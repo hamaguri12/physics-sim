@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地球の重力加速度マップ</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;width:100%;height:100%;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;overflow:hidden}
+  .estage{position:fixed;inset:0;background:#f5f7ff;overflow:hidden;border:0.5px solid rgba(0,0,0,0.08);touch-action:none}
+  .stage-3d{position:absolute;inset:0}
+  .stage-3d canvas{display:block;width:100%;height:100%;cursor:grab}
+  .stage-3d canvas:active{cursor:grabbing}
+  .jp-overlay{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .55s ease;z-index:4}
+  .jp-overlay.show{opacity:1}
+  .jp-overlay svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .jp-label{position:absolute;width:400px;background:rgba(240,244,255,0.97);border:3px solid #0055cc;border-radius:16px;padding:12px 22px 14px;text-align:center;opacity:0;transform:translateY(8px) scale(var(--lbl-s,1));transition:opacity .4s ease,transform .4s ease;pointer-events:auto}
+  .jp-overlay.show .jp-label{opacity:1;transform:translateY(0) scale(var(--lbl-s,1))}
+  .jp-label::before{content:"";position:absolute;left:0;right:0;top:0;height:32px;background:#0055cc;opacity:.10;border-radius:14px 14px 0 0;pointer-events:none}
+  .jp-name{font-size:32px;font-weight:500;color:#1a2040;position:relative}
+  .jp-g{font-size:44px;font-weight:700;color:#0055cc;font-family:"SF Mono","Menlo","Consolas",monospace;margin-top:6px;white-space:nowrap}
+  .jp-unit{font-size:20px;font-weight:400;vertical-align:middle;margin-left:4px}
+  .jp-lat{font-size:26px;color:rgba(20,30,80,0.65);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;margin-top:4px;letter-spacing:.02em}
+  .eov{position:absolute;color:rgba(20,30,80,0.94);z-index:5;pointer-events:none}
+  .eov.tl{top:14px;left:16px;max-width:340px}
+  .eov.bl{bottom:14px;left:16px;pointer-events:auto}
+  .eov.br{bottom:14px;right:16px;transition:opacity .35s;pointer-events:auto}
+  .e-title{font-size:15px;font-weight:500;letter-spacing:.02em}
+  .e-sub{font-size:11.5px;opacity:.62;margin-top:3px}
+  .e-legend{background:rgba(240,244,255,0.94);border:0.5px solid rgba(70,90,160,0.25);padding:9px 12px;border-radius:8px;font-size:11px;line-height:1.75;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  .e-legend .row{display:flex;align-items:center;gap:8px}
+  .e-sw{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none;box-shadow:0 0 6px currentColor}
+  .e-btn{background:rgba(70,90,160,0.10);color:#1a2040;border:0.5px solid rgba(70,90,160,0.30);padding:7px 13px;border-radius:8px;cursor:pointer;font-size:12px;margin-right:6px;transition:background .15s,transform .12s,opacity .25s;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-family:inherit}
+  .e-btn:hover{background:rgba(70,90,160,0.20)}
+  .e-btn:active{transform:scale(0.97)}
+  .e-btn.primary{background:rgba(0,85,204,0.12);border-color:rgba(0,85,204,0.45);color:#0055cc}
+  .e-btn.primary:hover{background:rgba(0,85,204,0.22)}
+  .j-hint{position:absolute;color:rgba(0,85,204,0.85);font-size:10.5px;letter-spacing:.06em;pointer-events:none;z-index:4;text-shadow:0 0 4px rgba(255,255,255,0.8);transform:translate(-50%,-50%);transition:opacity .3s}
+  .e-loader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(20,30,80,0.55);font-size:12.5px;pointer-events:none;z-index:1;letter-spacing:.05em;transition:opacity .4s}
+</style>
+</head>
+<body>
+
+<div class="estage" id="estage">
+  <div class="stage-3d" id="stage-3d"></div>
+  <div class="jp-overlay" id="jp-overlay"></div>
+  <div class="e-loader" id="e-loader">地球を生成中…</div>
+  <div class="eov tl">
+    <div class="e-title" id="e-title">地球の重力加速度マップ</div>
+    <div class="e-sub" id="e-sub">ドラッグ: 回転 / ホイール: ズーム / 日本をクリックで拡大</div>
+  </div>
+  <div class="j-hint" id="j-hint" style="opacity:0">🗾 click</div>
+  <div class="eov br" style="bottom:62px">
+    <div class="e-legend" id="e-legend">
+      <div class="row"><span class="e-sw" style="background:#ff5959;color:#ff5959"></span>赤道</div>
+      <div class="row"><span class="e-sw" style="background:#ffeb3b;color:#ffeb3b"></span>観測地点</div>
+      <div class="row"><span class="e-sw" style="background:#667799;color:#667799"></span>自転軸 (23.5°傾斜)</div>
+    </div>
+  </div>
+  <div class="eov br">
+    <button class="e-btn" id="btn-auto">自動回転: ON</button>
+    <button class="e-btn" id="btn-reset">初期視点</button>
+    <button class="e-btn primary" id="btn-japan">🗾 日本にズーム</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  const stage = document.getElementById('estage');
+  const stage3d = document.getElementById('stage-3d');
+  const loaderEl = document.getElementById('e-loader');
+  const titleEl = document.getElementById('e-title');
+  const subEl = document.getElementById('e-sub');
+  const jBtn = document.getElementById('btn-japan');
+  const autoBtn = document.getElementById('btn-auto');
+  const legendEl = document.getElementById('e-legend');
+  const hintEl = document.getElementById('j-hint');
+  const overlay = document.getElementById('jp-overlay');
+
+  let W = stage.clientWidth, H = stage.clientHeight;
+  let currentMode = '3d';
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, W/H, 0.05, 1000);
+  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage3d.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+  const sg = new THREE.BufferGeometry();
+  const sN = 3500, sP = new Float32Array(sN*3);
+  for(let i=0;i<sN;i++){
+    const r=80+Math.random()*40, th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1);
+    sP[i*3]=r*Math.sin(ph)*Math.cos(th); sP[i*3+1]=r*Math.sin(ph)*Math.sin(th); sP[i*3+2]=r*Math.cos(ph);
+  }
+  sg.setAttribute('position', new THREE.BufferAttribute(sP, 3));
+  scene.add(new THREE.Points(sg, new THREE.PointsMaterial({color:0xffffff,size:0.13,sizeAttenuation:true,transparent:true,opacity:0.85})));
+
+  const tiltGroup = new THREE.Group(); tiltGroup.rotation.z = 23.5*Math.PI/180; scene.add(tiltGroup);
+  const earthGroup = new THREE.Group(); tiltGroup.add(earthGroup);
+  const R = 1;
+
+  const earthMat = new THREE.MeshLambertMaterial({color:0x244879});
+  const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(R, 256, 256), earthMat);
+  earthGroup.add(earthMesh);
+
+  function hideLoader(){ if(loaderEl){ loaderEl.style.opacity=0; setTimeout(()=>loaderEl.style.display='none',400); } }
+
+  // Solar System Scope 2K テクスチャ（海が最初から鮮やかな青）をロード
+  // このテクスチャは bathy（海底地形）着色を含まないため暗い海溝が発生しない
+  function loadTex(url, cb, errCb) {
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      url,
+      t => { t.encoding = THREE.sRGBEncoding; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); cb(t); },
+      undefined,
+      errCb || (() => {})
+    );
+  }
+
+  const applyTex = t => { earthMat.map=t; earthMat.color.set(0xffffff); earthMat.needsUpdate=true; hideLoader(); };
+  loadTex('earth_bluemarble_4k.jpg', applyTex, () => {
+    loadTex('earth_bluemarble_2048.jpg', applyTex, () => {
+      loadTex('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg', applyTex, hideLoader);
+    });
+  });
+
+  scene.add(new THREE.Mesh(
+    new THREE.SphereGeometry(R*1.06, 64, 64),
+    new THREE.ShaderMaterial({
+      uniforms:{c:{value:0.6},p:{value:4.0},glowColor:{value:new THREE.Color(0x4a8cff)}},
+      vertexShader:'varying vec3 vN;void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+      fragmentShader:'uniform vec3 glowColor;uniform float c;uniform float p;varying vec3 vN;void main(){float i=pow(c-dot(vN,vec3(0.0,0.0,1.0)),p);gl_FragColor=vec4(glowColor*i,i*0.9);}',
+      side:THREE.BackSide, blending:THREE.AdditiveBlending, transparent:true, depthWrite:false
+    })
+  ));
+
+  const eqPts=[]; for(let i=0;i<=256;i++){const a=(i/256)*Math.PI*2; eqPts.push(new THREE.Vector3(Math.cos(a)*R*1.005,0,Math.sin(a)*R*1.005));}
+  const eqLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(eqPts), new THREE.LineDashedMaterial({color:0xff5050,dashSize:0.045,gapSize:0.025,transparent:true,opacity:0.95}));
+  eqLine.computeLineDistances(); earthGroup.add(eqLine);
+
+  const axMat = new THREE.LineDashedMaterial({color:0x000000,dashSize:0.07,gapSize:0.05,transparent:true,opacity:0.55});
+  const axLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-1.5,0), new THREE.Vector3(0,1.5,0)]), axMat);
+  axLine.computeLineDistances(); earthGroup.add(axLine);
+
+  function latLonToV3(lat, lon, radius){
+    const phi=(90-lat)*Math.PI/180, theta=(lon+180)*Math.PI/180;
+    return new THREE.Vector3(-radius*Math.sin(phi)*Math.cos(theta), radius*Math.cos(phi), radius*Math.sin(phi)*Math.sin(theta));
+  }
+  const jpOutlineMat = new THREE.LineBasicMaterial({color:0xffeb3b, transparent:true, opacity:0, depthTest:false});
+  (function loadJapanOutline(){
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js';
+    s.onload = () => {
+      fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json')
+        .then(r => r.json())
+        .then(topo => {
+          const countries = topojson.feature(topo, topo.objects.countries);
+          const japan = countries.features.find(f => f.id === '392' || +f.id === 392);
+          if (!japan) return;
+          const geom = japan.geometry;
+          const polys = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
+          polys.forEach(poly => {
+            poly.forEach(ring => {
+              if (ring.length < 2) return;
+              const pts = ring.map(([lon, lat]) => latLonToV3(lat, lon, R * 1.008));
+              earthGroup.add(new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints(pts),
+                jpOutlineMat
+              ));
+            });
+          });
+        }).catch(() => {});
+    };
+    s.onerror = () => {};
+    document.head.appendChild(s);
+  })();
+  let jpOutlineBase = 0;
+  let overJapan = false;
+
+  function fmtLat(lat){
+    const a=Math.abs(lat),d=Math.floor(a),m=Math.round((a-d)*60);
+    return (lat>=0?'北緯':'南緯')+d+'°'+(m<10?'0':'')+m+"'";
+  }
+  function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+  const intlLocs = [
+    {name:'オスロ',country:'ノルウェー',lat:59+55/60,lon:10.75,g:9.8191,color:'#7ad6ff'},
+    {name:'マニラ',country:'フィリピン',lat:14+35/60,lon:120.98,g:9.7834,color:'#ffb868'},
+    {name:'シンガポール',country:'',lat:1+18/60,lon:103.85,g:9.7807,color:'#ff7b9d',tanDir:-1},
+    {name:'昭和基地',country:'南極',lat:-69,lon:39.58,g:9.8252,color:'#a8e6ff'}
+  ];
+  function makeIntlLabel(loc){
+    const cw=720,ch=300,c=document.createElement('canvas'); c.width=cw; c.height=ch;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='rgba(240,244,255,0.97)'; ctx.strokeStyle=loc.color; ctx.lineWidth=4;
+    roundRect(ctx,6,6,cw-12,ch-12,26); ctx.fill(); ctx.stroke();
+    ctx.fillStyle=loc.color; ctx.globalAlpha=0.14; roundRect(ctx,6,6,cw-12,56,26); ctx.fill(); ctx.globalAlpha=1;
+    ctx.fillStyle='#1a2040'; ctx.font='600 52px "Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(loc.country?loc.name+' ('+loc.country+')':loc.name, cw/2, 24);
+    ctx.fillStyle='#0055cc'; ctx.font='700 64px "SF Mono","Menlo",monospace';
+    ctx.fillText('g = '+loc.g.toFixed(4), cw/2, 110);
+    ctx.fillStyle='rgba(0,70,180,0.85)'; ctx.font='500 32px "SF Mono",monospace';
+    ctx.fillText('m/s²', cw/2, 184);
+    ctx.fillStyle='rgba(20,30,80,0.70)'; ctx.font='500 36px "Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif';
+    ctx.fillText(fmtLat(loc.lat), cw/2, 230);
+    return new THREE.CanvasTexture(c);
+  }
+  const intlMarkers = intlLocs.map(loc => {
+    const grp=new THREE.Group();
+    const surf=latLonToV3(loc.lat,loc.lon,R*1.005);
+    const colNum=parseInt(loc.color.slice(1),16);
+    const dot=new THREE.Mesh(new THREE.SphereGeometry(0.022,24,24), new THREE.MeshBasicMaterial({color:0xffeb3b,transparent:true,opacity:1}));
+    dot.position.copy(surf); grp.add(dot);
+    const halo=new THREE.Mesh(new THREE.SphereGeometry(0.04,20,20), new THREE.MeshBasicMaterial({color:0xffeb3b,transparent:true,opacity:0.4,depthWrite:false}));
+    halo.position.copy(surf); grp.add(halo);
+    const ringPts=[]; const rRad=0.06; const rN=surf.clone().normalize();
+    let tan=new THREE.Vector3(0,1,0).cross(rN); if(tan.length()<0.01) tan.set(1,0,0); tan.normalize();
+    const bit=rN.clone().cross(tan).normalize();
+    for(let i=0;i<=64;i++){const a=(i/64)*Math.PI*2; ringPts.push(surf.clone().add(tan.clone().multiplyScalar(Math.cos(a)*rRad)).add(bit.clone().multiplyScalar(Math.sin(a)*rRad)));}
+    const ringL=new THREE.Line(new THREE.BufferGeometry().setFromPoints(ringPts), new THREE.LineBasicMaterial({color:colNum,transparent:true,opacity:0.85}));
+    grp.add(ringL);
+    // ラベルはドットの真上を避けるため、接線方向（tan）にもオフセット
+    const out=surf.clone().add(rN.clone().multiplyScalar(0.30)).add(tan.clone().multiplyScalar(0.55*(loc.tanDir||1)));
+    const spMat=new THREE.SpriteMaterial({map:makeIntlLabel(loc),transparent:true,depthTest:false});
+    const sp=new THREE.Sprite(spMat); sp.position.copy(out); sp.scale.set(0.72,0.30,1); grp.add(sp);
+    const lineMat=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.6});
+    grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([surf.clone(),out.clone()]),lineMat));
+    earthGroup.add(grp);
+    return {halo, dot, ring:ringL.material, label:sp, line:lineMat};
+  });
+
+  const jpCities = [
+    {name:'札幌',  lat:43+ 4/60, lon:141.35, latStr:"43°04'", g:9.8048, side:'r', lblY: 80,  delay: 0.45},
+    {name:'仙台',  lat:38+15/60, lon:140.87, latStr:"38°15'", g:9.8007, side:'r', lblY:300,  delay: 0.50},
+    {name:'羽田',  lat:35+33/60, lon:139.78, latStr:"35°33'", g:9.7976, side:'r', lblY:520,  delay: 0.55},
+    {name:'名古屋',lat:35+ 9/60, lon:136.91, latStr:"35°09'", g:9.7973, side:'r', lblY:740,  delay: 0.60},
+    {name:'金沢',  lat:36+33/60, lon:136.66, latStr:"36°33'", g:9.7984, side:'l', lblY: 80,  delay: 0.50},
+    {name:'京都',  lat:35+ 2/60, lon:135.77, latStr:"35°02'", g:9.7971, side:'l', lblY:280,  delay: 0.55},
+    {name:'広島',  lat:34+22/60, lon:132.46, latStr:"34°22'", g:9.7966, side:'l', lblY:480,  delay: 0.60},
+    {name:'福岡',  lat:33+36/60, lon:130.40, latStr:"33°36'", g:9.7963, side:'l', lblY:690,  delay: 0.65},
+    {name:'那覇',  lat:26+12/60, lon:127.68, latStr:"26°12'", g:9.7910, side:'l', lblY:930,  delay: 0.70}
+  ];
+
+  const JP_DOT_R  = 0.0040;
+  const JP_HALO_R = 0.0085;
+  const JP_RING_R = 0.0070;
+
+  const jpMarkers = jpCities.map(c => {
+    const grp = new THREE.Group();
+    const surf = latLonToV3(c.lat, c.lon, R*1.003);
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(JP_HALO_R, 16, 16),
+      new THREE.MeshBasicMaterial({color:0xffeb3b, transparent:true, opacity:0, depthWrite:false})
+    );
+    halo.position.copy(surf); grp.add(halo);
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(JP_DOT_R, 16, 16),
+      new THREE.MeshBasicMaterial({color:0xffeb3b, transparent:true, opacity:0})
+    );
+    dot.position.copy(surf); grp.add(dot);
+    const ringPts = []; const rN = surf.clone().normalize();
+    let tan = new THREE.Vector3(0,1,0).cross(rN); if(tan.length()<0.01) tan.set(1,0,0); tan.normalize();
+    const bit = rN.clone().cross(tan).normalize();
+    for(let i=0;i<=48;i++){
+      const a = (i/48)*Math.PI*2;
+      ringPts.push(surf.clone().add(tan.clone().multiplyScalar(Math.cos(a)*JP_RING_R)).add(bit.clone().multiplyScalar(Math.sin(a)*JP_RING_R)));
+    }
+    const ring = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(ringPts),
+      new THREE.LineBasicMaterial({color:0xffeb3b, transparent:true, opacity:0})
+    );
+    grp.add(ring);
+    grp.visible = false;
+    earthGroup.add(grp);
+    return {group:grp, halo, dot, ring:ring.material, surf};
+  });
+
+  const lineRefs = [];
+  const labelRefs = [];
+  function buildJapanOverlay(){
+    let h = '<svg id="jp-lines" preserveAspectRatio="none"></svg>';
+    jpCities.forEach((c, i) => {
+      const sideStyle = c.side === 'l' ? 'left:15px' : 'right:15px';
+      const latPrefix = c.lat >= 0 ? '北緯' : '南緯';
+      h += '<div class="jp-label" id="jp-lbl-'+i+'" style="'+sideStyle+';top:'+c.lblY+'px;transition-delay:'+c.delay+'s">'+
+        '<div class="jp-name">'+c.name+'</div>'+
+        '<div class="jp-g">g = '+c.g.toFixed(4)+'<span class="jp-unit"> m/s²</span></div>'+
+        '<div class="jp-lat">'+latPrefix+c.latStr+'</div>'+
+      '</div>';
+    });
+    overlay.innerHTML = h;
+    const linesEl = document.getElementById('jp-lines');
+    let lh = '';
+    jpCities.forEach((c, i) => {
+      lh += '<line id="jp-line-'+i+'" stroke="#ffeb3b" stroke-width="1" opacity="0" x1="0" y1="0" x2="0" y2="0"/>';
+    });
+    linesEl.innerHTML = lh;
+    jpCities.forEach((c, i) => {
+      lineRefs.push(document.getElementById('jp-line-'+i));
+      labelRefs.push(document.getElementById('jp-lbl-'+i));
+    });
+  }
+  buildJapanOverlay();
+
+  function updateOverlayViewport(){
+    const linesEl = document.getElementById('jp-lines');
+    if(linesEl) linesEl.setAttribute('viewBox', '0 0 '+W+' '+H);
+  }
+  updateOverlayViewport();
+
+  // ラベルを画面高さに合わせて個別スケール（小画面対応）
+  let overlayScale = 1;
+  const DESIGN_H = 1150;
+  function applyOverlayScale(){
+    overlayScale = Math.min(1, H / DESIGN_H);
+    const s = overlayScale;
+    overlay.style.transform = '';
+    overlay.style.transformOrigin = '';
+    if(labelRefs.length === 0) return;
+    labelRefs.forEach((lbl, i) => {
+      const c = jpCities[i];
+      lbl.style.setProperty('--lbl-s', s);
+      lbl.style.transformOrigin = c.side === 'l' ? 'top left' : 'top right';
+      lbl.style.top = (c.lblY * s) + 'px';
+    });
+  }
+
+  const tmpProj = new THREE.Vector3();
+  function updateJapanOverlay(){
+    if(currentMode !== '2d') return;
+    const sRect = stage.getBoundingClientRect();
+    jpMarkers.forEach((m, i) => {
+      m.dot.getWorldPosition(tmpProj);
+      tmpProj.project(camera);
+      const sx = (tmpProj.x*0.5 + 0.5) * W;
+      const sy = (-tmpProj.y*0.5 + 0.5) * H;
+      const inFront = tmpProj.z < 1;
+      const lblRect = labelRefs[i].getBoundingClientRect();
+      const c = jpCities[i];
+      let edgeX, edgeY;
+      if(c.side === 'l'){
+        edgeX = lblRect.right - sRect.left;
+      } else {
+        edgeX = lblRect.left - sRect.left;
+      }
+      edgeY = (lblRect.top - sRect.top) + lblRect.height/2;
+      const ln = lineRefs[i];
+      ln.setAttribute('x1', sx.toFixed(1));
+      ln.setAttribute('y1', sy.toFixed(1));
+      ln.setAttribute('x2', edgeX.toFixed(1));
+      ln.setAttribute('y2', edgeY.toFixed(1));
+      ln.setAttribute('opacity', inFront ? (0.85 * jpFade).toFixed(2) : 0);
+    });
+  }
+
+  let camDist=5.5, camTheta=0.55, camPhi=Math.PI/2-0.18;
+  let autoRotate=true, dragging=false, prevX=0, prevY=0;
+  const G_DIST=5.5, G_THETA=0.55, G_PHI=Math.PI/2-0.18;
+  const J_DIST = 1.95;
+  let camPhase = 'orbit';
+  let camAnim = null;
+
+  function computeJapanCamState(distance){
+    const jLocal = latLonToV3(36.5, 137, R);
+    const jLocalNorm = jLocal.clone().normalize();
+    const upLocal = new THREE.Vector3(0,1,0)
+      .sub(jLocalNorm.clone().multiplyScalar(jLocalNorm.y))
+      .normalize();
+    const m = new THREE.Matrix4().makeRotationZ(tiltGroup.rotation.z);
+    m.multiply(new THREE.Matrix4().makeRotationY(earthGroup.rotation.y));
+    const jWorldNorm = jLocalNorm.clone().applyMatrix4(m).normalize();
+    const upWorld = upLocal.clone().applyMatrix4(m).normalize();
+    return { pos: jWorldNorm.multiplyScalar(distance), up: upWorld };
+  }
+
+  function applyCamera(){
+    if(camPhase === 'orbit'){
+      const sp = Math.sin(camPhi), cp = Math.cos(camPhi);
+      camera.position.set(camDist*sp*Math.sin(camTheta), camDist*cp, camDist*sp*Math.cos(camTheta));
+      camera.up.set(0,1,0);
+      camera.lookAt(0,0,0);
+    } else if(camPhase === 'inJapan'){
+      const state = computeJapanCamState(camDist);
+      camera.position.copy(state.pos);
+      camera.up.copy(state.up);
+      camera.lookAt(0,0,0);
+    }
+  }
+  applyCamera();
+
+  function easeInOut(t){ return t<0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; }
+
+  function transitionTo(targetPos, targetUp, toDist, duration, endPhase, onEnd){
+    if(camAnim) camAnim = null;
+    const fromPos = camera.position.clone();
+    const fromDist = fromPos.length();
+    const fromDir = fromPos.clone().normalize();
+    const fromUp = camera.up.clone().normalize();
+    const toDir = targetPos.clone().normalize();
+    const toUp = targetUp.clone().normalize();
+    const dot = Math.max(-1, Math.min(1, fromDir.dot(toDir)));
+    const angle = Math.acos(dot);
+    const sa = Math.sin(angle);
+    const start = performance.now();
+    camAnim = () => {
+      const t = Math.min((performance.now() - start) / duration, 1);
+      const e = easeInOut(t);
+      let dir;
+      if(angle < 0.001 || sa < 0.001){
+        dir = toDir.clone();
+      } else {
+        const w1 = Math.sin((1-e)*angle) / sa;
+        const w2 = Math.sin(e*angle) / sa;
+        dir = fromDir.clone().multiplyScalar(w1).add(toDir.clone().multiplyScalar(w2));
+      }
+      const r = THREE.MathUtils.lerp(fromDist, toDist, e);
+      camera.position.copy(dir).multiplyScalar(r);
+      camera.up.copy(fromUp).lerp(toUp, e).normalize();
+      camera.lookAt(0,0,0);
+      if(t >= 1){
+        camAnim = null;
+        camPhase = endPhase;
+        camDist = toDist;
+        if(onEnd) onEnd();
+        applyCamera();
+      }
+    };
+  }
+
+  function startTransitionToJapan(duration){
+    camPhase = 'toJapan';
+    const target = computeJapanCamState(J_DIST);
+    transitionTo(target.pos, target.up, J_DIST, duration, 'inJapan', null);
+  }
+  function startTransitionToOrbit(duration){
+    camPhase = 'toOrbit';
+    const sp = Math.sin(G_PHI), cp = Math.cos(G_PHI);
+    const targetPos = new THREE.Vector3(G_DIST*sp*Math.sin(G_THETA), G_DIST*cp, G_DIST*sp*Math.cos(G_THETA));
+    const targetUp = new THREE.Vector3(0,1,0);
+    transitionTo(targetPos, targetUp, G_DIST, duration, 'orbit', () => {
+      camTheta = G_THETA; camPhi = G_PHI; camDist = G_DIST;
+    });
+  }
+
+  let intlFade=1, intlFadeT=1, jpFade=0, jpFadeT=0;
+
+  function setMode(m){
+    if(m === currentMode) return;
+    currentMode = m;
+    if(m === '2d'){
+      intlFadeT = 0;
+      jpFadeT = 1;
+      jpMarkers.forEach(mk => mk.group.visible = true);
+      applyOverlayScale();
+      overlay.classList.add('show');
+      titleEl.textContent = '日本の重力加速度';
+      subEl.textContent = '実測値マップ — 緯度ごとの g 値';
+      jBtn.textContent = '← 全体表示';
+      jBtn.classList.remove('primary');
+      legendEl.style.opacity = 0;
+      autoBtn.style.opacity = 0.4;
+      autoBtn.style.pointerEvents = 'none';
+      autoRotate = false;
+      autoBtn.textContent = '自動回転: OFF';
+      hintEl.style.opacity = 0;
+      startTransitionToJapan(1500);
+    } else {
+      intlFadeT = 1;
+      jpFadeT = 0;
+      overlay.classList.remove('show');
+      titleEl.textContent = '地球の重力加速度マップ';
+      subEl.textContent = 'ドラッグ: 回転 / ホイール: ズーム / 日本をクリックで拡大';
+      jBtn.textContent = '🗾 日本にズーム';
+      jBtn.classList.add('primary');
+      legendEl.style.opacity = 1;
+      autoBtn.style.opacity = 1;
+      autoBtn.style.pointerEvents = 'auto';
+      autoRotate = true;
+      autoBtn.textContent = '自動回転: ON';
+      startTransitionToOrbit(1500);
+    }
+  }
+
+  jBtn.addEventListener('click', ()=> setMode(currentMode === '3d' ? '2d' : '3d'));
+  autoBtn.addEventListener('click', e => { autoRotate = !autoRotate; e.target.textContent = '自動回転: '+(autoRotate?'ON':'OFF'); });
+  document.getElementById('btn-reset').addEventListener('click', ()=>{
+    if(currentMode === '2d') setMode('3d');
+    else startTransitionToOrbit(800);
+  });
+  window.addEventListener('keydown', e => { if(e.key === 'Escape' && currentMode === '2d') setMode('3d'); });
+
+  function inputOK(){ return currentMode === '3d' && camPhase === 'orbit'; }
+
+  let mDown = null;
+  renderer.domElement.addEventListener('mousedown', e => {
+    if(!inputOK()) return;
+    dragging = true; prevX = e.clientX; prevY = e.clientY;
+    mDown = {x:e.clientX, y:e.clientY, t:Date.now()};
+    e.preventDefault();
+  });
+  window.addEventListener('mouseup', e => {
+    if(dragging && mDown && inputOK()){
+      const dx=e.clientX-mDown.x, dy=e.clientY-mDown.y;
+      if(Math.sqrt(dx*dx+dy*dy)<5 && Date.now()-mDown.t<400) handleClick(e.clientX, e.clientY);
+    }
+    dragging = false; mDown = null;
+  });
+  window.addEventListener('mousemove', e => {
+    if(!dragging || !inputOK()) return;
+    camTheta -= (e.clientX-prevX)*0.0065;
+    camPhi -= (e.clientY-prevY)*0.0065;
+    camPhi = Math.max(0.08, Math.min(Math.PI-0.08, camPhi));
+    prevX=e.clientX; prevY=e.clientY;
+    applyCamera();
+  });
+  renderer.domElement.addEventListener('wheel', e => {
+    if(!inputOK()) return;
+    e.preventDefault();
+    camDist *= (1 + e.deltaY*0.0014);
+    camDist = Math.max(1.35, Math.min(8, camDist));
+    applyCamera();
+  }, {passive:false});
+
+  let tDown=null, tx=0, ty=0, td=0, twoF=false;
+  renderer.domElement.addEventListener('touchstart', e => {
+    if(!inputOK()) return;
+    if(e.touches.length===1){ tx=e.touches[0].clientX; ty=e.touches[0].clientY; tDown={x:tx,y:ty,t:Date.now()}; twoF=false; }
+    else if(e.touches.length===2){ const a=e.touches[0],b=e.touches[1]; td=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); twoF=true; tDown=null; }
+  }, {passive:false});
+  renderer.domElement.addEventListener('touchmove', e => {
+    if(!inputOK()) return;
+    e.preventDefault();
+    if(e.touches.length===1 && !twoF){
+      const dx=e.touches[0].clientX-tx, dy=e.touches[0].clientY-ty;
+      camTheta-=dx*0.0065; camPhi-=dy*0.0065;
+      camPhi=Math.max(0.08,Math.min(Math.PI-0.08,camPhi));
+      tx=e.touches[0].clientX; ty=e.touches[0].clientY;
+      applyCamera();
+      if(tDown && Math.hypot(e.touches[0].clientX-tDown.x, e.touches[0].clientY-tDown.y)>8) tDown=null;
+    } else if(e.touches.length===2){
+      const a=e.touches[0],b=e.touches[1];
+      const nd=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+      camDist *= 1-(nd-td)*0.005;
+      camDist=Math.max(1.35,Math.min(8,camDist));
+      td=nd;
+      applyCamera();
+    }
+  }, {passive:false});
+  renderer.domElement.addEventListener('touchend', e => {
+    if(tDown && e.changedTouches.length===1 && inputOK()){
+      const t=e.changedTouches[0];
+      if(Math.hypot(t.clientX-tDown.x, t.clientY-tDown.y)<10 && Date.now()-tDown.t<400) handleClick(t.clientX, t.clientY);
+    }
+    tDown=null; if(e.touches.length===0) twoF=false;
+  });
+
+  const raycaster = new THREE.Raycaster();
+  function handleClick(cx, cy){
+    if(camPhase !== 'orbit') return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const mx = ((cx-rect.left)/rect.width)*2-1;
+    const my = -((cy-rect.top)/rect.height)*2+1;
+    raycaster.setFromCamera({x:mx,y:my}, camera);
+    scene.updateMatrixWorld(true);
+    const hits = raycaster.intersectObject(earthMesh);
+    if(hits.length===0) return;
+    const local = earthMesh.worldToLocal(hits[0].point.clone());
+    const r = local.length();
+    const lat = 90 - Math.acos(local.y/r)*180/Math.PI;
+    let lon = Math.atan2(local.z, -local.x)*180/Math.PI - 180;
+    while(lon<-180) lon+=360;
+    while(lon>180) lon-=360;
+    if(lat>24 && lat<46 && lon>122 && lon<146){
+      setMode('2d');
+    }
+  }
+
+  function hitLatLon(cx, cy){
+    const rect = renderer.domElement.getBoundingClientRect();
+    const mx = ((cx-rect.left)/rect.width)*2-1;
+    const my = -((cy-rect.top)/rect.height)*2+1;
+    raycaster.setFromCamera({x:mx,y:my}, camera);
+    scene.updateMatrixWorld(true);
+    const hits = raycaster.intersectObject(earthMesh);
+    if(hits.length===0) return null;
+    const local = earthMesh.worldToLocal(hits[0].point.clone());
+    const r = local.length();
+    const lat = 90 - Math.acos(local.y/r)*180/Math.PI;
+    let lon = Math.atan2(local.z, -local.x)*180/Math.PI - 180;
+    while(lon<-180) lon+=360; while(lon>180) lon-=360;
+    return {lat, lon};
+  }
+
+  renderer.domElement.addEventListener('mousemove', e => {
+    if(!inputOK()){ overJapan = false; renderer.domElement.style.cursor='default'; return; }
+    const p = hitLatLon(e.clientX, e.clientY);
+    overJapan = !!(p && p.lat>24 && p.lat<46 && p.lon>122 && p.lon<146);
+    renderer.domElement.style.cursor = overJapan ? 'pointer' : 'default';
+  });
+  renderer.domElement.addEventListener('mouseleave', () => { overJapan = false; });
+
+  function updateHint(){
+    if(camPhase !== 'orbit'){ hintEl.style.opacity = 0; return; }
+    const local = latLonToV3(36, 138, R*1.05);
+    const wp = local.clone().applyAxisAngle(new THREE.Vector3(0,1,0), earthGroup.rotation.y).applyAxisAngle(new THREE.Vector3(0,0,1), tiltGroup.rotation.z);
+    const cd = camera.position.clone().normalize();
+    const facing = wp.clone().normalize().dot(cd);
+    if(facing < 0.3){ hintEl.style.opacity = 0; return; }
+    const sp = wp.clone().project(camera);
+    if(sp.z > 1){ hintEl.style.opacity = 0; return; }
+    const x = (sp.x*0.5+0.5)*W, y = (-sp.y*0.5+0.5)*H;
+    hintEl.style.left = x+'px';
+    hintEl.style.top = (y-28)+'px';
+    hintEl.style.opacity = (facing-0.3)/0.4;
+  }
+
+  let t = 0;
+  const tmpV = new THREE.Vector3(), camDir = new THREE.Vector3();
+  function frame(){
+    requestAnimationFrame(frame);
+    t += 0.016;
+    if(camAnim) camAnim();
+    if(autoRotate && !dragging && currentMode==='3d' && camPhase==='orbit') earthGroup.rotation.y += 0.0017;
+    intlFade = THREE.MathUtils.lerp(intlFade, intlFadeT, 0.06);
+    jpFade = THREE.MathUtils.lerp(jpFade, jpFadeT, 0.06);
+    jpOutlineBase = THREE.MathUtils.lerp(jpOutlineBase, (overJapan && camPhase==='orbit') ? 1 : 0, 0.08);
+    jpOutlineMat.opacity = jpOutlineBase * (0.65 + 0.35*Math.sin(t*2.8));
+    scene.updateMatrixWorld(true);
+    camDir.copy(camera.position).normalize();
+
+    intlMarkers.forEach(m => {
+      const s = 1 + Math.sin(t*2.5)*0.4;
+      m.halo.scale.set(s,s,s);
+      m.halo.material.opacity = (0.35 + Math.sin(t*2.5)*0.22) * intlFade;
+      m.dot.material.opacity = intlFade;
+      m.dot.getWorldPosition(tmpV);
+      const f = tmpV.normalize().dot(camDir);
+      const fade = THREE.MathUtils.smoothstep(f, -0.15, 0.18);
+      m.label.material.opacity = fade * intlFade;
+      m.line.opacity = (0.4 + fade*0.5) * intlFade;
+      m.ring.opacity = (0.35 + fade*0.55) * intlFade;
+    });
+
+    jpMarkers.forEach(m => {
+      const s = 1 + Math.sin(t*2.5)*0.35;
+      m.halo.scale.set(s,s,s);
+      m.halo.material.opacity = (0.45 + Math.sin(t*2.5)*0.25) * jpFade;
+      m.dot.material.opacity = jpFade;
+      m.ring.opacity = 0.7 * jpFade;
+      m.group.visible = jpFade > 0.01;
+    });
+
+    updateJapanOverlay();
+    updateHint();
+    renderer.render(scene, camera);
+  }
+  frame();
+
+  function onResize(){
+    W = stage.clientWidth; H = stage.clientHeight;
+    camera.aspect = W/H; camera.updateProjectionMatrix();
+    renderer.setSize(W, H);
+    updateOverlayViewport();
+    applyOverlayScale();
+    if(camPhase === 'orbit' || camPhase === 'inJapan') applyCamera();
+  }
+  window.addEventListener('resize', onResize);
+  setTimeout(()=>{ if(loaderEl && loaderEl.style.display!=='none') hideLoader(); }, 5000);
+})();
+</script>
+</body>
+</html>

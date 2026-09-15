@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>電磁気｜高校物理シミュ集</title>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#ffffff;color:#1a2040}
+    header{padding:18px 20px;border-bottom:1px solid rgba(70,90,160,0.30);display:flex;gap:12px;align-items:center}
+    a.back{color:#1a2040;text-decoration:none;border:1px solid rgba(70,90,160,0.30);padding:8px 10px;border-radius:12px;background:rgba(240,243,252,0.95)}
+    a.back:hover{opacity:.9}
+    h1{margin:0;font-size:18px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;padding:16px}
+    a.card{display:block;text-decoration:none;color:inherit;background:rgba(240,243,252,0.95);
+      border:1px solid rgba(70,90,160,0.30);border-radius:14px;padding:16px;
+      transition:border-color .15s, box-shadow .15s, background .15s;
+      /* 押すだけのボタンなので、文字を選べないようにし、リンクのドラッグも切る。
+         文字を選んでしまうと次のクリックが「選択のドラッグ」になり、
+         押したまま数px動かすと「リンクのドラッグ」になって、どちらもクリックが消える */
+      user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+    /* マウスを乗せてもカードの位置を動かさない。
+       以前は translateY(-2px) で浮かせていたが、カードが 2px 上へ逃げるので
+       下の縁にカーソルがあると「当たる→外れる」を繰り返し、クリックが空振りしていた
+       （2026-09-14 実測：5 枚中 4 枚で発生）。動かさずに 枠と影 で反応を見せる */
+    a.card:hover{border-color:rgba(70,90,160,0.55);background:rgba(232,238,252,0.98);
+      box-shadow:0 4px 12px rgba(70,90,160,0.18)}
+    .title{font-weight:800;font-size:15px;margin-bottom:8px}
+    .desc{font-size:12px;color:#5566aa;line-height:1.45}
+  </style>
+</head>
+<body>
+  <header>
+    <a class="back" href="index.html">← ホーム</a>
+    <h1>電磁気</h1>
+  </header>
+
+  <div class="grid">
+    <a class="card" href="em-electric-field.html">
+      <div class="title">電場</div>
+      <div class="desc">静電気力・電場・電位・物質と電場・コンデンサー</div>
+    </a>
+
+    <a class="card" href="#" onclick="alert('準備中です'); return false;">
+      <div class="title">電流</div><div class="desc">準備中</div>
+    </a>
+
+    <a class="card" href="#" onclick="alert('準備中です'); return false;">
+      <div class="title">電流と磁場</div><div class="desc">準備中</div>
+    </a>
+
+    <a class="card" href="#" onclick="alert('準備中です'); return false;">
+      <div class="title">電磁誘導と電磁波</div><div class="desc">準備中</div>
+    </a>
+  </div>
+</body>
+</html>

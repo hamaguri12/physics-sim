@@ -1,0 +1,1438 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>遠心力｜力学｜高校物理シミュ集</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:rgba(240,243,252,0.95);
+      --border:rgba(70,90,160,0.30);
+      --text:#1a2040;
+      --muted:#5566aa;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    #app{position:fixed;inset:0;overflow:hidden}
+
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+    .topbar{
+      position:absolute;left:0;top:0;right:0;z-index:5;
+      display:flex;gap:8px;align-items:center;
+      padding:10px 12px;
+      background:linear-gradient(to bottom, rgba(255,255,255,.80), rgba(255,255,255,0));
+      pointer-events:none;
+    }
+    .topbar a, .topbar button, .topbar .pill{pointer-events:auto}
+    .btn, .pill{
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);
+      border-radius:12px;
+      padding:8px 10px;
+      font-size:12px;
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .btn:hover{opacity:.9}
+    .pill{cursor:default;color:var(--muted)}
+    .btn.active{ outline:2px solid rgba(120,170,255,.6); outline-offset:-2px; }
+
+    /* ===== 道具箱の開閉 ===== */
+    #toolboxPanel{
+      position: fixed;
+      left: 16px;
+      top: 72px;
+      z-index: 1000;
+      transition: transform 180ms ease;
+      transform: translateX(0);
+      min-height: 48px;
+    }
+    #toolboxPanel.is-collapsed{
+      transform: translateX(calc(-100% + 36px));
+    }
+    #toolboxToggle.toolboxToggle{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      border: 1px solid rgba(70,90,160,0.25);
+      background: rgba(240,243,252,0.90);
+      color: #1a2040;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      line-height: 1;
+    }
+    #toolboxPanel.is-collapsed #toolboxToggle{
+      right: 4px;
+    }
+    #toolboxPanel{
+      overflow: hidden auto;              /* 中身が画面より長いときは縦にスクロール（横は出さない） */
+      overscroll-behavior: contain;
+      max-height: calc(100vh - 108px);   /* 上 72px・下 10px に収める（padding 24px と枠 2px のぶんを引く） */
+    }
+    #toolboxPanel.is-collapsed{
+      overflow: hidden;
+    }
+    #toolboxPanel.is-collapsed > :not(#toolboxToggle){
+      display: none !important;
+    }
+
+    .sidebar{
+      width:280px;max-width:85vw;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      backdrop-filter: blur(6px);
+    }
+    .h{font-weight:800;font-size:13px;margin:0 0 8px}
+    .group{margin:10px 0 12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .row .btn{flex:1;justify-content:center}
+    .lbl{color:var(--muted);font-size:12px;align-self:center}
+    .num{width:72px;max-width:90px;background:rgba(240,243,252,0.80);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:6px 8px;font-size:12px}
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="c"></canvas>
+
+    <!-- 上バー -->
+    <div class="topbar">
+      <a class="btn" href="../mechanics-circular.html">← 円運動へ</a>
+      <a class="btn" href="../index.html">ホーム</a>
+      <a class="btn" href="inertial-force.html">慣性力</a>
+      <a class="btn active" href="centrifugal-force.html">遠心力</a>
+    </div>
+
+    <!-- 左サイドバー：道具箱 -->
+    <aside class="sidebar" id="toolboxPanel">
+      <button id="toolboxToggle" class="toolboxToggle" type="button" aria-expanded="false">＞</button>
+
+      <p class="h">道具箱</p>
+
+      <div class="group">
+        <p class="h" style="margin-top:0">回転台</p>
+        <div class="row" style="align-items:center;margin-top:4px">
+          <span class="lbl">ω =</span>
+          <input class="num" id="diskOmegaInput" type="number" value="1.0" min="-20" max="20" step="0.1" style="width:60px">
+          <span class="lbl">rad/s</span>
+        </div>
+        <div class="row">
+          <button class="btn" id="diskStartStop">▶ 開始</button>
+          <button class="btn" id="diskReset">↺ リセット</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h" style="margin-top:0">オブジェクト</p>
+        <div class="row">
+          <button class="btn" id="toolSpringBall">球（ばね）</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="toolPersonExt">観測者（外）</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="toolPersonDisk">観測者（盤上）</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h" style="margin-top:0">視点</p>
+        <div class="row">
+          <button class="btn" id="toolExtCam">観測者（外）カメラ</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="toolDiskCam">観測者（盤上）カメラ</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="toolTopCam">真上カメラ</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h" style="margin-top:0">描画</p>
+        <div class="row">
+          <button class="btn" id="toolPen">ペン</button>
+          <button class="btn" id="toolEraser">消しゴム</button>
+          <button class="btn" id="toolArrow">矢印</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="inkClear">ペンを全消し</button>
+          <button class="btn" id="shapeClear">図形を全消し</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="shapeDeleteSelected" style="display:none">選択図形を消す</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const canvas = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+    camera.position.set(0, 12, 16);
+    scene.add(camera);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.12;
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    // グリッド（床）
+    const grid = new THREE.GridHelper(16, 16, 0x9bb0d0, 0xc8d6e8);
+    grid.position.y = 0;
+    scene.add(grid);
+
+    // 環境光
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+    // ===== 回転グループ（円盤 + 軸）=====
+    const rotatingGroup = new THREE.Group();
+    scene.add(rotatingGroup);
+
+    // 回転台（薄い円盤）：半径 5 マス、厚さ 0.18
+    const DISK_H = 0.18;
+    const diskGeo = new THREE.CylinderGeometry(5, 5, DISK_H, 64);
+    const diskMatTop  = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: 0.65, metalness: 0.0 });
+    const diskMatSide = new THREE.MeshStandardMaterial({ color: 0x9a7050, roughness: 0.75, metalness: 0.0 });
+    const disk = new THREE.Mesh(diskGeo, [diskMatSide, diskMatTop, diskMatSide]);
+    disk.position.set(0, DISK_H / 2, 0);
+    rotatingGroup.add(disk);
+
+    // 輪郭（上面・下面の縁だけ黒線）
+    const diskEdgesGeo = new THREE.EdgesGeometry(diskGeo, 15);
+    const diskEdgesMat = new THREE.LineBasicMaterial({ color: 0x111111 });
+    const diskEdges = new THREE.LineSegments(diskEdgesGeo, diskEdgesMat);
+    disk.add(diskEdges);
+
+    // 中心軸（円盤を貫通する円柱）：直径 0.5 マス = 半径 0.25
+    const AXIS_R   = 0.25;
+    const AXIS_TOP = DISK_H + 0.4;
+    const AXIS_BOT = -1.8;
+    const AXIS_H   = AXIS_TOP - AXIS_BOT;
+    const axisGeo = new THREE.CylinderGeometry(AXIS_R, AXIS_R, AXIS_H, 32);
+    const axisMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.4, metalness: 0.7 });
+    const axisMesh = new THREE.Mesh(axisGeo, axisMat);
+    axisMesh.position.set(0, (AXIS_TOP + AXIS_BOT) / 2, 0);
+    rotatingGroup.add(axisMesh);
+
+    // 軸の輪郭
+    const axisEdgesGeo = new THREE.EdgesGeometry(axisGeo, 30);
+    const axisEdgesMat = new THREE.LineBasicMaterial({ color: 0x222222 });
+    const axisEdges = new THREE.LineSegments(axisEdgesGeo, axisEdgesMat);
+    axisMesh.add(axisEdges);
+
+    // ===== 回転台の制御 =====
+    let diskRunning = false;
+    let prevTime = performance.now();
+
+    function setDiskRunning(val) {
+      diskRunning = val;
+      document.getElementById('diskStartStop').textContent = val ? '⏸ 停止' : '▶ 開始';
+      if (val) prevTime = performance.now();
+    }
+
+    document.getElementById('diskStartStop').addEventListener('click', () => {
+      setDiskRunning(!diskRunning);
+    });
+    document.getElementById('diskReset').addEventListener('click', () => {
+      setDiskRunning(false);
+      rotatingGroup.rotation.y = 0;
+      resetBall();
+    });
+
+    // ===== 球（ばね）=====
+    const SPRING_L0   = 2.0;   // 自然長（マス2個分）
+    const SPRING_K    = 20.0;  // ばね定数 [N/m]  ω_critical = √(k/m) ≈ 4.47 rad/s
+    const BALL_M      = 1.0;   // 質量 [kg]
+    const SPRING_DAMP = 2.0;   // 減衰係数（ζ ≈ 0.22、約3回振動して収束）
+    const BALL_R      = 0.3;
+    const BALL_Y      = DISK_H + BALL_R; // 円盤上面に載る高さ
+
+    let springBallGroup = null;
+    let springRef = null; // ばねメッシュ参照
+    let ballRef   = null; // 球メッシュ参照
+    let ballR     = AXIS_R + SPRING_L0; // 軸中心からの半径
+    let ballRDot  = 0;                   // 半径方向速度
+
+    function makeSpringMesh() {
+      // x = 0〜1 の正規化ばね。scale.x で長さを制御する
+      const coils = 10, helixR = 0.055, segs = coils * 24;
+      const pts = [];
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const a = t * coils * Math.PI * 2;
+        pts.push(new THREE.Vector3(t, Math.sin(a) * helixR, Math.cos(a) * helixR));
+      }
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const geo   = new THREE.TubeGeometry(curve, segs, 0.010, 6, false);
+      const mat   = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.4, metalness: 0.6 });
+      const mesh  = new THREE.Mesh(geo, mat);
+      mesh.position.set(AXIS_R, BALL_Y, 0); // 軸表面から開始
+      mesh.scale.set(SPRING_L0, 1, 1);      // 初期スケール = 自然長
+      return mesh;
+    }
+
+    function resetBall() {
+      ballR    = AXIS_R + SPRING_L0;
+      ballRDot = 0;
+      if (springRef) springRef.scale.x = SPRING_L0;
+      if (ballRef)   ballRef.position.x = ballR;
+    }
+
+    function spawnSpringBall() {
+      if (springBallGroup) {
+        rotatingGroup.remove(springBallGroup);
+        springBallGroup = null;
+        springRef = null;
+        ballRef   = null;
+        document.getElementById('toolSpringBall').classList.remove('active');
+        return;
+      }
+
+      springBallGroup = new THREE.Group();
+
+      springRef = makeSpringMesh();
+      springBallGroup.add(springRef);
+
+      const ballGeo = new THREE.SphereGeometry(BALL_R, 24, 16);
+      const ballMat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.3, metalness: 0.1 });
+      ballRef = new THREE.Mesh(ballGeo, ballMat);
+      ballRef.position.set(AXIS_R + SPRING_L0, BALL_Y, 0);
+      springBallGroup.add(ballRef);
+
+      resetBall();
+      rotatingGroup.add(springBallGroup);
+      document.getElementById('toolSpringBall').classList.add('active');
+    }
+
+    document.getElementById('toolSpringBall').addEventListener('click', spawnSpringBall);
+
+    // ===== 観測者（外）=====
+    function buildPerson() {
+      const g = new THREE.Group();
+      const skinMat  = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.8 });
+      const shirtMat = new THREE.MeshStandardMaterial({ color: 0xdd4411, roughness: 0.7 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x5a4a30, roughness: 0.7 });
+      const hairMat  = new THREE.MeshStandardMaterial({ color: 0x221100, roughness: 0.9 });
+
+      const legH = 0.36;
+      [-0.072, 0.072].forEach(lx => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.10, legH, 0.12), pantsMat);
+        leg.position.set(lx, legH / 2, 0);
+        g.add(leg);
+      });
+
+      const torsoH = 0.40;
+      const torsoY = legH + torsoH / 2;
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.26, torsoH, 0.16), shirtMat);
+      torso.position.set(0, torsoY, 0);
+      g.add(torso);
+
+      const armH = 0.33;
+      [-0.185, 0.185].forEach(ax => {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.09, armH, 0.10), shirtMat);
+        arm.position.set(ax, torsoY - 0.04, 0);
+        g.add(arm);
+      });
+
+      const neckY = legH + torsoH + 0.04;
+      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.10), skinMat);
+      neck.position.set(0, neckY, 0);
+      g.add(neck);
+
+      const headY = neckY + 0.08 / 2 + 0.23 / 2;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.23, 0.20), skinMat);
+      head.position.set(0, headY, 0);
+      g.add(head);
+
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.06, 0.21), hairMat);
+      hair.position.set(0, headY + 0.23 / 2, 0);
+      g.add(hair);
+
+      return g;
+    }
+
+    const EXT_OBS_POS = new THREE.Vector3(7, 0, 7);
+    let personExtGroup = null;
+
+    function spawnPersonExt() {
+      if (personExtGroup) {
+        scene.remove(personExtGroup);
+        personExtGroup = null;
+        document.getElementById('toolPersonExt').classList.remove('active');
+        return;
+      }
+      personExtGroup = buildPerson();
+      personExtGroup.scale.setScalar(4);
+      personExtGroup.position.copy(EXT_OBS_POS);
+      // 原点（円盤中心）を向く方向に回転
+      const toOrigin = new THREE.Vector3(0, 0, 0).sub(EXT_OBS_POS);
+      personExtGroup.rotation.y = Math.atan2(toOrigin.x, toOrigin.z);
+      scene.add(personExtGroup);
+      document.getElementById('toolPersonExt').classList.add('active');
+    }
+
+    document.getElementById('toolPersonExt').addEventListener('click', spawnPersonExt);
+
+    // ===== 観測者（盤上）：椅子に座った姿勢 =====
+    function buildSittingPersonOnChair() {
+      const g = new THREE.Group();
+      const skinMat  = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.8 });
+      const shirtMat = new THREE.MeshStandardMaterial({ color: 0xdd4411, roughness: 0.7 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x5a4a30, roughness: 0.7 });
+      const hairMat  = new THREE.MeshStandardMaterial({ color: 0x221100, roughness: 0.9 });
+      const chairMat = new THREE.MeshStandardMaterial({ color: 0x8b5e3c, roughness: 0.8 });
+
+      const CHAIR_LEG_H = 0.35;
+      const SEAT_H      = 0.06;
+      const SEAT_TOP    = CHAIR_LEG_H + SEAT_H; // 0.41
+
+      // 椅子：4本脚
+      [[-0.12, -0.13], [-0.12, 0.13], [0.12, -0.13], [0.12, 0.13]].forEach(([cx, cz]) => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, CHAIR_LEG_H, 0.04), chairMat);
+        leg.position.set(cx, CHAIR_LEG_H / 2, cz);
+        g.add(leg);
+      });
+      // 椅子：座面
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.30, SEAT_H, 0.30), chairMat);
+      seat.position.set(0, CHAIR_LEG_H + SEAT_H / 2, 0);
+      g.add(seat);
+      // 椅子：背もたれ（人物の後ろ = -Z）
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.38, 0.05), chairMat);
+      back.position.set(0, SEAT_TOP + 0.19, -0.13);
+      g.add(back);
+
+      // 太もも（水平・前方 +Z へ伸びる）
+      [-0.07, 0.07].forEach(tx => {
+        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.09, 0.30), pantsMat);
+        thigh.position.set(tx, SEAT_TOP, 0.15);
+        g.add(thigh);
+      });
+      // すね（垂直・膝から下）
+      [-0.07, 0.07].forEach(tx => {
+        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.30, 0.10), pantsMat);
+        shin.position.set(tx, SEAT_TOP - 0.15, 0.30);
+        g.add(shin);
+      });
+      // 胴体
+      const torsoH = 0.40;
+      const torsoY = SEAT_TOP + torsoH / 2 + 0.03;
+      const torso  = new THREE.Mesh(new THREE.BoxGeometry(0.26, torsoH, 0.16), shirtMat);
+      torso.position.set(0, torsoY, 0);
+      g.add(torso);
+      // 腕
+      [-0.185, 0.185].forEach(ax => {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.30, 0.10), shirtMat);
+        arm.position.set(ax, torsoY - 0.05, 0);
+        g.add(arm);
+      });
+      // 首
+      const neckY = SEAT_TOP + torsoH + 0.06;
+      const neck  = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.10), skinMat);
+      neck.position.set(0, neckY, 0);
+      g.add(neck);
+      // 頭
+      const headY = neckY + 0.04 + 0.115;
+      const head  = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.23, 0.20), skinMat);
+      head.position.set(0, headY, 0);
+      g.add(head);
+      // 髪
+      const hair  = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.06, 0.21), hairMat);
+      hair.position.set(0, headY + 0.115, 0);
+      g.add(hair);
+
+      return g;
+    }
+
+    let personDiskGroup = null;
+
+    function spawnPersonDisk() {
+      if (personDiskGroup) {
+        rotatingGroup.remove(personDiskGroup);
+        personDiskGroup = null;
+        document.getElementById('toolPersonDisk').classList.remove('active');
+        return;
+      }
+      personDiskGroup = buildSittingPersonOnChair();
+      // 円盤中心(0)と円盤端(半径5)の中点(x=2.5)の真横（Z 方向）に配置
+      personDiskGroup.position.set(2.5, DISK_H, 3.5);
+      personDiskGroup.rotation.y = Math.PI; // -Z 方向（ばね側）を向く
+      rotatingGroup.add(personDiskGroup);   // 回転グループに追加 → 円盤と一緒に回る
+      document.getElementById('toolPersonDisk').classList.add('active');
+    }
+
+    document.getElementById('toolPersonDisk').addEventListener('click', spawnPersonDisk);
+
+    // ===== 描画ツール =====
+    // デフォルトボードはカメラ前面に追従（fov=50°、距離8 → 縦≈7.5）
+    const DEFAULT_BOARD_Z  = -8;
+    const INK_BOARD_WIDTH  = 20;
+    const INK_BOARD_HEIGHT = 12;
+
+    let inkMode    = 'none'; // 'none' | 'pen' | 'eraser'
+    let inkDrawing = false;
+    let inkBoardMesh    = null;
+    let inkBoardCanvas  = null;
+    let inkBoardCtx     = null;
+    let inkBoardTexture = null;
+    let activeInkCtx    = null;
+    let activeIBMesh    = null;
+    let activeIBTexture = null;
+    let inkDirty   = false; // tick()で needsUpdate を1回だけセットするフラグ
+    let shapeDirty = false;
+    const PEN_COLOR    = 'rgba(255, 40, 40, 1.0)';
+    const PEN_WIDTH    = 2;
+    const ERASER_WIDTH = 20;
+    let lastInkX = 0, lastInkY = 0;
+
+    // ===== 盤上ボード（縦型、rotatingGroup 内）=====
+    const DISK_DRAW_CENTER = new THREE.Vector3(2.5, DISK_H + 1.0, 0.5);
+    const DISK_DRAW_W = 8, DISK_DRAW_H = 3;
+
+    let diskInkBoardMesh = null, diskInkBoardCanvas = null;
+    let diskInkBoardCtx  = null, diskInkBoardTexture = null;
+    let diskShapeBoardMesh = null, diskShapeBoardCanvas = null;
+    let diskShapeBoardCtx  = null, diskShapeBoardTexture = null;
+    const diskShapes = [];
+    let diskSelectedShapeIdx = -1;
+
+    // ===== 真上カメラ用ボード（水平、球の上）=====
+    // 球のトップ = DISK_H + 2*BALL_R ≈ 0.78 → 余裕を持って y=1.0
+    const TOP_INK_BOARD_CENTER = new THREE.Vector3(0, 1.0, 0.05);
+
+    let topInkBoardMesh = null, topInkBoardCanvas = null;
+    let topInkBoardCtx  = null, topInkBoardTexture = null;
+    let topShapeBoardMesh = null, topShapeBoardCanvas = null;
+    let topShapeBoardCtx  = null, topShapeBoardTexture = null;
+    const topShapes = [];
+    let topSelectedShapeIdx = -1;
+
+    // ===== 観測者（外）カメラ用ボード（カメラ前面に固定）=====
+    let extInkBoardMesh = null, extInkBoardCanvas = null;
+    let extInkBoardCtx  = null, extInkBoardTexture = null;
+    let extShapeBoardMesh = null, extShapeBoardCanvas = null;
+    let extShapeBoardCtx  = null, extShapeBoardTexture = null;
+    const extShapes = [];
+    let extSelectedShapeIdx = -1;
+
+    // アクティブなボードを返すヘルパー（4 系統）
+    function _ib() {
+      if (diskCamActive) return { mesh: diskInkBoardMesh, canvas: diskInkBoardCanvas,
+                                  ctx: diskInkBoardCtx,  texture: diskInkBoardTexture };
+      if (topCamActive)  return { mesh: topInkBoardMesh,  canvas: topInkBoardCanvas,
+                                  ctx: topInkBoardCtx,   texture: topInkBoardTexture };
+      if (extCamActive)  return { mesh: extInkBoardMesh,  canvas: extInkBoardCanvas,
+                                  ctx: extInkBoardCtx,   texture: extInkBoardTexture };
+      return { mesh: inkBoardMesh, canvas: inkBoardCanvas,
+               ctx: inkBoardCtx,   texture: inkBoardTexture };
+    }
+    function _sb() {
+      if (diskCamActive) return { mesh: diskShapeBoardMesh, canvas: diskShapeBoardCanvas,
+                                  ctx: diskShapeBoardCtx,  texture: diskShapeBoardTexture };
+      if (topCamActive)  return { mesh: topShapeBoardMesh,  canvas: topShapeBoardCanvas,
+                                  ctx: topShapeBoardCtx,   texture: topShapeBoardTexture };
+      if (extCamActive)  return { mesh: extShapeBoardMesh,  canvas: extShapeBoardCanvas,
+                                  ctx: extShapeBoardCtx,   texture: extShapeBoardTexture };
+      return { mesh: shapeBoardMesh, canvas: shapeBoardCanvas,
+               ctx: shapeBoardCtx,   texture: shapeBoardTexture };
+    }
+    function _shapes() {
+      if (diskCamActive) return diskShapes;
+      if (topCamActive)  return topShapes;
+      if (extCamActive)  return extShapes;
+      return shapes;
+    }
+    function _getSelIdx() {
+      if (diskCamActive) return diskSelectedShapeIdx;
+      if (topCamActive)  return topSelectedShapeIdx;
+      if (extCamActive)  return extSelectedShapeIdx;
+      return selectedShapeIdx;
+    }
+    function _setSelIdx(v) {
+      if (diskCamActive)      diskSelectedShapeIdx = v;
+      else if (topCamActive)  topSelectedShapeIdx  = v;
+      else if (extCamActive)  extSelectedShapeIdx  = v;
+      else                    selectedShapeIdx      = v;
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const mouse     = new THREE.Vector2();
+
+    function ensureInkBoard() {
+      if (diskCamActive) { ensureDiskInkBoard(); return; }
+      if (topCamActive)  { ensureTopInkBoard();  return; }
+      if (extCamActive)  { ensureExtInkBoard();  return; }
+      if (inkBoardMesh) return;
+      inkBoardCanvas = document.createElement('canvas');
+      inkBoardCanvas.width  = 1024;
+      inkBoardCanvas.height = 614;
+      inkBoardCtx = inkBoardCanvas.getContext('2d');
+      inkBoardCtx.lineCap  = 'round';
+      inkBoardCtx.lineJoin = 'round';
+      inkBoardTexture = new THREE.CanvasTexture(inkBoardCanvas);
+      inkBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      inkBoardTexture.generateMipmaps = false;
+      inkBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: inkBoardTexture, transparent: true, opacity: 1,
+        side: THREE.FrontSide, depthWrite: false, depthTest: false,
+      });
+      const geo = new THREE.PlaneGeometry(INK_BOARD_WIDTH, INK_BOARD_HEIGHT);
+      inkBoardMesh = new THREE.Mesh(geo, mat);
+      inkBoardMesh.position.set(0, 0, DEFAULT_BOARD_Z);
+      inkBoardMesh.renderOrder = 1;
+      camera.add(inkBoardMesh);
+    }
+
+    function ensureDiskInkBoard() {
+      if (diskInkBoardMesh) return;
+      diskInkBoardCanvas = document.createElement('canvas');
+      diskInkBoardCanvas.width  = 1024;
+      diskInkBoardCanvas.height = 384;
+      diskInkBoardCtx = diskInkBoardCanvas.getContext('2d');
+      diskInkBoardCtx.lineCap  = 'round';
+      diskInkBoardCtx.lineJoin = 'round';
+      diskInkBoardTexture = new THREE.CanvasTexture(diskInkBoardCanvas);
+      diskInkBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      diskInkBoardTexture.generateMipmaps = false;
+      diskInkBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: diskInkBoardTexture, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -1;
+      mat.polygonOffsetUnits  = -1;
+      const geo = new THREE.PlaneGeometry(DISK_DRAW_W, DISK_DRAW_H);
+      diskInkBoardMesh = new THREE.Mesh(geo, mat);
+      diskInkBoardMesh.position.copy(DISK_DRAW_CENTER);
+      // 回転なし（XY 面、+Z 向き＝観測者の方向）
+      rotatingGroup.add(diskInkBoardMesh);
+    }
+
+    function ensureDiskShapeBoard() {
+      if (diskShapeBoardMesh) return;
+      diskShapeBoardCanvas = document.createElement('canvas');
+      diskShapeBoardCanvas.width  = 1024;
+      diskShapeBoardCanvas.height = 384;
+      diskShapeBoardCtx = diskShapeBoardCanvas.getContext('2d');
+      diskShapeBoardCtx.lineCap  = 'round';
+      diskShapeBoardCtx.lineJoin = 'round';
+      diskShapeBoardTexture = new THREE.CanvasTexture(diskShapeBoardCanvas);
+      diskShapeBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      diskShapeBoardTexture.generateMipmaps = false;
+      diskShapeBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: diskShapeBoardTexture, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -2;
+      mat.polygonOffsetUnits  = -2;
+      const geo = new THREE.PlaneGeometry(DISK_DRAW_W, DISK_DRAW_H);
+      diskShapeBoardMesh = new THREE.Mesh(geo, mat);
+      diskShapeBoardMesh.position.set(DISK_DRAW_CENTER.x, DISK_DRAW_CENTER.y, DISK_DRAW_CENTER.z - 0.02);
+      rotatingGroup.add(diskShapeBoardMesh);
+    }
+
+    function ensureTopInkBoard() {
+      if (topInkBoardMesh) return;
+      topInkBoardCanvas = document.createElement('canvas');
+      topInkBoardCanvas.width  = 2048;
+      topInkBoardCanvas.height = 1536;
+      topInkBoardCtx = topInkBoardCanvas.getContext('2d');
+      topInkBoardCtx.lineCap  = 'round';
+      topInkBoardCtx.lineJoin = 'round';
+      topInkBoardTexture = new THREE.CanvasTexture(topInkBoardCanvas);
+      topInkBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      topInkBoardTexture.generateMipmaps = false;
+      topInkBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: topInkBoardTexture, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -1;
+      mat.polygonOffsetUnits  = -1;
+      const geo = new THREE.PlaneGeometry(INK_BOARD_WIDTH, INK_BOARD_HEIGHT);
+      topInkBoardMesh = new THREE.Mesh(geo, mat);
+      topInkBoardMesh.position.copy(TOP_INK_BOARD_CENTER);
+      topInkBoardMesh.rotation.x = -Math.PI / 2; // 水平
+      rotatingGroup.add(topInkBoardMesh);
+    }
+
+    function ensureTopShapeBoard() {
+      if (topShapeBoardMesh) return;
+      topShapeBoardCanvas = document.createElement('canvas');
+      topShapeBoardCanvas.width  = 2048;
+      topShapeBoardCanvas.height = 1536;
+      topShapeBoardCtx = topShapeBoardCanvas.getContext('2d');
+      topShapeBoardCtx.lineCap  = 'round';
+      topShapeBoardCtx.lineJoin = 'round';
+      topShapeBoardTexture = new THREE.CanvasTexture(topShapeBoardCanvas);
+      topShapeBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      topShapeBoardTexture.generateMipmaps = false;
+      topShapeBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: topShapeBoardTexture, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -2;
+      mat.polygonOffsetUnits  = -2;
+      const geo = new THREE.PlaneGeometry(SHAPE_BOARD_WIDTH, SHAPE_BOARD_HEIGHT);
+      topShapeBoardMesh = new THREE.Mesh(geo, mat);
+      topShapeBoardMesh.position.set(TOP_INK_BOARD_CENTER.x, TOP_INK_BOARD_CENTER.y - 0.02, TOP_INK_BOARD_CENTER.z);
+      topShapeBoardMesh.rotation.x = -Math.PI / 2; // 水平
+      rotatingGroup.add(topShapeBoardMesh);
+    }
+
+    // ===== 観測者（外）カメラ用ボード（観測者の顔の前、ワールド空間）=====
+    // 観測者: (7,0,7) からスケール4倍・原点向き → 目線高さ ≈ 3.82
+    // カメラから約4unit前方 (4.5, 1.9, 4.5) に垂直ボードを設置
+    const EXT_DRAW_CENTER = new THREE.Vector3(4.5, 1.9, 4.5);
+    const EXT_DRAW_W = 8, EXT_DRAW_H = 5;
+
+    function ensureExtInkBoard() {
+      if (extInkBoardMesh) return;
+      extInkBoardCanvas = document.createElement('canvas');
+      extInkBoardCanvas.width  = 1024;
+      extInkBoardCanvas.height = 640;
+      extInkBoardCtx = extInkBoardCanvas.getContext('2d');
+      extInkBoardCtx.lineCap  = 'round';
+      extInkBoardCtx.lineJoin = 'round';
+      extInkBoardTexture = new THREE.CanvasTexture(extInkBoardCanvas);
+      extInkBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      extInkBoardTexture.generateMipmaps = false;
+      extInkBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: extInkBoardTexture, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -1;
+      mat.polygonOffsetUnits  = -1;
+      const geo = new THREE.PlaneGeometry(EXT_DRAW_W, EXT_DRAW_H);
+      extInkBoardMesh = new THREE.Mesh(geo, mat);
+      extInkBoardMesh.position.copy(EXT_DRAW_CENTER);
+      extInkBoardMesh.rotation.y = Math.PI / 4; // 観測者方向を向く
+      scene.add(extInkBoardMesh);
+    }
+
+    function ensureExtShapeBoard() {
+      if (extShapeBoardMesh) return;
+      extShapeBoardCanvas = document.createElement('canvas');
+      extShapeBoardCanvas.width  = 1024;
+      extShapeBoardCanvas.height = 640;
+      extShapeBoardCtx = extShapeBoardCanvas.getContext('2d');
+      extShapeBoardCtx.lineCap  = 'round';
+      extShapeBoardCtx.lineJoin = 'round';
+      extShapeBoardTexture = new THREE.CanvasTexture(extShapeBoardCanvas);
+      extShapeBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      extShapeBoardTexture.generateMipmaps = false;
+      extShapeBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: extShapeBoardTexture, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -2;
+      mat.polygonOffsetUnits  = -2;
+      const geo = new THREE.PlaneGeometry(EXT_DRAW_W, EXT_DRAW_H);
+      extShapeBoardMesh = new THREE.Mesh(geo, mat);
+      extShapeBoardMesh.position.set(
+        EXT_DRAW_CENTER.x, EXT_DRAW_CENTER.y, EXT_DRAW_CENTER.z
+      );
+      extShapeBoardMesh.rotation.y = Math.PI / 4;
+      scene.add(extShapeBoardMesh);
+    }
+
+    function setInkMode(next) {
+      inkMode = (inkMode === next) ? 'none' : next;
+      if (inkMode !== 'none') {
+        ensureInkBoard();
+        shapeMode = 'none';
+        document.getElementById('toolArrow').classList.remove('active');
+        _setSelIdx(-1);
+        if (_sb().mesh) redrawShapes();
+        if (shapeDrawing) endShapeDraw();
+      }
+      document.getElementById('toolPen').classList.toggle('active', inkMode === 'pen');
+      document.getElementById('toolEraser').classList.toggle('active', inkMode === 'eraser');
+      if (inkDrawing) endGraphInk();
+    }
+
+    function clearInkAll() {
+      const b = _ib();
+      if (b.ctx && b.canvas) {
+        b.ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
+        if (b.texture) b.texture.needsUpdate = true;
+      }
+    }
+
+    function uvToCanvasXY(uv, cvs) {
+      return { x: uv.x * cvs.width, y: (1 - uv.y) * cvs.height };
+    }
+
+    function getPointerNDC(ev) {
+      const rect = canvas.getBoundingClientRect();
+      mouse.set(
+        ((ev.clientX - rect.left) / rect.width)  *  2 - 1,
+        -((ev.clientY - rect.top)  / rect.height) *  2 + 1
+      );
+    }
+
+    function tryStartGraphInk(ev) {
+      if (inkMode === 'none') return false;
+      ensureInkBoard();
+      const b = _ib();
+      if (!b.mesh) return false;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(b.mesh, false);
+      if (!hits.length || !hits[0].uv) return false;
+      activeInkCtx = b.ctx;
+      activeIBMesh    = b.mesh;
+      activeIBTexture = b.texture;
+      const xy = uvToCanvasXY(hits[0].uv, b.canvas);
+      lastInkX = xy.x; lastInkY = xy.y;
+      inkDrawing = true;
+      if (inkMode === 'pen') {
+        activeInkCtx.globalCompositeOperation = 'source-over';
+        activeInkCtx.strokeStyle = PEN_COLOR;
+        activeInkCtx.lineWidth   = PEN_WIDTH;
+      } else {
+        activeInkCtx.globalCompositeOperation = 'destination-out';
+        activeInkCtx.strokeStyle = 'rgba(0,0,0,1)';
+        activeInkCtx.lineWidth   = ERASER_WIDTH;
+      }
+      activeInkCtx.beginPath();
+      activeInkCtx.moveTo(lastInkX, lastInkY);
+      activeInkCtx.lineTo(lastInkX + 0.01, lastInkY + 0.01);
+      activeInkCtx.stroke();
+      controls.enabled = false;
+      try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+      inkDirty = true;
+      ev.preventDefault(); ev.stopPropagation();
+      return true;
+    }
+
+    function updateGraphInk(ev) {
+      if (!inkDrawing) return;
+      if (!activeIBMesh) return;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+      const b = _ib();
+      const hits = raycaster.intersectObject(activeIBMesh, false);
+      if (!hits.length || !hits[0].uv) return;
+      const xy = uvToCanvasXY(hits[0].uv, b.canvas);
+      activeInkCtx.beginPath();
+      activeInkCtx.moveTo(lastInkX, lastInkY);
+      activeInkCtx.lineTo(xy.x, xy.y);
+      activeInkCtx.stroke();
+      lastInkX = xy.x; lastInkY = xy.y;
+      inkDirty = true;
+      ev.preventDefault();
+    }
+
+    function endGraphInk(ev) {
+      if (!inkDrawing) return;
+      inkDrawing = false;
+      controls.enabled = true;
+      try { renderer.domElement.releasePointerCapture(ev?.pointerId); } catch(e) {}
+    }
+
+    document.getElementById('toolPen').addEventListener('click', () => setInkMode('pen'));
+    document.getElementById('toolEraser').addEventListener('click', () => setInkMode('eraser'));
+    document.getElementById('inkClear').addEventListener('click', clearInkAll);
+
+    // ===== 図形ツール（矢印）=====
+    const SHAPE_BOARD_CENTER = new THREE.Vector3(0, 0, 0.03);
+    const SHAPE_BOARD_WIDTH  = 40;
+    const SHAPE_BOARD_HEIGHT = 30;
+
+    let shapeMode        = 'none';
+    let shapeDrawing     = false;
+    let shapeStartX      = 0, shapeStartY  = 0;
+    let shapeCurrentX    = 0, shapeCurrentY = 0;
+    let shapeBoardCanvas  = null;
+    let shapeBoardCtx     = null;
+    let shapeBoardTexture = null;
+    let shapeBoardMesh    = null;
+    const shapes = [];
+    let selectedShapeIdx    = -1;
+    let selectDragging      = false;
+    let selectDragHandle    = null;
+    let selectDragOrigin    = null;
+    let selectDragShapeSnap = null;
+
+    function ensureShapeBoard() {
+      if (diskCamActive) { ensureDiskShapeBoard(); return; }
+      if (topCamActive)  { ensureTopShapeBoard();  return; }
+      if (extCamActive)  { ensureExtShapeBoard();  return; }
+      if (shapeBoardMesh) return;
+      shapeBoardCanvas = document.createElement('canvas');
+      shapeBoardCanvas.width  = 1024;
+      shapeBoardCanvas.height = 614;
+      shapeBoardCtx = shapeBoardCanvas.getContext('2d');
+      shapeBoardCtx.lineCap  = 'round';
+      shapeBoardCtx.lineJoin = 'round';
+      shapeBoardTexture = new THREE.CanvasTexture(shapeBoardCanvas);
+      shapeBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      shapeBoardTexture.generateMipmaps = false;
+      shapeBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: shapeBoardTexture, transparent: true, opacity: 1,
+        side: THREE.FrontSide, depthWrite: false, depthTest: false,
+      });
+      const geo = new THREE.PlaneGeometry(INK_BOARD_WIDTH, INK_BOARD_HEIGHT);
+      shapeBoardMesh = new THREE.Mesh(geo, mat);
+      shapeBoardMesh.position.set(0, 0, DEFAULT_BOARD_Z - 0.01);
+      shapeBoardMesh.renderOrder = 2;
+      camera.add(shapeBoardMesh);
+    }
+
+    function drawHandle(ctx, x, y, isMid = false) {
+      ctx.save();
+      ctx.fillStyle   = isMid ? '#88ccff' : '#ffffff';
+      ctx.strokeStyle = '#4499ff';
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawArrowOnCanvas(ctx, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      if (len < 2) return;
+      const angle = Math.atan2(dy, dx);
+      const hw = Math.max(8, Math.min(24, len * 0.10));
+      const ha = Math.PI / 8;
+      function pass(width, color) {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - hw * Math.cos(angle - ha), y2 - hw * Math.sin(angle - ha)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - hw * Math.cos(angle + ha), y2 - hw * Math.sin(angle + ha)); ctx.stroke();
+      }
+      pass(PEN_WIDTH + 2, 'rgba(0,0,0,0.88)');
+      pass(PEN_WIDTH,     PEN_COLOR);
+    }
+
+    function drawShapeOnCanvas(ctx, shape, selected) {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = PEN_COLOR;
+      ctx.lineWidth   = PEN_WIDTH;
+      if (shape.type === 'arrow') {
+        drawArrowOnCanvas(ctx, shape.x1, shape.y1, shape.x2, shape.y2);
+        if (selected) {
+          drawHandle(ctx, shape.x1, shape.y1);
+          drawHandle(ctx, shape.x2, shape.y2);
+          drawHandle(ctx, (shape.x1 + shape.x2) / 2, (shape.y1 + shape.y2) / 2, true);
+        }
+      }
+    }
+
+    function updateShapeSelectionUI() {
+      const delBtn = document.getElementById('shapeDeleteSelected');
+      if (delBtn) delBtn.style.display = _getSelIdx() >= 0 ? '' : 'none';
+    }
+
+    function redrawShapes() {
+      const b = _sb();
+      if (!b.ctx) return;
+      b.ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
+      _shapes().forEach((s, i) => drawShapeOnCanvas(b.ctx, s, i === _getSelIdx()));
+      shapeDirty = true;
+      updateShapeSelectionUI();
+    }
+
+    function distToSegment(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const len2 = dx * dx + dy * dy;
+      if (len2 === 0) return Math.hypot(px - x1, py - y1);
+      const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+      return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
+
+    function hitTestShape(shape, cx, cy, thr = 12) {
+      if (shape.type === 'arrow')
+        return distToSegment(cx, cy, shape.x1, shape.y1, shape.x2, shape.y2) < thr;
+      return false;
+    }
+
+    function hitTestHandles(shape, cx, cy, thr = 5) {
+      if (shape.type === 'arrow') {
+        if (Math.hypot(cx - shape.x1, cy - shape.y1) < thr) return 'arrow-start';
+        if (Math.hypot(cx - shape.x2, cy - shape.y2) < thr) return 'arrow-end';
+        const mx = (shape.x1 + shape.x2) / 2, my = (shape.y1 + shape.y2) / 2;
+        if (Math.hypot(cx - mx, cy - my) < thr) return 'arrow-mid';
+      }
+      return null;
+    }
+
+    function setShapeMode(next) {
+      shapeMode = (shapeMode === next) ? 'none' : next;
+      if (shapeMode !== 'none') {
+        ensureShapeBoard();
+        _setSelIdx(-1);
+        redrawShapes();
+        inkMode = 'none';
+        document.getElementById('toolPen').classList.remove('active');
+        document.getElementById('toolEraser').classList.remove('active');
+        if (inkDrawing) endGraphInk();
+      }
+      document.getElementById('toolArrow').classList.toggle('active', shapeMode === 'arrow');
+      updateShapeSelectionUI();
+    }
+
+    function tryStartShapeDraw(ev) {
+      if (shapeMode === 'none') return false;
+      ensureShapeBoard();
+      const b = _sb();
+      if (!b.mesh) return false;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(b.mesh, false);
+      if (!hits.length || !hits[0].uv) return false;
+      const xy = uvToCanvasXY(hits[0].uv, b.canvas);
+      shapeStartX = xy.x; shapeStartY = xy.y;
+      shapeCurrentX = xy.x; shapeCurrentY = xy.y;
+      shapeDrawing = true;
+      controls.enabled = false;
+      try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+      ev.preventDefault(); ev.stopPropagation();
+      return true;
+    }
+
+    function updateShapeDraw(ev) {
+      if (!shapeDrawing) return;
+      const b = _sb();
+      if (!b.mesh) return;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(b.mesh, false);
+      if (!hits.length || !hits[0].uv) return;
+      const xy = uvToCanvasXY(hits[0].uv, b.canvas);
+      shapeCurrentX = xy.x; shapeCurrentY = xy.y;
+      b.ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
+      _shapes().forEach((s, i) => drawShapeOnCanvas(b.ctx, s, i === _getSelIdx()));
+      b.ctx.globalCompositeOperation = 'source-over';
+      b.ctx.strokeStyle = PEN_COLOR;
+      b.ctx.lineWidth   = PEN_WIDTH;
+      drawArrowOnCanvas(b.ctx, shapeStartX, shapeStartY, shapeCurrentX, shapeCurrentY);
+      shapeDirty = true;
+      ev.preventDefault();
+    }
+
+    function endShapeDraw(ev) {
+      if (!shapeDrawing) return;
+      shapeDrawing = false;
+      controls.enabled = true;
+      try { renderer.domElement.releasePointerCapture(ev?.pointerId); } catch(e) {}
+      if (Math.hypot(shapeCurrentX - shapeStartX, shapeCurrentY - shapeStartY) >= 4)
+        _shapes().push({ type: 'arrow', x1: shapeStartX, y1: shapeStartY, x2: shapeCurrentX, y2: shapeCurrentY });
+      redrawShapes();
+      shapeMode = 'none';
+      document.getElementById('toolArrow').classList.remove('active');
+    }
+
+    function tryStartSelectDrag(ev) {
+      if (shapeMode !== 'none' || inkMode !== 'none') return false;
+      const b = _sb();
+      if (!b.mesh) return false;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(b.mesh, false);
+      if (!hits.length || !hits[0].uv) return false;
+      const { x: cx, y: cy } = uvToCanvasXY(hits[0].uv, b.canvas);
+      const si = _getSelIdx();
+      const sh = _shapes();
+      if (si >= 0) {
+        const handle = hitTestHandles(sh[si], cx, cy);
+        if (handle) {
+          selectDragHandle    = handle;
+          selectDragOrigin    = { x: cx, y: cy };
+          selectDragShapeSnap = { ...sh[si] };
+          selectDragging      = true;
+          controls.enabled    = false;
+          try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+          ev.preventDefault(); ev.stopPropagation();
+          return true;
+        }
+      }
+      for (let i = sh.length - 1; i >= 0; i--) {
+        if (hitTestShape(sh[i], cx, cy)) {
+          _setSelIdx(i);
+          selectDragging = false;
+          redrawShapes();
+          ev.preventDefault(); ev.stopPropagation();
+          return true;
+        }
+      }
+      if (si >= 0) { _setSelIdx(-1); redrawShapes(); }
+      return false;
+    }
+
+    function updateSelectDrag(ev) {
+      if (!selectDragging || !selectDragHandle || _getSelIdx() < 0) return;
+      const b = _sb();
+      if (!b.mesh) return;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(b.mesh, false);
+      if (!hits.length || !hits[0].uv) return;
+      const { x, y } = uvToCanvasXY(hits[0].uv, b.canvas);
+      const shape = _shapes()[_getSelIdx()];
+      if (shape.type === 'arrow') {
+        if (selectDragHandle === 'arrow-start') { shape.x1 = x; shape.y1 = y; }
+        else if (selectDragHandle === 'arrow-end') { shape.x2 = x; shape.y2 = y; }
+        else if (selectDragHandle === 'arrow-mid' && selectDragOrigin && selectDragShapeSnap) {
+          const dx = x - selectDragOrigin.x, dy = y - selectDragOrigin.y;
+          shape.x1 = selectDragShapeSnap.x1 + dx; shape.y1 = selectDragShapeSnap.y1 + dy;
+          shape.x2 = selectDragShapeSnap.x2 + dx; shape.y2 = selectDragShapeSnap.y2 + dy;
+        }
+      }
+      redrawShapes();
+      ev.preventDefault();
+    }
+
+    function endSelectDrag(ev) {
+      if (!selectDragging) return;
+      selectDragging = false; selectDragHandle = null;
+      selectDragOrigin = null; selectDragShapeSnap = null;
+      controls.enabled = true;
+      try { renderer.domElement.releasePointerCapture(ev?.pointerId); } catch(e) {}
+    }
+
+    document.getElementById('toolArrow').addEventListener('click', () => setShapeMode('arrow'));
+    document.getElementById('shapeDeleteSelected').addEventListener('click', () => {
+      const si = _getSelIdx();
+      if (si >= 0) {
+        _shapes().splice(si, 1);
+        _setSelIdx(-1);
+        redrawShapes();
+      }
+    });
+    document.getElementById('shapeClear').addEventListener('click', () => {
+      _shapes().length = 0;
+      _setSelIdx(-1);
+      if (_sb().ctx) redrawShapes();
+    });
+    window.addEventListener('keydown', (ev) => {
+      const tag = document.activeElement?.tagName;
+      if (_getSelIdx() >= 0 && (ev.key === 'Delete' || ev.key === 'Backspace')
+          && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        _shapes().splice(_getSelIdx(), 1);
+        _setSelIdx(-1);
+        redrawShapes();
+        ev.preventDefault();
+      }
+    });
+
+    // ===== ポインターイベント =====
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      if (e.button === 0) {
+        tryStartShapeDraw(e) || tryStartSelectDrag(e) || tryStartGraphInk(e);
+      }
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (shapeDrawing) { updateShapeDraw(e); return; }
+      if (selectDragging) { updateSelectDrag(e); return; }
+      if (inkDrawing) { updateGraphInk(e); return; }
+    });
+    window.addEventListener('pointerup', (e) => {
+      if (e.button === 0) { endShapeDraw(e); endSelectDrag(e); endGraphInk(e); }
+    });
+    window.addEventListener('pointercancel', (e) => { endShapeDraw(e); endSelectDrag(e); endGraphInk(e); });
+
+    // ===== 道具箱の開閉 =====
+    (function setupToolboxToggle(){
+      const panel = document.getElementById('toolboxPanel');
+      const btn   = document.getElementById('toolboxToggle');
+      if (!panel || !btn) return;
+      let open = true;
+      function apply(){
+        panel.classList.toggle('is-collapsed', !open);
+        btn.textContent = open ? '＜' : '＞';
+        btn.setAttribute('aria-expanded', String(open));
+      }
+      apply();
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        open = !open;
+        apply();
+      });
+    })();
+
+    // ===== カメラトランジション =====
+    let camTrans = null;
+
+    function beginCamTransition(toPos, toTarget, onDone, dur) {
+      camTrans = {
+        fromPos:    camera.position.clone(),
+        fromTarget: controls.target.clone(),
+        toPos:      toPos.clone(),
+        toTarget:   toTarget.clone(),
+        dur:        dur != null ? dur : 0.6,
+        t:          0,
+        onDone:     onDone || null
+      };
+      controls.enableRotate = false;
+      controls.enablePan    = false;
+    }
+
+    // ===== 観測者（盤上）カメラ =====
+    // 観測者ローカル座標（rotatingGroup 内）での目線位置
+    const DISK_CAM_EYE_LOCAL = new THREE.Vector3(2.5, DISK_H + 1.0, 3.1);
+    // 観測者の正面方向ローカル（rotation.y=π → -Z 向き）
+    const DISK_CAM_FRONT_LOCAL = new THREE.Vector3(0, 0, -1);
+
+    let diskCamActive = false;
+    const _eyeWorld    = new THREE.Vector3();
+    const _frontWorld  = new THREE.Vector3();
+
+    function getDiskCamWorldVecs() {
+      rotatingGroup.localToWorld(_eyeWorld.copy(DISK_CAM_EYE_LOCAL));
+      _frontWorld.copy(DISK_CAM_FRONT_LOCAL).applyQuaternion(rotatingGroup.quaternion);
+    }
+
+    // デフォルトボード（カメラ子）の表示切替
+    function _syncDefaultBoards() {
+      const show = !diskCamActive && !extCamActive && !topCamActive;
+      if (inkBoardMesh)   inkBoardMesh.visible   = show;
+      if (shapeBoardMesh) shapeBoardMesh.visible  = show;
+    }
+
+    function setDiskCam(active) {
+      diskCamActive = active;
+      document.getElementById('toolDiskCam').classList.toggle('active', active);
+      if (active) {
+        // 他カメラをオフ
+        if (extCamActive) { extCamActive = false; document.getElementById('toolExtCam').classList.remove('active'); }
+        if (topCamActive) { topCamActive  = false; document.getElementById('toolTopCam').classList.remove('active');
+                            camera.up.set(0, 1, 0); controls.enableZoom = true; }
+        controls.enableRotate = false;
+        controls.enablePan    = false;
+        getDiskCamWorldVecs();
+        const toTarget = _eyeWorld.clone().addScaledVector(_frontWorld, 8);
+        beginCamTransition(_eyeWorld.clone(), toTarget, null, 0.6);
+      } else {
+        controls.enableRotate = true;
+        controls.enablePan    = true;
+        controls.update();
+      }
+      _syncDefaultBoards();
+    }
+
+    document.getElementById('toolDiskCam').addEventListener('click', () => {
+      setDiskCam(!diskCamActive);
+    });
+
+    // ===== 観測者（外）カメラ =====
+    // 3倍スケール観測者の目線高さ（headY ≈ 0.955 × 3 ≈ 2.87）
+    const EXT_EYE_Y     = 0.955 * 4;
+    const EXT_CAM_POS   = new THREE.Vector3(EXT_OBS_POS.x, EXT_EYE_Y, EXT_OBS_POS.z);
+    const EXT_CAM_TARGET = new THREE.Vector3(0, 0, 0); // 円盤中心を見る
+
+    let extCamActive = false;
+
+    function setExtCam(active) {
+      extCamActive = active;
+      document.getElementById('toolExtCam').classList.toggle('active', active);
+      if (active) {
+        // 他カメラをオフ
+        if (diskCamActive) { diskCamActive = false; document.getElementById('toolDiskCam').classList.remove('active'); }
+        if (topCamActive)  { topCamActive  = false; document.getElementById('toolTopCam').classList.remove('active');
+                             camera.up.set(0, 1, 0); controls.enableZoom = true; }
+        controls.enableRotate = false;
+        controls.enablePan    = false;
+        beginCamTransition(EXT_CAM_POS, EXT_CAM_TARGET, null, 0.6);
+      } else {
+        controls.enableRotate = true;
+        controls.enablePan    = true;
+        controls.update();
+      }
+      _syncDefaultBoards();
+    }
+
+    document.getElementById('toolExtCam').addEventListener('click', () => {
+      setExtCam(!extCamActive);
+    });
+
+    // ===== 真上カメラ =====
+    let topCamActive = false;
+    let topCamY = 14; // 真上からの高さ（ホイールで変更）
+
+    function setTopCam(active) {
+      topCamActive = active;
+      document.getElementById('toolTopCam').classList.toggle('active', active);
+      if (active) {
+        if (diskCamActive) { diskCamActive = false; document.getElementById('toolDiskCam').classList.remove('active'); }
+        if (extCamActive)  { extCamActive  = false; document.getElementById('toolExtCam').classList.remove('active'); }
+        controls.enableRotate = false;
+        controls.enablePan    = false;
+        controls.enableZoom   = false; // ホイールズームを独自処理に
+        camera.up.set(0, 0, -1); // 真下を向くときのジンバルロック回避
+        beginCamTransition(
+          new THREE.Vector3(0, topCamY, 0),
+          new THREE.Vector3(0, 0, 0),
+          null, 0.6
+        );
+      } else {
+        camera.up.set(0, 1, 0);
+        controls.enableRotate = true;
+        controls.enablePan    = true;
+        controls.enableZoom   = true;
+        controls.update();
+      }
+      _syncDefaultBoards();
+    }
+
+    document.getElementById('toolTopCam').addEventListener('click', () => {
+      setTopCam(!topCamActive);
+    });
+
+    // 真上カメラ中のホイールズーム
+    renderer.domElement.addEventListener('wheel', (e) => {
+      if (!topCamActive) return;
+      const step = topCamY * 0.08; // 高さに比例したズーム感
+      topCamY = Math.max(3, Math.min(30, topCamY + (e.deltaY > 0 ? step : -step)));
+      e.preventDefault();
+    }, { passive: false });
+
+    // ===== リサイズ＆描画ループ =====
+    // hor+: 16:9基準で水平方向の見え方を固定するためのFOV計算
+    const BASE_FOV    = 50;
+    const BASE_ASPECT = 16 / 9;
+    function hPlusFov(aspect){
+      return aspect >= BASE_ASPECT
+        ? BASE_FOV
+        : 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * BASE_ASPECT / aspect) * 180 / Math.PI;
+    }
+    function resize(){
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      const aspect = w / h;
+      camera.fov    = hPlusFov(aspect);
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function tick(){
+      requestAnimationFrame(tick);
+
+      const now = performance.now();
+      const dt  = Math.min((now - prevTime) / 1000, 0.05);
+      prevTime  = now;
+
+      if (diskRunning) {
+        const omega = parseFloat(document.getElementById('diskOmegaInput').value) || 0;
+        rotatingGroup.rotation.y += omega * dt; // 正のω = 反時計回り
+
+        // ===== ばね-球の物理（回転座標系、半径方向のみ）=====
+        // m*r̈ = m*ω²*r（遠心力）- k*(r - AXIS_R - L0)（ばね力）- c*ṙ（減衰）
+        // 数値積分：半陰的オイラー法（速度→位置の順で更新、エネルギー保存的で安定）
+        if (springBallGroup && springRef && ballRef) {
+          const stretch = ballR - AXIS_R - SPRING_L0;
+          const accel   = omega * omega * ballR                // 遠心加速度
+                        - (SPRING_K / BALL_M) * stretch       // ばね加速度
+                        - (SPRING_DAMP / BALL_M) * ballRDot;  // 減衰加速度
+          ballRDot += accel * dt;   // 速度を先に更新（半陰的オイラー法のキー）
+          ballR    += ballRDot * dt; // 更新済み速度で位置を更新
+          // クランプ（軸内部・円盤外周）
+          const maxR = 5 - BALL_R;
+          if (ballR < AXIS_R + 0.01) { ballR = AXIS_R + 0.01; if (ballRDot < 0) ballRDot = 0; }
+          if (ballR > maxR)           { ballR = maxR;           if (ballRDot > 0) ballRDot = 0; }
+          // ビジュアル更新
+          springRef.scale.x = Math.max(0.01, ballR - AXIS_R);
+          ballRef.position.x = ballR;
+        }
+      }
+
+      // カメラトランジション
+      if (camTrans) {
+        camTrans.t += dt / camTrans.dur;
+        if (camTrans.t >= 1) {
+          camera.position.lerpVectors(camTrans.fromPos, camTrans.toPos, 1);
+          controls.target.lerpVectors(camTrans.fromTarget, camTrans.toTarget, 1);
+          const done = camTrans.onDone;
+          camTrans = null;
+          if (done) done();
+        } else {
+          const ease = 1 - Math.pow(1 - camTrans.t, 3);
+          camera.position.lerpVectors(camTrans.fromPos, camTrans.toPos, ease);
+          controls.target.lerpVectors(camTrans.fromTarget, camTrans.toTarget, ease);
+        }
+      }
+
+      // 真上カメラ：真上固定・ホイールで高さ変更
+      if (topCamActive && !camTrans) {
+        camera.position.set(0, topCamY, 0);
+        controls.target.set(0, 0, 0);
+      }
+
+      // 観測者（外）カメラ：固定位置で円盤中心を向く
+      if (extCamActive && !camTrans) {
+        camera.position.copy(EXT_CAM_POS);
+        controls.target.copy(EXT_CAM_TARGET);
+      }
+
+      // 観測者（盤上）カメラ：回転グループと連動して目線位置・方向を更新
+      if (diskCamActive && !camTrans) {
+        getDiskCamWorldVecs();
+        camera.position.copy(_eyeWorld);
+        controls.target.copy(_eyeWorld.clone().addScaledVector(_frontWorld, 8));
+      }
+
+      // テクスチャ更新（pointermoveのたびではなく1フレーム1回）
+      if (inkDirty)   { if (activeIBTexture)   activeIBTexture.needsUpdate   = true; inkDirty   = false; }
+      if (shapeDirty) { const sb = _sb(); if (sb.texture) sb.texture.needsUpdate = true; shapeDirty = false; }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    tick();
+  </script>
+</body>
+</html>

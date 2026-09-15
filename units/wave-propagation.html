@@ -1,0 +1,3366 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>波の伝わり方（授業用）｜3Dボード</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:rgba(240,243,252,0.95);
+      --border:rgba(70,90,160,0.30);
+      --text:#1a2040;
+      --muted:#5566aa;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    #app{position:fixed;inset:0;overflow:hidden}
+
+    /* 3Dキャンバス */
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+    /* 上バー */
+    .topbar{
+      position:absolute;left:0;top:0;right:0;z-index:5;
+      display:flex;gap:8px;align-items:center;
+      padding:10px 12px;
+      background:linear-gradient(to bottom, rgba(255,255,255,.80), rgba(255,255,255,0));
+      pointer-events:none;
+    }
+    .topbar a, .topbar button, .topbar .pill{pointer-events:auto}
+    .btn, .pill{
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);
+      border-radius:12px;
+      padding:8px 10px;
+      font-size:12px;
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .btn:hover{opacity:.9}
+    .pill{cursor:default;color:var(--muted)}
+    .btn.active{ outline:2px solid rgba(120,170,255,.6); }
+
+    /* 左サイドバー */
+    .sidebar{
+      position:absolute;left:10px;top:56px;bottom:10px;z-index:6;
+      width:280px;max-width:85vw;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      overflow:auto;
+      backdrop-filter: blur(6px);
+    }
+    .h{font-weight:800;font-size:13px;margin:0 0 8px}
+    .sub{color:var(--muted);font-size:12px;line-height:1.5;margin:0 0 10px}
+    .group{margin:10px 0 12px}
+    .groupTitle{font-weight:700;font-size:12px;color:var(--text);margin:0 0 8px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .lbl{color:var(--muted);font-size:12px;align-self:center}
+    .num{width:72px;max-width:90px}
+    .row .btn{flex:1;justify-content:center}
+
+    /* 道具箱の開閉 */
+    #toolboxPanel{
+      position: fixed;
+      left: 16px;
+      top: 72px;
+      z-index: 1000;
+      transition: transform 180ms ease;
+      transform: translateX(0);
+    }
+    #toolboxPanel.is-collapsed{
+      transform: translateX(calc(-100% + 36px));
+    }
+    #toolboxToggle.toolboxToggle{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      border: 1px solid rgba(70,90,160,0.25);
+      background: rgba(240,243,252,0.90);
+      color: #1a2040;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      line-height: 1;
+    }
+    #toolboxPanel.is-collapsed #toolboxToggle{
+      right: 4px;
+    }
+    #toolboxPanel{
+      overflow: hidden auto;              /* 中身が画面より長いときは縦にスクロール（横は出さない） */
+      overscroll-behavior: contain;
+    }
+    #toolboxPanel.is-collapsed > :not(#toolboxToggle){
+      display: none !important;
+    }
+
+    /* アニメーション解説ナビ */
+    #autoNav{
+      display:none;
+      position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+      z-index:1500;
+      align-items:center;gap:16px;
+    }
+    .auto-nav-btn{
+      width:48px;height:48px;border-radius:50%;
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);font-size:22px;font-weight:700;
+      cursor:pointer;display:grid;place-items:center;
+      backdrop-filter:blur(6px);
+    }
+    .auto-nav-btn:hover{background:rgba(50,80,140,.15)}
+    .auto-nav-btn:disabled{opacity:.3;cursor:not-allowed}
+    .auto-center{display:flex;flex-direction:column;align-items:center;gap:8px}
+    .auto-scene-label{
+      font-size:13px;color:var(--muted);
+      background:var(--panel);border:1px solid var(--border);
+      border-radius:10px;padding:6px 14px;
+      backdrop-filter:blur(6px);white-space:nowrap;
+    }
+    #autoExit{
+      position:fixed;top:10px;right:10px;z-index:1500;
+      display:none;
+    }
+
+    /* 右下ヘルプ */
+    .help{
+      position:absolute;right:10px;bottom:10px;z-index:6;
+      background:rgba(240,243,252,0.92);
+      border:1px solid rgba(70,90,160,0.20);
+      border-radius:14px;
+      padding:10px 12px;
+      font-size:12px;
+      color:var(--muted);
+      max-width:420px;
+    }
+    .help b{color:var(--text)}
+    #inkCanvas{position:absolute;inset:0;pointer-events:none;z-index:8;}
+    #inkToolbar{display:none;position:fixed;bottom:10px;left:10px;z-index:1500;gap:4px;align-items:center;}
+    .pen-color-btn{border:none;background:none;padding:7px 16px;border-radius:7px;cursor:pointer;font-size:13px;text-align:left;white-space:nowrap;font-weight:600;}
+    .pen-color-btn:hover{background:rgba(70,90,160,0.10);}
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="c"></canvas>
+    <canvas id="wave2dCanvas" style="position:absolute;inset:0;display:none;pointer-events:none;"></canvas>
+    <canvas id="inkCanvas"></canvas>
+
+    <!-- 上バー -->
+    <div class="topbar">
+      <a class="btn" href="../index.html">← ホーム</a>
+      <span class="pill">波の伝わり方</span>
+      <button class="btn" id="btnAutoSim">▶ アニメーション解説</button>
+      <div id="s5SlitBtns" style="display:none;gap:4px;">
+        <button class="btn active" id="s5Btn2">２本</button>
+        <button class="btn" id="s5Btn4">４本</button>
+      </div>
+      <button class="btn" id="btn2D" style="display:none;">2D</button>
+      <div id="s6ColorBtns" style="display:none;gap:4px;">
+        <button class="btn active" id="s6BtnRed" style="color:#cc2222;">赤</button>
+        <button class="btn active" id="s6BtnRedArc" style="color:#cc2222;">赤半円</button>
+        <button class="btn active" id="s6BtnBlue" style="color:#2244cc;">青</button>
+        <button class="btn active" id="s6BtnBlueArc" style="color:#2244cc;">青半円</button>
+        <button class="btn" id="s6BtnFringe" style="color:#44aa22;">明線</button>
+        <button class="btn" id="s6BtnPoint"  style="color:#66bb22;">ポイント</button>
+        <button class="btn active s6BtnOrder" data-idx="0" style="color:#884400;">-3次</button>
+        <button class="btn active s6BtnOrder" data-idx="1" style="color:#884400;">-2次</button>
+        <button class="btn active s6BtnOrder" data-idx="2" style="color:#884400;">-1次</button>
+        <button class="btn active s6BtnOrder" data-idx="3" style="color:#884400;">0次</button>
+        <button class="btn active s6BtnOrder" data-idx="4" style="color:#884400;">+1次</button>
+        <button class="btn active s6BtnOrder" data-idx="5" style="color:#884400;">+2次</button>
+        <button class="btn active s6BtnOrder" data-idx="6" style="color:#884400;">+3次</button>
+        <button class="btn" id="s6BtnPointClear" style="display:none;color:#cc4400;">全て削除</button>
+      </div>
+    </div>
+
+    <!-- アニメーション解説ナビ -->
+    <button class="btn" id="autoExit">✕ 通常に戻る</button>
+    <div id="autoNav">
+      <button class="auto-nav-btn" id="autoPrev">＜</button>
+      <div class="auto-center">
+        <button class="auto-nav-btn" id="autoPlay">▶</button>
+        <span class="auto-scene-label" id="autoSceneLabel">1 / 1</span>
+      </div>
+      <button class="auto-nav-btn" id="autoNext">＞</button>
+    </div>
+
+    <!-- ペン/消しゴムツールバー（アニメーション解説中のみ表示） -->
+    <div id="inkToolbar">
+      <button class="btn" id="autoPen">ペン</button>
+      <button class="btn" id="autoEraser">消しゴム</button>
+      <button class="btn" id="autoInkClear">ペンを全消し</button>
+      <button class="btn" id="inkUndo" disabled>↩</button>
+      <button class="btn" id="inkRedo" disabled>↪</button>
+    </div>
+
+    <!-- ペン色選択メニュー -->
+    <div id="penColorMenu" style="display:none;position:fixed;z-index:2000;background:rgba(240,243,252,0.97);border:1px solid rgba(70,90,160,0.30);border-radius:10px;box-shadow:0 4px 14px rgba(20,30,60,0.18);padding:6px;flex-direction:column;gap:2px;">
+      <button class="pen-color-btn" data-color="rgba(255,40,40,1)" style="color:#e01010;">● 赤</button>
+      <button class="pen-color-btn" data-color="rgba(30,80,220,1)" style="color:#1e50dc;">● 青</button>
+      <button class="pen-color-btn" data-color="rgba(60,190,50,1)" style="color:#3cbe32;">● 黄緑</button>
+    </div>
+
+    <!-- 場面6 ポイント削除コンテキストメニュー -->
+    <div id="s6PointCtxMenu" style="display:none;position:fixed;z-index:600;background:rgba(240,243,252,0.97);border:1px solid rgba(70,90,160,0.30);border-radius:10px;box-shadow:0 4px 14px rgba(20,30,60,0.18);padding:4px;">
+      <button id="s6PointDeleteBtn" type="button" style="display:flex;align-items:center;gap:7px;border:none;background:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;color:#1a2040;white-space:nowrap">
+        🗑️ 削除
+      </button>
+    </div>
+
+    <!-- 左サイドバー：道具箱 -->
+    <aside class="sidebar" id="toolboxPanel">
+      <button id="toolboxToggle" class="toolboxToggle" type="button" aria-expanded="false">＞</button>
+
+      <p class="h">道具箱</p>
+
+      <div class="group">
+        <p class="groupTitle">視点</p>
+        <div class="row">
+          <button class="btn" id="viewXY">XY視点（正面）</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="groupTitle">青い波の初期時刻</p>
+        <div id="yx2TimeGroup" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:8px">
+          <button class="btn active" data-offset="0"    style="justify-content:center">2T</button>
+          <button class="btn"        data-offset="0.25" style="justify-content:center">9T/4</button>
+          <button class="btn"        data-offset="0.5"  style="justify-content:center">5T/2</button>
+          <button class="btn"        data-offset="0.75" style="justify-content:center">11T/4</button>
+          <button class="btn"        data-offset="1"    style="justify-content:center">3T</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="groupTitle">単振動</p>
+        <div class="row">
+          <span class="lbl">D</span>
+          <input id="circD" class="num" type="number" value="4" step="0.5" min="0" />
+          <span class="lbl">T</span>
+          <input id="circT" class="num" type="number" value="4" step="0.5" min="0.1" />
+        </div>
+        <div class="row">
+          <button class="btn" id="circToggle">▶ 開始</button>
+          <button class="btn" id="circReset">↺ リセット</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn active" id="toggleRed"  style="justify-content:center;color:#BE461E">赤</button>
+          <button class="btn active" id="toggleBlue" style="justify-content:center;color:#2255cc">青</button>
+          <button class="btn active" id="toggleRes"  style="justify-content:center;color:#66cc00">合成波</button>
+        </div>
+      </div>
+
+    </aside>
+
+    <div class="help">
+      <b>操作</b>：ドラッグ＝視点回転／ホイール＝ズーム／右ドラッグ＝平行移動
+    </div>
+  </div>
+
+  <!-- エラー表示 -->
+  <div id="errOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;padding:24px;overflow:auto;">
+    <div style="background:#1a0808;border:2px solid #cc3333;border-radius:10px;padding:18px;max-width:820px;margin:auto;color:#ffcccc;font-family:monospace;font-size:12px;">
+      <div style="color:#ff5555;font-size:14px;font-weight:bold;margin-bottom:10px;">⚠ JavaScript Error</div>
+      <pre id="errMsg" style="white-space:pre-wrap;word-break:break-all;margin:0;"></pre>
+    </div>
+  </div>
+  <script>
+  window.addEventListener('error', (e) => {
+    const el = document.getElementById('errOverlay');
+    const msg = document.getElementById('errMsg');
+    if (el && msg) {
+      el.style.display = 'block';
+      msg.textContent += (e.message || 'Unknown error') + '\n' +
+        (e.filename ? '  at ' + e.filename + ':' + e.lineno + ':' + e.colno + '\n' : '') +
+        (e.error?.stack ? e.error.stack : '') + '\n\n';
+    }
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const el = document.getElementById('errOverlay');
+    const msg = document.getElementById('errMsg');
+    if (el && msg) {
+      el.style.display = 'block';
+      msg.textContent += 'Unhandled Promise rejection:\n' +
+        (e.reason?.message || String(e.reason) || 'Unknown') + '\n' +
+        (e.reason?.stack || '') + '\n\n';
+    }
+  });
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { Line2 }        from 'three/addons/lines/Line2.js';
+    import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+    import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
+    // ===== 基本セットアップ =====
+    const canvas = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    // ===== アニメーション解説用の別シーン =====
+    const autoScene = new THREE.Scene();
+    autoScene.background = new THREE.Color(0xffffff);
+    autoScene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+    camera.position.set(0, 8, 18);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+    controls.zoomToCursor = true;
+    controls.update();
+
+    // ライト
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.70);
+    dir.position.set(6, 10, 6);
+    scene.add(dir);
+
+    // 地面グリッド（2.5×2.5 マス、8×8）
+    const grid = new THREE.GridHelper(20, 8, 0x9bb0d0, 0xc8d6e8);
+    grid.position.y = 0;
+    scene.add(grid);
+
+
+    // ===== y-x グラフ =====
+    const YX_X_START  = -10;
+    const YX_X_END    =  10;
+    const YX_Y_BASE   =   5;
+    const YX_Z        =   0;
+    const YX_N_POINTS = 400;
+
+    // y=0 基準線（x軸）
+    {
+      const pts = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(YX_X_START, YX_Y_BASE, YX_Z),
+        new THREE.Vector3(YX_X_END,   YX_Y_BASE, YX_Z),
+      ]);
+      const axisLine = new THREE.Line(pts, new THREE.LineBasicMaterial({ color: 0x7788aa }));
+      scene.add(axisLine);
+    }
+
+    let yxLine      = null;
+    let yxGeo       = null;
+    let yxPositions = null;
+    let yxMat       = null;
+
+    function ensureYxGraph() {
+      if (yxLine) return;
+      yxPositions = new Float32Array(YX_N_POINTS * 3);
+      for (let i = 0; i < YX_N_POINTS; i++) {
+        yxPositions[i*3]   = YX_X_START + (YX_X_END - YX_X_START) * i / (YX_N_POINTS - 1);
+        yxPositions[i*3+1] = YX_Y_BASE;
+        yxPositions[i*3+2] = YX_Z;
+      }
+      yxGeo = new LineGeometry();
+      yxGeo.setPositions(yxPositions);
+      const { w, h } = { w: window.innerWidth, h: window.innerHeight };
+      yxMat = new LineMaterial({ color: 0xBE461E, linewidth: 2, resolution: new THREE.Vector2(w, h), dashed: true, dashSize: 0.8, gapSize: 0.4 });
+      yxLine = new Line2(yxGeo, yxMat);
+      scene.add(yxLine);
+      yxLine.computeLineDistances();
+    }
+
+    function resetYxGraph() {
+      ensureYxGraph();
+      for (let i = 0; i < YX_N_POINTS; i++) yxPositions[i*3+1] = YX_Y_BASE;
+      updateLine2Y(yxGeo, yxPositions, YX_N_POINTS);
+    }
+
+    // ===== y-x グラフ（青）=====
+    const YX2_Y_OFFSET = -0.15; // 青グラフを少し下にずらす
+    let yx2OffsetFrac = 0; // 青波の初期時刻オフセット（T の倍数）
+
+    let yx2Line      = null;
+    let yx2Geo       = null;
+    let yx2Positions = null;
+    let yx2Mat       = null;
+
+    function ensureYx2Graph() {
+      if (yx2Line) return;
+      yx2Positions = new Float32Array(YX_N_POINTS * 3);
+      for (let i = 0; i < YX_N_POINTS; i++) {
+        yx2Positions[i*3]   = YX_X_START + (YX_X_END - YX_X_START) * i / (YX_N_POINTS - 1);
+        yx2Positions[i*3+1] = YX_Y_BASE;
+        yx2Positions[i*3+2] = YX_Z;
+      }
+      yx2Geo = new LineGeometry();
+      yx2Geo.setPositions(yx2Positions);
+      const { w, h } = { w: window.innerWidth, h: window.innerHeight };
+      yx2Mat = new LineMaterial({ color: 0x2255cc, linewidth: 2, resolution: new THREE.Vector2(w, h), dashed: true, dashSize: 0.8, gapSize: 0.4 });
+      yx2Line = new Line2(yx2Geo, yx2Mat);
+      scene.add(yx2Line);
+      yx2Line.computeLineDistances();
+    }
+
+    function drawYx2AtElapsed(elapsed) {
+      ensureYx2Graph();
+      const omega   = Math.PI * 2 / circ.T;
+      const v_world = (YX_X_END - YX_X_START) / (2 * circ.T);
+      for (let i = 0; i < YX_N_POINTS; i++) {
+        const worldX  = YX_X_START + (YX_X_END - YX_X_START) * i / (YX_N_POINTS - 1);
+        const waveAge = elapsed - (worldX - YX_X_START) / v_world;
+        yx2Positions[i*3+1] = YX_Y_BASE + (waveAge >= 0 ? circ.r * Math.sin(omega * waveAge) : 0);
+      }
+      updateLine2Y(yx2Geo, yx2Positions, YX_N_POINTS);
+    }
+
+    // ===== 合成波 =====
+    let yxResLine      = null;
+    let yxResGeo       = null;
+    let yxResPositions = null;
+    let yxResMat       = null;
+
+    function ensureYxResGraph() {
+      if (yxResLine) return;
+      yxResPositions = new Float32Array(YX_N_POINTS * 3);
+      for (let i = 0; i < YX_N_POINTS; i++) {
+        yxResPositions[i*3]   = YX_X_START + (YX_X_END - YX_X_START) * i / (YX_N_POINTS - 1);
+        yxResPositions[i*3+1] = YX_Y_BASE;
+        yxResPositions[i*3+2] = YX_Z;
+      }
+      yxResGeo = new LineGeometry();
+      yxResGeo.setPositions(yxResPositions);
+      const { w, h } = { w: window.innerWidth, h: window.innerHeight };
+      yxResMat = new LineMaterial({ color: 0x66cc00, linewidth: 2, resolution: new THREE.Vector2(w, h) });
+      yxResLine = new Line2(yxResGeo, yxResMat);
+      scene.add(yxResLine);
+    }
+
+    // Line2 バッファ直接更新ヘルパー
+    // （LineGeometry 内部バッファの layout: [p0, p1, p1, p2, p2, ...] × 6 float/slot）
+    function updateLine2Y(geo, positions, n) {
+      const buf = geo.attributes.instanceStart.data.array;
+      for (let j = 0; j < n; j++) {
+        const y = positions[j * 3 + 1];
+        if (j < n - 1) buf[j * 6 + 1] = y;        // instanceStart[j].y
+        if (j > 0)     buf[(j - 1) * 6 + 4] = y;  // instanceEnd[j-1].y
+      }
+      geo.attributes.instanceStart.data.needsUpdate = true;
+    }
+    // XY両方を更新するヘルパー（点線用：xs/ys は通常の配列、n 点分）
+    function updateLine2XY(geo, xs, ys, n) {
+      const buf = geo.attributes.instanceStart.data.array;
+      for (let j = 0; j < n; j++) {
+        if (j < n - 1) { buf[j*6]     = xs[j]; buf[j*6 + 1] = ys[j]; }
+        if (j > 0)     { buf[(j-1)*6+3] = xs[j]; buf[(j-1)*6+4] = ys[j]; }
+      }
+      geo.attributes.instanceStart.data.needsUpdate = true;
+    }
+
+    // 全グラフを elapsed 時刻で一括描画
+    function redrawGraphs(elapsed) {
+      const omega   = Math.PI * 2 / circ.T;
+      const v_world = (YX_X_END - YX_X_START) / (2 * circ.T);
+      for (let i = 0; i < YX_N_POINTS; i++) {
+        const worldX   = YX_X_START + (YX_X_END - YX_X_START) * i / (YX_N_POINTS - 1);
+        const age1 = elapsed - (worldX - YX_X_START) / v_world;
+        const age2 = elapsed + yx2OffsetFrac * circ.T - (worldX - YX_X_START) / v_world;
+        const d1 = age1 >= 0 ? circ.r * Math.sin(omega * age1) : 0;
+        const d2 = age2 >= 0 ? circ.r * Math.sin(omega * age2) : 0;
+        yxPositions[i*3+1]    = YX_Y_BASE + d1;
+        yx2Positions[i*3+1]   = YX_Y_BASE + d2 + YX2_Y_OFFSET;
+        yxResPositions[i*3+1] = YX_Y_BASE + d1 + d2;
+      }
+      updateLine2Y(yxGeo,    yxPositions,    YX_N_POINTS);
+      updateLine2Y(yx2Geo,   yx2Positions,   YX_N_POINTS);
+      updateLine2Y(yxResGeo, yxResPositions, YX_N_POINTS);
+      yxLine.computeLineDistances();
+      yx2Line.computeLineDistances();
+    }
+
+    // ===== 単振動パラメータ =====
+    const nowSec = () => performance.now() / 1000;
+    const circ = { active: false, r: 2, T: 4, startTime: 0, startTheta: 0, frozenElapsed: 0 };
+
+    function readCircParams() {
+      const D = parseFloat(document.getElementById('circD')?.value) || 4;
+      const T = parseFloat(document.getElementById('circT')?.value) || 4;
+      return { r: D / 2, T: Math.max(T, 0.01) };
+    }
+
+    function updateCircToggleBtn() {
+      const btn = document.getElementById('circToggle');
+      if (btn) btn.textContent = circ.active ? '⏸ 停止' : '▶ 開始';
+    }
+
+    document.getElementById('circToggle')?.addEventListener('click', () => {
+      const { r, T } = readCircParams();
+      if (circ.active) {
+        circ.frozenElapsed += nowSec() - circ.startTime;
+        circ.active = false;
+      } else {
+        circ.r = r; circ.T = T;
+        if (circ.frozenElapsed === 0) {
+          circ.startTheta = 0;
+          circ.frozenElapsed = 0;
+        }
+        circ.startTime = nowSec();
+        circ.active = true;
+      }
+      updateCircToggleBtn();
+    });
+
+    document.getElementById('circReset')?.addEventListener('click', () => {
+      circ.active = false;
+      circ.startTheta = 0;
+      circ.frozenElapsed = 0;
+      updateCircToggleBtn();
+      redrawGraphs(0);
+    });
+
+    // ===== 青い波の初期時刻 選択 =====
+    document.getElementById('yx2TimeGroup')?.querySelectorAll('[data-offset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#yx2TimeGroup [data-offset]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        yx2OffsetFrac = parseFloat(btn.dataset.offset);
+        if (!circ.active) {
+          const elapsed = circ.frozenElapsed > 0 ? circ.frozenElapsed : 0;
+          redrawGraphs(elapsed);
+        }
+      });
+    });
+
+    // ===== 波の表示 ON/OFF =====
+    function makeVisToggle(btnId, getLine) {
+      document.getElementById(btnId)?.addEventListener('click', function() {
+        const line = getLine();
+        if (!line) return;
+        line.visible = !line.visible;
+        this.classList.toggle('active', line.visible);
+      });
+    }
+    makeVisToggle('toggleRed',  () => yxLine);
+    makeVisToggle('toggleBlue', () => yx2Line);
+    makeVisToggle('toggleRes',  () => yxResLine);
+
+    // ===== 視点スナップ =====
+    let viewTween = null;
+
+    function snapToXY() {
+      const dist   = camera.position.distanceTo(controls.target);
+      const dir    = new THREE.Vector3(0, 0, 1);
+      const center = new THREE.Vector3(0, YX_Y_BASE, 0);
+      viewTween = {
+        startPos:    camera.position.clone(),
+        endPos:      center.clone().add(dir.multiplyScalar(dist)),
+        startTarget: controls.target.clone(),
+        endTarget:   center.clone(),
+        startTime:   nowSec(),
+        dur: 0.35,
+      };
+    }
+
+    function updateViewSnap(t) {
+      if (!viewTween) return;
+      const u = Math.min(1, (t - viewTween.startTime) / viewTween.dur);
+      const k = u * u * (3 - 2 * u); // easeInOut
+      camera.position.lerpVectors(viewTween.startPos, viewTween.endPos, k);
+      controls.target.lerpVectors(viewTween.startTarget, viewTween.endTarget, k);
+      controls.update();
+      if (u >= 1) viewTween = null;
+    }
+
+    document.getElementById('viewXY')?.addEventListener('click', snapToXY);
+
+    // ===== 道具箱 開閉 =====
+    const toolboxPanel  = document.getElementById('toolboxPanel');
+    const toolboxToggle = document.getElementById('toolboxToggle');
+    toolboxToggle?.addEventListener('click', () => {
+      const collapsed = toolboxPanel.classList.toggle('is-collapsed');
+      toolboxToggle.textContent = collapsed ? '＜' : '＞';
+      toolboxToggle.setAttribute('aria-expanded', String(!collapsed));
+    });
+
+    // ===== リサイズ =====
+    function onResize() {
+      const w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      if (yxMat)    yxMat.resolution.set(w, h);
+      if (yx2Mat)   yx2Mat.resolution.set(w, h);
+      if (yxResMat) yxResMat.resolution.set(w, h);
+    }
+    window.addEventListener('resize', onResize);
+    onResize();
+
+    // ===== アニメーション解説 =====
+    const AUTO_CAM_POS    = new THREE.Vector3(0, 0, 20);
+    const AUTO_CAM_TARGET = new THREE.Vector3(0, 0, 0);
+
+    // 場面ごとに autoScene に追加したオブジェクトを保持→場面切替時に削除
+    let autoSceneObjects = [];
+    // 赤い波パルス用
+    const AUTO_WAVE_N          = 300;
+    const AUTO_WAVE_X_START    = -14;
+    const AUTO_WAVE_X_END      =  14;
+    const AUTO_WAVE_HALF_LAMBDA = 4;    // 半波長（ワールド単位）
+    const AUTO_WAVE_AMP        = 1.5;  // 振幅
+    const AUTO_WAVE_SPEED      = 3.5;  // 進行速度（単位/秒）
+    const AUTO_WAVE_CYCLE_DUR  = 9.8;  // 1サイクルの長さ（秒）：波が抜けた後に約0.7秒の間隔
+    // 衝突タイミング：両前端が交差するdt=4s、完全分離はdt=36/7s
+    const AUTO_COL_START_DT = 4.0;
+    const AUTO_COL_END_DT   = 36 / 7;
+    const AUTO_PAUSE_CYCLE  = 2;        // 0始まりで3回目の衝突（場面1）
+    const AUTO_PAUSE_DT     = AUTO_COL_START_DT + 0.3 * (AUTO_COL_END_DT - AUTO_COL_START_DT);
+    const AUTO2_PAUSE_CYCLE = 1;        // 0始まりで2回目の衝突（場面2）
+    const AUTO2_PAUSE_DT    = 32 / 7;  // 両波が完全に重なる瞬間
+    // 場面5：3D水面波
+    const S5_WAVE_SPEED = 2.5;   // 進行速度（単位/秒）
+    const S5_WAVELENGTH = 3.0;   // 波長
+    const S5_MAX_RADIUS = 16.8;  // 波が到達する最大半径（14×1.2）
+    const S5_AMP        = 1.5;   // 最大振幅
+    const S5_DECAY      = 0.08;  // 距離による振幅減衰
+    const S5_GRID_SIZE     = 140;  // グリッドZ方向サイズ（±70まで拡張）
+    const S5_GRID_SEGS     = 560;  // Z方向分割数
+    const S5_GRID_X        = 120;  // グリッドX方向サイズ（バリア右側90単位を確保）
+    const S5_GRID_SEGS_X   = 600;  // X方向分割数
+    const S5_MESH_OFFSET_X = 45;   // メッシュ中心をX正方向にずらす量（x=-15〜+105を網羅）
+    let autoS5Geo  = null;       // 水面メッシュのジオメトリ
+    let autoS5Mesh = null;
+    let s5SlitMode = 2;          // 2 or 4
+    let autoS5OuterBoxes = [];   // z=±15 の直方体（モード切替用）
+    let s6Mode2d      = false;     // 場面6: 2D表示モード
+    let s6ShowRed     = true;      // 場面6: 赤（右スリット）表示
+    let s6ShowRedArc  = true;      // 場面6: 赤半円表示
+    let s6ShowBlue    = true;      // 場面6: 青（左スリット）表示
+    let s6ShowBlueArc = true;      // 場面6: 青半円表示
+    let s6ShowOrders  = [true, true, true, true, true, true, true]; // 次数ボタン状態
+    let s6ShowFringes = false;     // 場面6: 明線表示
+    let s6PointMode    = false;     // 場面6: ポイント配置モード
+    let s6PointSpheres = [];       // 場面6: 配置済み球の配列（右クリック削除用）
+    let autoS6LineGroup   = null;  // 場面6: 3D空間内波ラインのグループ
+    let autoS6FringeGroup = null;  // 場面6: 明線グループ
+    let autoS7FadeStart = null;   // 場面7: 球フェードイン開始時刻
+    let autoS7Spheres   = [];     // 場面7: 明線端点の球
+    let autoS7FadeDone   = false;  // 場面7: フェード完了・自動停止済みフラグ
+    let autoS7LineStart  = null;   // 場面7: 線アニメーション開始時刻
+    let autoS7PathLines  = [];     // 場面7: スリット→球の線
+    // 場面3：連続正弦波（左→右）
+    const S3_T      = 4.0;            // 波の周期（秒）→波長 = 3.5×4 = 14単位（軸に2サイクル表示）
+    const S3_AMP    = 2.25;           // 振幅（1.5の1.5倍）
+    const S3_Y2_OFFSET = -0.2;       // 青波を赤波より少し下にずらす（視覚的分離）
+    let autoWaveLine     = null, autoWaveGeo     = null, autoWavePositions     = null; // 赤・実線
+    let autoWaveDashLine = null, autoWaveDashGeo = null, autoWaveDashPositions = null; // 赤・点線（重なり部）
+    let autoWave2Line     = null, autoWave2Geo     = null, autoWave2Positions     = null; // 青・実線
+    let autoWave2DashLine = null, autoWave2DashGeo = null, autoWave2DashPositions = null; // 青・点線（重なり部）
+    let autoWaveResLine = null, autoWaveResGeo = null, autoWaveResPositions = null;
+    let autoWave3Line = null, autoWave3Geo = null, autoWave3Positions = null; // 場面3/4・下軸・赤
+    let autoWave4Line = null, autoWave4Geo = null, autoWave4Positions = null; // 場面3/4・下軸・青（逆位相）
+    let autoWaveRes2Line = null, autoWaveRes2Geo = null, autoWaveRes2Positions = null; // 場面4・下軸・合成波
+    let autoS8WasActive = false; // 場面8: カメラリセット用フラグ
+    let autoOrthoCamera   = null;  // 場面8: 正射影カメラ
+    let autoOrthoControls = null;  // 場面8: OrthographicCamera用OrbitControls
+    let autoS8Knob     = null;     // 場面8: つまみ球
+    let autoS8KnobZ    = 0;        // 場面8: つまみのZ位置
+    let autoS8KnobXPos = 0;        // 場面8: つまみのX位置（固定）
+    let autoS8WaveGeos = [];       // 場面8: 波のGeometry配列 [{geo, zCenter}]
+    let autoS8AxGeos   = [];       // 場面8: 軸のGeometry配列 [{geo, zCenter}]
+    let autoS8Dragging = false;    // 場面8: ドラッグ中フラグ
+    let autoS8DragStartZ     = 0;  // 場面8: ドラッグ開始時のマウスワールドZ
+    let autoS8DragStartKnobZ = 0;  // 場面8: ドラッグ開始時のつまみZ
+    let _s8PD = null, _s8PM = null, _s8PU = null; // 場面8: イベントハンドラ参照
+    let autoPlayStartTime = null;
+    let inkMode = 'none'; // 'none' | 'pen' | 'eraser'
+    let inkPenColor = 'rgba(255,40,40,1)';
+    let inkDrawing = false;
+    let inkLastX = 0, inkLastY = 0;
+    let autoWavePaused = false;
+    let autoWavePauseWallTime = 0;
+    let autoWaveCycle = 0;
+
+    function clearAutoSceneObjects() {
+      autoSceneObjects.forEach(o => autoScene.remove(o));
+      autoSceneObjects = [];
+      autoWaveLine     = null; autoWaveGeo     = null;
+      autoWaveDashLine = null; autoWaveDashGeo = null;
+      autoWave2Line     = null; autoWave2Geo     = null;
+      autoWave2DashLine = null; autoWave2DashGeo = null;
+      autoWaveResLine  = null; autoWaveResGeo  = null;
+      autoWave3Line = null; autoWave3Geo = null; autoWave3Positions = null;
+      autoWave4Line = null; autoWave4Geo = null; autoWave4Positions = null;
+      autoWaveRes2Line = null; autoWaveRes2Geo = null; autoWaveRes2Positions = null;
+      autoS5Geo = null; autoS5Mesh = null;
+      autoS5OuterBoxes = [];
+      autoS6LineGroup   = null;
+      autoS6FringeGroup = null;
+      autoS7FadeStart = null;
+      autoS7Spheres   = [];
+      autoS7FadeDone   = false;
+      autoS7LineStart  = null;
+      autoS7PathLines  = [];
+      s6PointMode    = false;
+      s6PointSpheres = [];
+      s6ShowRedArc  = true;
+      s6ShowBlueArc = true;
+      s6ShowOrders  = [true, true, true, true, true, true, true];
+      document.querySelectorAll('.s6BtnOrder').forEach(b => b.classList.add('active'));
+      document.getElementById('s6BtnPoint').classList.remove('active');
+      document.getElementById('s6BtnPointClear').style.display = 'none';
+      autoPlayStartTime   = null;
+      autoWavePaused      = false;
+      autoWavePauseWallTime = 0;
+      autoWaveCycle       = 0;
+      if (autoS8WasActive) {
+        autoS8WasActive = false;
+        if (_s8PD) { renderer.domElement.removeEventListener('pointerdown', _s8PD, true); _s8PD = null; }
+        if (_s8PM) { renderer.domElement.removeEventListener('pointermove', _s8PM, true); _s8PM = null; }
+        if (_s8PU) { renderer.domElement.removeEventListener('pointerup',   _s8PU, true); _s8PU = null; }
+        autoS8Knob = null; autoS8WaveGeos = []; autoS8AxGeos = [];
+        autoS8KnobZ = 0; autoS8Dragging = false;
+        if (autoOrthoControls) { autoOrthoControls.dispose(); autoOrthoControls = null; }
+        autoOrthoCamera = null;
+        camera.position.copy(AUTO_CAM_POS);
+        camera.up.set(0, 1, 0);
+        controls.target.copy(AUTO_CAM_TARGET);
+        controls.enableRotate = true;
+        controls.update();
+      }
+      const btn = document.getElementById('autoPlay');
+      if (btn) btn.textContent = '▶';
+    }
+
+    const scenes = [
+      {
+        label: '場面1',
+        setup() {
+          clearAutoSceneObjects();
+        },
+        play() {
+          const playBtn = document.getElementById('autoPlay');
+          // 再生中 or 一時停止中 → トグル
+          if (autoPlayStartTime !== null) {
+            if (autoWavePaused) {
+              // 再開：停止していた分だけ開始時刻をずらす
+              autoPlayStartTime += nowSec() - autoWavePauseWallTime;
+              autoWavePaused = false;
+              if (playBtn) playBtn.textContent = '‖';
+            } else {
+              // 一時停止
+              autoWavePauseWallTime = nowSec();
+              autoWavePaused = true;
+              if (playBtn) playBtn.textContent = '▶';
+            }
+            return;
+          }
+          // 初回：X軸＋波を生成
+          const axisGeo = new LineGeometry();
+          axisGeo.setPositions([AUTO_WAVE_X_START, 0, 0, AUTO_WAVE_X_END, 0, 0]);
+          const axisMat = new LineMaterial({
+            color: 0x000000,
+            linewidth: 2,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+          });
+          const axisLine = new Line2(axisGeo, axisMat);
+          autoScene.add(axisLine);
+          autoSceneObjects.push(axisLine);
+
+          // 赤い波パルス（初期はフラット）
+          autoWavePositions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWavePositions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWavePositions[i*3+1] = NaN;
+            autoWavePositions[i*3+2] = 0;
+          }
+          autoWaveGeo = new LineGeometry();
+          autoWaveGeo.setPositions(autoWavePositions);
+          const autoWaveMat = new LineMaterial({
+            color: 0xcc2200,
+            linewidth: 2.5,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+          });
+          autoWaveLine = new Line2(autoWaveGeo, autoWaveMat);
+          autoScene.add(autoWaveLine);
+          autoSceneObjects.push(autoWaveLine);
+
+          // 赤・点線（重なり部専用：instanceCount=0 で初期は非表示）
+          autoWaveDashGeo = new LineGeometry();
+          autoWaveDashGeo.setPositions(new Float32Array(AUTO_WAVE_N * 3)); // バッファ確保のみ
+          autoWaveDashGeo.instanceCount = 0;
+          const autoWaveDashMat = new LineMaterial({
+            color: 0xcc2200, linewidth: 2.5,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+            dashed: true, dashSize: 0.55, gapSize: 0.45,
+          });
+          autoWaveDashLine = new Line2(autoWaveDashGeo, autoWaveDashMat);
+          autoScene.add(autoWaveDashLine);
+          autoSceneObjects.push(autoWaveDashLine);
+
+          // 青い波パルス（右→左、初期はフラット）
+          autoWave2Positions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWave2Positions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWave2Positions[i*3+1] = NaN;
+            autoWave2Positions[i*3+2] = 0;
+          }
+          autoWave2Geo = new LineGeometry();
+          autoWave2Geo.setPositions(autoWave2Positions);
+          const autoWave2Mat = new LineMaterial({
+            color: 0x2255cc,
+            linewidth: 2.5,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+          });
+          autoWave2Line = new Line2(autoWave2Geo, autoWave2Mat);
+          autoScene.add(autoWave2Line);
+          autoSceneObjects.push(autoWave2Line);
+
+          // 青・点線（重なり部専用：instanceCount=0 で初期は非表示）
+          autoWave2DashGeo = new LineGeometry();
+          autoWave2DashGeo.setPositions(new Float32Array(AUTO_WAVE_N * 3));
+          autoWave2DashGeo.instanceCount = 0;
+          const autoWave2DashMat = new LineMaterial({
+            color: 0x2255cc, linewidth: 2.5,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+            dashed: true, dashSize: 0.55, gapSize: 0.45,
+          });
+          autoWave2DashLine = new Line2(autoWave2DashGeo, autoWave2DashMat);
+          autoScene.add(autoWave2DashLine);
+          autoSceneObjects.push(autoWave2DashLine);
+
+          // 緑：合成波（初期は全点NaN→非表示）
+          autoWaveResPositions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWaveResPositions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWaveResPositions[i*3+1] = NaN;
+            autoWaveResPositions[i*3+2] = 0;
+          }
+          autoWaveResGeo = new LineGeometry();
+          autoWaveResGeo.setPositions(autoWaveResPositions);
+          const autoWaveResMat = new LineMaterial({
+            color: 0x22aa44,
+            linewidth: 2.5,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+          });
+          autoWaveResLine = new Line2(autoWaveResGeo, autoWaveResMat);
+          autoScene.add(autoWaveResLine);
+          autoSceneObjects.push(autoWaveResLine);
+
+          autoPlayStartTime = nowSec();
+          if (playBtn) playBtn.textContent = '‖';
+        },
+      },
+      // ===== 場面2 =====
+      {
+        label: '場面2',
+        setup() {
+          clearAutoSceneObjects();
+          // 場面2に入ると同時にX軸を表示
+          const axisGeo = new LineGeometry();
+          axisGeo.setPositions([AUTO_WAVE_X_START, 0, 0, AUTO_WAVE_X_END, 0, 0]);
+          const axisMat = new LineMaterial({
+            color: 0x000000,
+            linewidth: 2,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+          });
+          const axisLine = new Line2(axisGeo, axisMat);
+          autoScene.add(axisLine);
+          autoSceneObjects.push(axisLine);
+        },
+        play() {
+          const playBtn = document.getElementById('autoPlay');
+          // 再生中/停止中 → トグル
+          if (autoPlayStartTime !== null) {
+            if (autoWavePaused) {
+              autoPlayStartTime += nowSec() - autoWavePauseWallTime;
+              autoWavePaused = false;
+              if (playBtn) playBtn.textContent = '‖';
+            } else {
+              autoWavePauseWallTime = nowSec();
+              autoWavePaused = true;
+              if (playBtn) playBtn.textContent = '▶';
+            }
+            return;
+          }
+          // 初回：波ラインを生成（軸はsetup()で生成済み）
+          autoWavePositions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWavePositions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWavePositions[i*3+1] = NaN;
+            autoWavePositions[i*3+2] = 0;
+          }
+          autoWaveGeo = new LineGeometry();
+          autoWaveGeo.setPositions(autoWavePositions);
+          autoWaveLine = new Line2(autoWaveGeo, new LineMaterial({ color: 0xcc2200, linewidth: 2.5, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight) }));
+          autoScene.add(autoWaveLine); autoSceneObjects.push(autoWaveLine);
+
+          autoWaveDashGeo = new LineGeometry();
+          autoWaveDashGeo.setPositions(new Float32Array(AUTO_WAVE_N * 3));
+          autoWaveDashGeo.instanceCount = 0;
+          autoWaveDashLine = new Line2(autoWaveDashGeo, new LineMaterial({ color: 0xcc2200, linewidth: 2.5, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight), dashed: true, dashSize: 0.55, gapSize: 0.45 }));
+          autoScene.add(autoWaveDashLine); autoSceneObjects.push(autoWaveDashLine);
+
+          autoWave2Positions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWave2Positions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWave2Positions[i*3+1] = NaN;
+            autoWave2Positions[i*3+2] = 0;
+          }
+          autoWave2Geo = new LineGeometry();
+          autoWave2Geo.setPositions(autoWave2Positions);
+          autoWave2Line = new Line2(autoWave2Geo, new LineMaterial({ color: 0x2255cc, linewidth: 2.5, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight) }));
+          autoScene.add(autoWave2Line); autoSceneObjects.push(autoWave2Line);
+
+          autoWave2DashGeo = new LineGeometry();
+          autoWave2DashGeo.setPositions(new Float32Array(AUTO_WAVE_N * 3));
+          autoWave2DashGeo.instanceCount = 0;
+          autoWave2DashLine = new Line2(autoWave2DashGeo, new LineMaterial({ color: 0x2255cc, linewidth: 2.5, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight), dashed: true, dashSize: 0.55, gapSize: 0.45 }));
+          autoScene.add(autoWave2DashLine); autoSceneObjects.push(autoWave2DashLine);
+
+          autoWaveResPositions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWaveResPositions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWaveResPositions[i*3+1] = NaN;
+            autoWaveResPositions[i*3+2] = 0;
+          }
+          autoWaveResGeo = new LineGeometry();
+          autoWaveResGeo.setPositions(autoWaveResPositions);
+          autoWaveResLine = new Line2(autoWaveResGeo, new LineMaterial({ color: 0x22aa44, linewidth: 2.5, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight) }));
+          autoScene.add(autoWaveResLine); autoSceneObjects.push(autoWaveResLine);
+
+          autoPlayStartTime = nowSec();
+          if (playBtn) playBtn.textContent = '‖';
+        },
+      },
+      // ===== 場面3 =====
+      {
+        label: '場面3',
+        setup() {
+          clearAutoSceneObjects();
+          const axisGeo = new LineGeometry();
+          axisGeo.setPositions([AUTO_WAVE_X_START, 4.5, 0, AUTO_WAVE_X_END, 4.5, 0]);
+          const axisMat = new LineMaterial({
+            color: 0x000000,
+            linewidth: 2,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+          });
+          const axisLine = new Line2(axisGeo, axisMat);
+          autoScene.add(axisLine);
+          autoSceneObjects.push(axisLine);
+
+          const axis2Geo = new LineGeometry();
+          axis2Geo.setPositions([AUTO_WAVE_X_START, -4.5, 0, AUTO_WAVE_X_END, -4.5, 0]);
+          const axis2Line = new Line2(axis2Geo, new LineMaterial({
+            color: 0x000000, linewidth: 2,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+          }));
+          autoScene.add(axis2Line);
+          autoSceneObjects.push(axis2Line);
+        },
+        play() {
+          const playBtn = document.getElementById('autoPlay');
+          if (autoPlayStartTime !== null) {
+            if (autoWavePaused) {
+              autoPlayStartTime += nowSec() - autoWavePauseWallTime;
+              autoWavePaused = false;
+              if (playBtn) playBtn.textContent = '‖';
+            } else {
+              autoWavePauseWallTime = nowSec();
+              autoWavePaused = true;
+              if (playBtn) playBtn.textContent = '▶';
+            }
+            return;
+          }
+          // 初回：赤波・青波のラインを生成（軸はsetup()で生成済み）
+          autoWavePositions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWavePositions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWavePositions[i*3+1] = NaN;
+            autoWavePositions[i*3+2] = 0;
+          }
+          autoWaveGeo = new LineGeometry();
+          autoWaveGeo.setPositions(autoWavePositions);
+          autoWaveLine = new Line2(autoWaveGeo, new LineMaterial({ color: 0xBE461E, linewidth: 2, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight), dashed: true, dashSize: 0.8, gapSize: 0.4 }));
+          autoScene.add(autoWaveLine); autoSceneObjects.push(autoWaveLine);
+
+          autoWave2Positions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWave2Positions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWave2Positions[i*3+1] = NaN;
+            autoWave2Positions[i*3+2] = 0;
+          }
+          autoWave2Geo = new LineGeometry();
+          autoWave2Geo.setPositions(autoWave2Positions);
+          autoWave2Line = new Line2(autoWave2Geo, new LineMaterial({ color: 0x2255cc, linewidth: 2, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight), dashed: true, dashSize: 0.8, gapSize: 0.4 }));
+          autoScene.add(autoWave2Line); autoSceneObjects.push(autoWave2Line);
+
+          // 下軸（y=-4.5）：赤（同位相）・青（逆位相）
+          autoWave3Positions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWave3Positions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWave3Positions[i*3+1] = NaN;
+            autoWave3Positions[i*3+2] = 0;
+          }
+          autoWave3Geo = new LineGeometry();
+          autoWave3Geo.setPositions(autoWave3Positions);
+          autoWave3Line = new Line2(autoWave3Geo, new LineMaterial({ color: 0xBE461E, linewidth: 2, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight), dashed: true, dashSize: 0.8, gapSize: 0.4 }));
+          autoScene.add(autoWave3Line); autoSceneObjects.push(autoWave3Line);
+
+          autoWave4Positions = new Float32Array(AUTO_WAVE_N * 3);
+          for (let i = 0; i < AUTO_WAVE_N; i++) {
+            autoWave4Positions[i*3]   = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+            autoWave4Positions[i*3+1] = NaN;
+            autoWave4Positions[i*3+2] = 0;
+          }
+          autoWave4Geo = new LineGeometry();
+          autoWave4Geo.setPositions(autoWave4Positions);
+          autoWave4Line = new Line2(autoWave4Geo, new LineMaterial({ color: 0x2255cc, linewidth: 2, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight), dashed: true, dashSize: 0.8, gapSize: 0.4 }));
+          autoScene.add(autoWave4Line); autoSceneObjects.push(autoWave4Line);
+
+          autoPlayStartTime = nowSec();
+          if (playBtn) playBtn.textContent = '‖';
+        },
+      },
+      // ===== 場面4 =====
+      {
+        label: '場面4',
+        setup() {
+          clearAutoSceneObjects();
+          // 上軸
+          const axisGeo = new LineGeometry();
+          axisGeo.setPositions([AUTO_WAVE_X_START, 4.5, 0, AUTO_WAVE_X_END, 4.5, 0]);
+          const axisLine = new Line2(axisGeo, new LineMaterial({ color: 0x000000, linewidth: 2, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight) }));
+          autoScene.add(axisLine); autoSceneObjects.push(axisLine);
+          // 下軸
+          const axis2Geo = new LineGeometry();
+          axis2Geo.setPositions([AUTO_WAVE_X_START, -4.5, 0, AUTO_WAVE_X_END, -4.5, 0]);
+          const axis2Line = new Line2(axis2Geo, new LineMaterial({ color: 0x000000, linewidth: 2, resolution: new THREE.Vector2(window.innerWidth, window.innerHeight) }));
+          autoScene.add(axis2Line); autoSceneObjects.push(axis2Line);
+        },
+        play() {
+          const playBtn = document.getElementById('autoPlay');
+          if (autoPlayStartTime !== null) {
+            if (autoWavePaused) {
+              autoPlayStartTime += nowSec() - autoWavePauseWallTime;
+              autoWavePaused = false;
+              if (playBtn) playBtn.textContent = '‖';
+            } else {
+              autoWavePauseWallTime = nowSec();
+              autoWavePaused = true;
+              if (playBtn) playBtn.textContent = '▶';
+            }
+            return;
+          }
+          const res = new THREE.Vector2(window.innerWidth, window.innerHeight);
+          const makeArr = () => {
+            const a = new Float32Array(AUTO_WAVE_N * 3);
+            for (let i = 0; i < AUTO_WAVE_N; i++) {
+              a[i*3] = AUTO_WAVE_X_START + (AUTO_WAVE_X_END - AUTO_WAVE_X_START) * i / (AUTO_WAVE_N - 1);
+              a[i*3+1] = NaN; a[i*3+2] = 0;
+            }
+            return a;
+          };
+          const makeLine = (color, dashed) => {
+            const mat = new LineMaterial({ color, linewidth: dashed ? 2 : 2.5, resolution: res,
+              ...(dashed ? { dashed: true, dashSize: 0.8, gapSize: 0.4 } : {}) });
+            return mat;
+          };
+          // 上軸：赤・青
+          autoWavePositions = makeArr(); autoWaveGeo = new LineGeometry(); autoWaveGeo.setPositions(autoWavePositions);
+          autoWaveLine = new Line2(autoWaveGeo, makeLine(0xBE461E, true));
+          autoScene.add(autoWaveLine); autoSceneObjects.push(autoWaveLine);
+
+          autoWave2Positions = makeArr(); autoWave2Geo = new LineGeometry(); autoWave2Geo.setPositions(autoWave2Positions);
+          autoWave2Line = new Line2(autoWave2Geo, makeLine(0x2255cc, true));
+          autoScene.add(autoWave2Line); autoSceneObjects.push(autoWave2Line);
+
+          // 上軸：合成波（緑・実線）
+          autoWaveResPositions = makeArr(); autoWaveResGeo = new LineGeometry(); autoWaveResGeo.setPositions(autoWaveResPositions);
+          autoWaveResLine = new Line2(autoWaveResGeo, makeLine(0x22aa44, false));
+          autoScene.add(autoWaveResLine); autoSceneObjects.push(autoWaveResLine);
+
+          // 下軸：赤・青（逆位相）
+          autoWave3Positions = makeArr(); autoWave3Geo = new LineGeometry(); autoWave3Geo.setPositions(autoWave3Positions);
+          autoWave3Line = new Line2(autoWave3Geo, makeLine(0xBE461E, true));
+          autoScene.add(autoWave3Line); autoSceneObjects.push(autoWave3Line);
+
+          autoWave4Positions = makeArr(); autoWave4Geo = new LineGeometry(); autoWave4Geo.setPositions(autoWave4Positions);
+          autoWave4Line = new Line2(autoWave4Geo, makeLine(0x2255cc, true));
+          autoScene.add(autoWave4Line); autoSceneObjects.push(autoWave4Line);
+
+          // 下軸：合成波（緑・実線）
+          autoWaveRes2Positions = makeArr(); autoWaveRes2Geo = new LineGeometry(); autoWaveRes2Geo.setPositions(autoWaveRes2Positions);
+          autoWaveRes2Line = new Line2(autoWaveRes2Geo, makeLine(0x22aa44, false));
+          autoScene.add(autoWaveRes2Line); autoSceneObjects.push(autoWaveRes2Line);
+
+          autoPlayStartTime = nowSec();
+          if (playBtn) playBtn.textContent = '‖';
+        },
+      },
+      // ===== 場面5 =====
+      {
+        label: '場面5',
+        setup() {
+          clearAutoSceneObjects();
+          const mat = new THREE.ShaderMaterial({
+            uniforms: { baseColor: { value: new THREE.Color(0xffff00) } },
+            vertexShader: `
+              varying vec3 vNormalView;
+              void main() {
+                vNormalView = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 baseColor;
+              varying vec3 vNormalView;
+              void main() {
+                vec3 N = normalize(vNormalView);
+                vec3 V = vec3(0.0, 0.0, 1.0);
+                float ndotv = max(dot(N, V), 0.0);
+                float shade = pow(ndotv, 0.5);
+                vec3 dark   = baseColor * 0.45;
+                vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+                vec3 color  = mix(dark, bright, shade);
+                vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+                vec3 H = normalize(L + V);
+                float spec = pow(max(dot(N, H), 0.0), 52.0);
+                color += vec3(1.0) * spec * 1.1;
+                float fresnel = pow(1.0 - ndotv, 3.0);
+                color += baseColor * fresnel * 0.45;
+                gl_FragColor = vec4(color, 1.0);
+              }
+            `,
+          });
+          const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 16), mat);
+          sphere.position.set(-15, 0, 0);
+          autoScene.add(sphere);
+          autoSceneObjects.push(sphere);
+
+          // 直方体：球からX方向に15離れた位置、X:±0.5、Y:±5、Z:±1
+          const boxMat = new THREE.ShaderMaterial({
+            uniforms: { baseColor: { value: new THREE.Color(0x999999) } },
+            vertexShader: `
+              varying vec3 vNormalView;
+              void main() {
+                vNormalView = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 baseColor;
+              varying vec3 vNormalView;
+              void main() {
+                vec3 N = normalize(vNormalView);
+                vec3 V = vec3(0.0, 0.0, 1.0);
+                float ndotv = max(dot(N, V), 0.0);
+                float shade = pow(ndotv, 0.5);
+                vec3 dark   = baseColor * 0.45;
+                vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+                vec3 color  = mix(dark, bright, shade);
+                vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+                vec3 H = normalize(L + V);
+                float spec = pow(max(dot(N, H), 0.0), 52.0);
+                color += vec3(1.0) * spec * 1.1;
+                float fresnel = pow(1.0 - ndotv, 3.0);
+                color += baseColor * fresnel * 0.45;
+                gl_FragColor = vec4(color, 1.0);
+              }
+            `,
+          });
+          // バリア壁: スリットは z=±5（常時）、z=±15 はモード切替で開閉
+          s5SlitMode = 2;
+          autoS5OuterBoxes = [];
+          document.getElementById('s5Btn2').classList.add('active');
+          document.getElementById('s5Btn4').classList.remove('active');
+          for (const z of [0, 1, -1, 2, -2, 3, -3]) {
+            const b = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+            b.position.set(15, 0, z);
+            autoScene.add(b); autoSceneObjects.push(b);
+          }
+          for (let z = 4; z <= 20; z++) {
+            if (z === 5) continue; // z=±5 は常時スリット
+            for (const sign of [1, -1]) {
+              const b = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+              b.position.set(15, 0, sign * z);
+              autoScene.add(b); autoSceneObjects.push(b);
+              if (z === 15) autoS5OuterBoxes.push(b); // z=±15: 初期は表示（2本モード）
+            }
+          }
+          // 第1壁: x=0（球の位置）、z=0 のみスリット
+          for (let z = 1; z <= 20; z++) {
+            for (const sign of [1, -1]) {
+              const b1 = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+              b1.position.set(0, 0, sign * z);
+              autoScene.add(b1); autoSceneObjects.push(b1);
+            }
+          }
+        },
+        play() {
+          const playBtn = document.getElementById('autoPlay');
+          if (autoPlayStartTime !== null) {
+            if (autoWavePaused) {
+              autoPlayStartTime += nowSec() - autoWavePauseWallTime;
+              autoWavePaused = false;
+              if (playBtn) playBtn.textContent = '‖';
+            } else {
+              autoWavePauseWallTime = nowSec();
+              autoWavePaused = true;
+              if (playBtn) playBtn.textContent = '▶';
+            }
+            return;
+          }
+          // XZ平面グリッドメッシュを生成（x方向を広くしてバリア右側の干渉領域を確保）
+          autoS5Geo = new THREE.PlaneGeometry(S5_GRID_X, S5_GRID_SIZE, S5_GRID_SEGS_X, S5_GRID_SEGS);
+          autoS5Geo.rotateX(-Math.PI / 2);
+          const s5Mat = new THREE.ShaderMaterial({
+            uniforms: {
+              uFront:      { value: 0.0 },
+              uWavelength: { value: S5_WAVELENGTH },
+              uTime:       { value: 0.0 },
+              uSlitMode:   { value: 0.0 },  // 0.0=2本, 1.0=4本
+            },
+            transparent: true,
+            side: THREE.DoubleSide,
+            vertexShader: `
+              uniform float uTime;
+              uniform float uFront;
+              uniform float uWavelength;
+              uniform float uSlitMode;
+              varying vec3 vWorldPos;
+
+              const float SPEED    = 2.5;
+              const float AMP      = 1.5;
+              const float DECAY    = 0.08;
+              const float BARRIER  = 15.0;
+              const float OFFSET_X = 45.0;
+              const float PI       = 3.14159265358979;
+
+              float waveAt(float wx, float wz) {
+                float k     = 2.0 * PI / uWavelength;
+                float omega = SPEED * k;
+                float y     = 0.0;
+                if (wx <= 0.0) {
+                  // 領域1: 平面波（球 x=-15 → 第1スリット x=0、z範囲は第1壁±20）
+                  float xDist = wx + 15.0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (xDist > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - xDist) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * xDist - omega * uTime) * eF * zFade;
+                  }
+                } else if (wx <= BARRIER) {
+                  // 領域2: 第1スリット(0,0)からの円形波（z範囲は壁±20に制限）
+                  float r0    = length(vec2(wx, wz));
+                  float path0 = 15.0 + r0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (r0 > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - path0) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * path0 - omega * uTime) * eF * zFade;
+                  }
+                } else {
+                  // 領域3: 第2スリット(15,±5/±15)からの円形波の合成
+                  float L      = wx - BARRIER;
+                  float r1     = length(vec2(L, wz -  5.0));
+                  float r2     = length(vec2(L, wz +  5.0));
+                  float r3     = length(vec2(L, wz - 15.0));
+                  float r4     = length(vec2(L, wz + 15.0));
+                  float d12    = sqrt(225.0 + 25.0);
+                  float d34    = sqrt(225.0 + 225.0);
+                  float base12 = 15.0 + d12;
+                  float base34 = 15.0 + d34;
+                  float rMin = (uSlitMode < 0.5)
+                               ? min(r1, r2)
+                               : min(min(r1, r2), min(r3, r4));
+                  if (rMin > 0.001) {
+                    float eF1 = clamp((uFront - base12 - r1) / uWavelength, 0.0, 1.0);
+                    float eF2 = clamp((uFront - base12 - r2) / uWavelength, 0.0, 1.0);
+                    float w1  = sin(k * (base12 + r1) - omega * uTime) * eF1;
+                    float w2  = sin(k * (base12 + r2) - omega * uTime) * eF2;
+                    if (uSlitMode < 0.5) {
+                      y = AMP * 0.5 * (w1 + w2);
+                    } else {
+                      float eF3 = clamp((uFront - base34 - r3) / uWavelength, 0.0, 1.0);
+                      float eF4 = clamp((uFront - base34 - r4) / uWavelength, 0.0, 1.0);
+                      float w3  = sin(k * (base34 + r3) - omega * uTime) * eF3;
+                      float w4  = sin(k * (base34 + r4) - omega * uTime) * eF4;
+                      y = AMP * 0.25 * (w1 + w2 + w3 + w4);
+                    }
+                  }
+                  // 第2壁中心(x=15,z=0)から半径70の半円でフェードアウト
+                  y *= smoothstep(70.0, 67.0, length(vec2(L, wz)));
+                }
+                return y;
+              }
+
+              void main() {
+                float wx = position.x + OFFSET_X;
+                float wz = position.z;
+                float y  = waveAt(wx, wz);
+
+                vec3 displaced = vec3(position.x, y, position.z);
+                vWorldPos = (modelMatrix * vec4(displaced, 1.0)).xyz;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform float uFront;
+              uniform float uWavelength;
+              uniform float uSlitMode;
+              uniform float uTime;
+              varying vec3 vWorldPos;
+
+              const float PI      = 3.14159265358979;
+              const float SPEED   = 2.5;
+              const float AMP     = 1.5;
+              const float BARRIER = 15.0;
+
+              float waveAt(float wx, float wz) {
+                float k     = 2.0 * PI / uWavelength;
+                float omega = SPEED * k;
+                float y     = 0.0;
+                if (wx <= 0.0) {
+                  float xDist = wx + 15.0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (xDist > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - xDist) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * xDist - omega * uTime) * eF * zFade;
+                  }
+                } else if (wx <= BARRIER) {
+                  float r0    = length(vec2(wx, wz));
+                  float path0 = 15.0 + r0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (r0 > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - path0) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * path0 - omega * uTime) * eF * zFade;
+                  }
+                } else {
+                  float L      = wx - BARRIER;
+                  float r1     = length(vec2(L, wz -  5.0));
+                  float r2     = length(vec2(L, wz +  5.0));
+                  float r3     = length(vec2(L, wz - 15.0));
+                  float r4     = length(vec2(L, wz + 15.0));
+                  float d12    = sqrt(225.0 + 25.0);
+                  float d34    = sqrt(225.0 + 225.0);
+                  float base12 = 15.0 + d12;
+                  float base34 = 15.0 + d34;
+                  float rMin = (uSlitMode < 0.5)
+                               ? min(r1, r2)
+                               : min(min(r1, r2), min(r3, r4));
+                  if (rMin > 0.001) {
+                    float eF1 = clamp((uFront - base12 - r1) / uWavelength, 0.0, 1.0);
+                    float eF2 = clamp((uFront - base12 - r2) / uWavelength, 0.0, 1.0);
+                    float w1  = sin(k * (base12 + r1) - omega * uTime) * eF1;
+                    float w2  = sin(k * (base12 + r2) - omega * uTime) * eF2;
+                    if (uSlitMode < 0.5) {
+                      y = AMP * 0.5 * (w1 + w2);
+                    } else {
+                      float eF3 = clamp((uFront - base34 - r3) / uWavelength, 0.0, 1.0);
+                      float eF4 = clamp((uFront - base34 - r4) / uWavelength, 0.0, 1.0);
+                      float w3  = sin(k * (base34 + r3) - omega * uTime) * eF3;
+                      float w4  = sin(k * (base34 + r4) - omega * uTime) * eF4;
+                      y = AMP * 0.25 * (w1 + w2 + w3 + w4);
+                    }
+                  }
+                  y *= smoothstep(70.0, 67.0, length(vec2(L, wz)));
+                }
+                return y;
+              }
+
+              void main() {
+                float alpha;
+                if (vWorldPos.x <= 0.0) {
+                  // 平面波波面（z範囲を第1壁±20に制限）
+                  if (abs(vWorldPos.z) > 21.0) discard;
+                  float xDist = vWorldPos.x + 15.0;
+                  if (xDist > uFront) discard;
+                  float zFade = smoothstep(21.0, 19.0, abs(vWorldPos.z));
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), xDist) * zFade;
+                } else if (vWorldPos.x <= 15.0) {
+                  // 第1スリット(0,0)からの円形波面（z範囲は壁±20に制限）
+                  if (abs(vWorldPos.z) > 21.0) discard;
+                  float r0    = length(vec2(vWorldPos.x, vWorldPos.z));
+                  float path0 = 15.0 + r0;
+                  if (path0 > uFront) discard;
+                  float zFade = smoothstep(21.0, 19.0, abs(vWorldPos.z));
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), path0) * zFade;
+                } else {
+                  // 第2スリットからの合成波面
+                  float Lf     = vWorldPos.x - 15.0;
+                  // 第2壁中心(x=15,z=0)から半径70の半円クリップ
+                  float distC  = length(vec2(Lf, vWorldPos.z));
+                  if (distC > 70.0) discard;
+                  float d12    = sqrt(250.0);
+                  float base12 = 15.0 + d12;
+                  float rMin12 = min(length(vec2(Lf, vWorldPos.z -  5.0)),
+                                     length(vec2(Lf, vWorldPos.z +  5.0)));
+                  float minT;
+                  if (uSlitMode >= 0.5) {
+                    float d34    = sqrt(450.0);
+                    float base34 = 15.0 + d34;
+                    float rMin34 = min(length(vec2(Lf, vWorldPos.z - 15.0)),
+                                       length(vec2(Lf, vWorldPos.z + 15.0)));
+                    minT = min(base12 + rMin12, base34 + rMin34);
+                  } else {
+                    minT = base12 + rMin12;
+                  }
+                  if (minT > uFront) discard;
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), minT)
+                        * smoothstep(70.0, 67.0, distC);
+                }
+                vec3 base = vec3(1.0, 0.94, 0.50);
+                float nEps = 0.3;
+                float dydx = (waveAt(vWorldPos.x + nEps, vWorldPos.z)
+                            - waveAt(vWorldPos.x - nEps, vWorldPos.z)) / (2.0 * nEps);
+                float dydz = (waveAt(vWorldPos.x, vWorldPos.z + nEps)
+                            - waveAt(vWorldPos.x, vWorldPos.z - nEps)) / (2.0 * nEps);
+                vec3 N = normalize(vec3(-dydx, 1.0, -dydz));
+                vec3 L = normalize(vec3(0.4, 1.0, 0.5));
+                float diff = clamp(dot(N, L), 0.0, 1.0);
+                vec3 color = base * (0.35 + 0.65 * diff);
+                gl_FragColor = vec4(color, 0.96 * alpha);
+              }
+            `,
+          });
+          autoS5Mesh = new THREE.Mesh(autoS5Geo, s5Mat);
+          autoS5Mesh.position.set(S5_MESH_OFFSET_X, 0, 0);
+          autoScene.add(autoS5Mesh); autoSceneObjects.push(autoS5Mesh);
+          autoPlayStartTime = nowSec();
+          if (playBtn) playBtn.textContent = '‖';
+        },
+      },
+      // ===== 場面6 =====
+      {
+        label: '場面6',
+        setup() {
+          clearAutoSceneObjects();
+          const mat = new THREE.ShaderMaterial({
+            uniforms: { baseColor: { value: new THREE.Color(0xffff00) } },
+            vertexShader: `
+              varying vec3 vNormalView;
+              void main() {
+                vNormalView = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 baseColor;
+              varying vec3 vNormalView;
+              void main() {
+                vec3 N = normalize(vNormalView);
+                vec3 V = vec3(0.0, 0.0, 1.0);
+                float ndotv = max(dot(N, V), 0.0);
+                float shade = pow(ndotv, 0.5);
+                vec3 dark   = baseColor * 0.45;
+                vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+                vec3 color  = mix(dark, bright, shade);
+                vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+                vec3 H = normalize(L + V);
+                float spec = pow(max(dot(N, H), 0.0), 52.0);
+                color += vec3(1.0) * spec * 1.1;
+                float fresnel = pow(1.0 - ndotv, 3.0);
+                color += baseColor * fresnel * 0.45;
+                gl_FragColor = vec4(color, 1.0);
+              }
+            `,
+          });
+          const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 16), mat);
+          sphere.position.set(-15, 0, 0);
+          autoScene.add(sphere);
+          autoSceneObjects.push(sphere);
+
+          const boxMat = new THREE.ShaderMaterial({
+            uniforms: { baseColor: { value: new THREE.Color(0x999999) } },
+            vertexShader: `
+              varying vec3 vNormalView;
+              void main() {
+                vNormalView = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 baseColor;
+              varying vec3 vNormalView;
+              void main() {
+                vec3 N = normalize(vNormalView);
+                vec3 V = vec3(0.0, 0.0, 1.0);
+                float ndotv = max(dot(N, V), 0.0);
+                float shade = pow(ndotv, 0.5);
+                vec3 dark   = baseColor * 0.45;
+                vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+                vec3 color  = mix(dark, bright, shade);
+                vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+                vec3 H = normalize(L + V);
+                float spec = pow(max(dot(N, H), 0.0), 52.0);
+                color += vec3(1.0) * spec * 1.1;
+                float fresnel = pow(1.0 - ndotv, 3.0);
+                color += baseColor * fresnel * 0.45;
+                gl_FragColor = vec4(color, 1.0);
+              }
+            `,
+          });
+          // 2D モードをリセット
+          s6Mode2d = false;
+          document.getElementById('btn2D').classList.remove('active');
+          s6ShowRed = true;  s6ShowBlue = true;  s6ShowFringes = false;
+          document.getElementById('s6BtnRed').classList.add('active');
+          document.getElementById('s6BtnRedArc').style.display = 'none';
+          document.getElementById('s6BtnBlue').classList.add('active');
+          document.getElementById('s6BtnBlueArc').style.display = 'none';
+          document.getElementById('s6BtnFringe').classList.remove('active');
+          document.querySelectorAll('.s6BtnOrder').forEach(b => { b.style.display = 'none'; });
+          // バリア壁: z=±5 のみスリット（2本固定）
+          for (const z of [0, 1, -1, 2, -2, 3, -3]) {
+            const b = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+            b.position.set(15, 0, z);
+            autoScene.add(b); autoSceneObjects.push(b);
+          }
+          for (let z = 4; z <= 20; z++) {
+            if (z === 5) continue;
+            for (const sign of [1, -1]) {
+              const b = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+              b.position.set(15, 0, sign * z);
+              autoScene.add(b); autoSceneObjects.push(b);
+            }
+          }
+          // 第1壁: x=0（球の位置）、z=0 のみスリット
+          for (let z = 1; z <= 20; z++) {
+            for (const sign of [1, -1]) {
+              const b1 = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+              b1.position.set(0, 0, sign * z);
+              autoScene.add(b1); autoSceneObjects.push(b1);
+            }
+          }
+        },
+        play() {
+          const playBtn = document.getElementById('autoPlay');
+          if (autoPlayStartTime !== null) {
+            if (autoWavePaused) {
+              autoPlayStartTime += nowSec() - autoWavePauseWallTime;
+              autoWavePaused = false;
+              if (playBtn) playBtn.textContent = '‖';
+            } else {
+              autoWavePauseWallTime = nowSec();
+              autoWavePaused = true;
+              if (playBtn) playBtn.textContent = '▶';
+            }
+            return;
+          }
+          autoS5Geo = new THREE.PlaneGeometry(S5_GRID_X, S5_GRID_SIZE, S5_GRID_SEGS_X, S5_GRID_SEGS);
+          autoS5Geo.rotateX(-Math.PI / 2);
+          const s5Mat = new THREE.ShaderMaterial({
+            uniforms: {
+              uFront:      { value: 0.0 },
+              uWavelength: { value: S5_WAVELENGTH },
+              uTime:       { value: 0.0 },
+              uSlitMode:   { value: 0.0 },  // 2本固定
+            },
+            transparent: true,
+            side: THREE.DoubleSide,
+            vertexShader: `
+              uniform float uTime;
+              uniform float uFront;
+              uniform float uWavelength;
+              uniform float uSlitMode;
+              varying vec3 vWorldPos;
+
+              const float SPEED    = 2.5;
+              const float AMP      = 1.5;
+              const float DECAY    = 0.08;
+              const float BARRIER  = 15.0;
+              const float OFFSET_X = 45.0;
+              const float PI       = 3.14159265358979;
+
+              float waveAt(float wx, float wz) {
+                float k     = 2.0 * PI / uWavelength;
+                float omega = SPEED * k;
+                float y     = 0.0;
+                if (wx <= 0.0) {
+                  // 領域1: 平面波（球 x=-15 → 第1スリット x=0、z範囲は第1壁±20）
+                  float xDist = wx + 15.0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (xDist > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - xDist) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * xDist - omega * uTime) * eF * zFade;
+                  }
+                } else if (wx <= BARRIER) {
+                  // 領域2: 第1スリット(0,0)からの円形波（z範囲は壁±20に制限）
+                  float r0    = length(vec2(wx, wz));
+                  float path0 = 15.0 + r0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (r0 > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - path0) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * path0 - omega * uTime) * eF * zFade;
+                  }
+                } else {
+                  // 領域3: 第2スリット(15,±5/±15)からの円形波の合成
+                  float L      = wx - BARRIER;
+                  float r1     = length(vec2(L, wz -  5.0));
+                  float r2     = length(vec2(L, wz +  5.0));
+                  float r3     = length(vec2(L, wz - 15.0));
+                  float r4     = length(vec2(L, wz + 15.0));
+                  float d12    = sqrt(225.0 + 25.0);
+                  float d34    = sqrt(225.0 + 225.0);
+                  float base12 = 15.0 + d12;
+                  float base34 = 15.0 + d34;
+                  float rMin = (uSlitMode < 0.5)
+                               ? min(r1, r2)
+                               : min(min(r1, r2), min(r3, r4));
+                  if (rMin > 0.001) {
+                    float eF1 = clamp((uFront - base12 - r1) / uWavelength, 0.0, 1.0);
+                    float eF2 = clamp((uFront - base12 - r2) / uWavelength, 0.0, 1.0);
+                    float w1  = sin(k * (base12 + r1) - omega * uTime) * eF1;
+                    float w2  = sin(k * (base12 + r2) - omega * uTime) * eF2;
+                    if (uSlitMode < 0.5) {
+                      y = AMP * 0.5 * (w1 + w2);
+                    } else {
+                      float eF3 = clamp((uFront - base34 - r3) / uWavelength, 0.0, 1.0);
+                      float eF4 = clamp((uFront - base34 - r4) / uWavelength, 0.0, 1.0);
+                      float w3  = sin(k * (base34 + r3) - omega * uTime) * eF3;
+                      float w4  = sin(k * (base34 + r4) - omega * uTime) * eF4;
+                      y = AMP * 0.25 * (w1 + w2 + w3 + w4);
+                    }
+                  }
+                  // 第2壁中心(x=15,z=0)から半径70の半円でフェードアウト
+                  y *= smoothstep(70.0, 67.0, length(vec2(L, wz)));
+                }
+                return y;
+              }
+
+              void main() {
+                float wx = position.x + OFFSET_X;
+                float wz = position.z;
+                float y  = waveAt(wx, wz);
+
+                vec3 displaced = vec3(position.x, y, position.z);
+                vWorldPos = (modelMatrix * vec4(displaced, 1.0)).xyz;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform float uFront;
+              uniform float uWavelength;
+              uniform float uSlitMode;
+              uniform float uTime;
+              varying vec3 vWorldPos;
+
+              const float PI      = 3.14159265358979;
+              const float SPEED   = 2.5;
+              const float AMP     = 1.5;
+              const float BARRIER = 15.0;
+
+              float waveAt(float wx, float wz) {
+                float k     = 2.0 * PI / uWavelength;
+                float omega = SPEED * k;
+                float y     = 0.0;
+                if (wx <= 0.0) {
+                  float xDist = wx + 15.0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (xDist > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - xDist) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * xDist - omega * uTime) * eF * zFade;
+                  }
+                } else if (wx <= BARRIER) {
+                  float r0    = length(vec2(wx, wz));
+                  float path0 = 15.0 + r0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (r0 > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - path0) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * path0 - omega * uTime) * eF * zFade;
+                  }
+                } else {
+                  float L      = wx - BARRIER;
+                  float r1     = length(vec2(L, wz -  5.0));
+                  float r2     = length(vec2(L, wz +  5.0));
+                  float r3     = length(vec2(L, wz - 15.0));
+                  float r4     = length(vec2(L, wz + 15.0));
+                  float d12    = sqrt(225.0 + 25.0);
+                  float d34    = sqrt(225.0 + 225.0);
+                  float base12 = 15.0 + d12;
+                  float base34 = 15.0 + d34;
+                  float rMin = (uSlitMode < 0.5)
+                               ? min(r1, r2)
+                               : min(min(r1, r2), min(r3, r4));
+                  if (rMin > 0.001) {
+                    float eF1 = clamp((uFront - base12 - r1) / uWavelength, 0.0, 1.0);
+                    float eF2 = clamp((uFront - base12 - r2) / uWavelength, 0.0, 1.0);
+                    float w1  = sin(k * (base12 + r1) - omega * uTime) * eF1;
+                    float w2  = sin(k * (base12 + r2) - omega * uTime) * eF2;
+                    if (uSlitMode < 0.5) {
+                      y = AMP * 0.5 * (w1 + w2);
+                    } else {
+                      float eF3 = clamp((uFront - base34 - r3) / uWavelength, 0.0, 1.0);
+                      float eF4 = clamp((uFront - base34 - r4) / uWavelength, 0.0, 1.0);
+                      float w3  = sin(k * (base34 + r3) - omega * uTime) * eF3;
+                      float w4  = sin(k * (base34 + r4) - omega * uTime) * eF4;
+                      y = AMP * 0.25 * (w1 + w2 + w3 + w4);
+                    }
+                  }
+                  y *= smoothstep(70.0, 67.0, length(vec2(L, wz)));
+                }
+                return y;
+              }
+
+              void main() {
+                float alpha;
+                if (vWorldPos.x <= 0.0) {
+                  // 平面波波面（z範囲を第1壁±20に制限）
+                  if (abs(vWorldPos.z) > 21.0) discard;
+                  float xDist = vWorldPos.x + 15.0;
+                  if (xDist > uFront) discard;
+                  float zFade = smoothstep(21.0, 19.0, abs(vWorldPos.z));
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), xDist) * zFade;
+                } else if (vWorldPos.x <= 15.0) {
+                  // 第1スリット(0,0)からの円形波面（z範囲は壁±20に制限）
+                  if (abs(vWorldPos.z) > 21.0) discard;
+                  float r0    = length(vec2(vWorldPos.x, vWorldPos.z));
+                  float path0 = 15.0 + r0;
+                  if (path0 > uFront) discard;
+                  float zFade = smoothstep(21.0, 19.0, abs(vWorldPos.z));
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), path0) * zFade;
+                } else {
+                  // 第2スリットからの合成波面
+                  float Lf     = vWorldPos.x - 15.0;
+                  // 第2壁中心(x=15,z=0)から半径70の半円クリップ
+                  float distC  = length(vec2(Lf, vWorldPos.z));
+                  if (distC > 70.0) discard;
+                  float d12    = sqrt(250.0);
+                  float base12 = 15.0 + d12;
+                  float rMin12 = min(length(vec2(Lf, vWorldPos.z -  5.0)),
+                                     length(vec2(Lf, vWorldPos.z +  5.0)));
+                  float minT;
+                  if (uSlitMode >= 0.5) {
+                    float d34    = sqrt(450.0);
+                    float base34 = 15.0 + d34;
+                    float rMin34 = min(length(vec2(Lf, vWorldPos.z - 15.0)),
+                                       length(vec2(Lf, vWorldPos.z + 15.0)));
+                    minT = min(base12 + rMin12, base34 + rMin34);
+                  } else {
+                    minT = base12 + rMin12;
+                  }
+                  if (minT > uFront) discard;
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), minT)
+                        * smoothstep(70.0, 67.0, distC);
+                }
+                vec3 base = vec3(1.0, 0.94, 0.50);
+                float nEps = 0.3;
+                float dydx = (waveAt(vWorldPos.x + nEps, vWorldPos.z)
+                            - waveAt(vWorldPos.x - nEps, vWorldPos.z)) / (2.0 * nEps);
+                float dydz = (waveAt(vWorldPos.x, vWorldPos.z + nEps)
+                            - waveAt(vWorldPos.x, vWorldPos.z - nEps)) / (2.0 * nEps);
+                vec3 N = normalize(vec3(-dydx, 1.0, -dydz));
+                vec3 L = normalize(vec3(0.4, 1.0, 0.5));
+                float diff = clamp(dot(N, L), 0.0, 1.0);
+                vec3 color = base * (0.35 + 0.65 * diff);
+                gl_FragColor = vec4(color, 0.96 * alpha);
+              }
+            `,
+          });
+          autoS5Mesh = new THREE.Mesh(autoS5Geo, s5Mat);
+          autoS5Mesh.position.set(S5_MESH_OFFSET_X, 0, 0);
+          autoS5Mesh.visible = !s6Mode2d;
+          autoScene.add(autoS5Mesh); autoSceneObjects.push(autoS5Mesh);
+
+          // 3D空間内 実線/点線 波ライングループ
+          autoS6LineGroup = createS6LineGroup();
+          autoS6LineGroup.visible = s6Mode2d;
+          autoScene.add(autoS6LineGroup); autoSceneObjects.push(autoS6LineGroup);
+
+          autoS6FringeGroup = createS6FringeGroup();
+          autoS6FringeGroup.visible = s6ShowFringes;
+          autoScene.add(autoS6FringeGroup); autoSceneObjects.push(autoS6FringeGroup);
+
+          autoPlayStartTime = nowSec();
+          if (playBtn) playBtn.textContent = '‖';
+        },
+      },
+      // ===== 場面7 =====
+      {
+        label: '場面7',
+        setup() {
+          clearAutoSceneObjects();
+          const mat = new THREE.ShaderMaterial({
+            uniforms: { baseColor: { value: new THREE.Color(0xffff00) } },
+            vertexShader: `
+              varying vec3 vNormalView;
+              void main() {
+                vNormalView = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 baseColor;
+              varying vec3 vNormalView;
+              void main() {
+                vec3 N = normalize(vNormalView);
+                vec3 V = vec3(0.0, 0.0, 1.0);
+                float ndotv = max(dot(N, V), 0.0);
+                float shade = pow(ndotv, 0.5);
+                vec3 dark   = baseColor * 0.45;
+                vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+                vec3 color  = mix(dark, bright, shade);
+                vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+                vec3 H = normalize(L + V);
+                float spec = pow(max(dot(N, H), 0.0), 52.0);
+                color += vec3(1.0) * spec * 1.1;
+                float fresnel = pow(1.0 - ndotv, 3.0);
+                color += baseColor * fresnel * 0.45;
+                gl_FragColor = vec4(color, 1.0);
+              }
+            `,
+          });
+          const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 16), mat);
+          sphere.position.set(-15, 0, 0);
+          autoScene.add(sphere);
+          autoSceneObjects.push(sphere);
+
+          const boxMat = new THREE.ShaderMaterial({
+            uniforms: { baseColor: { value: new THREE.Color(0x999999) } },
+            vertexShader: `
+              varying vec3 vNormalView;
+              void main() {
+                vNormalView = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 baseColor;
+              varying vec3 vNormalView;
+              void main() {
+                vec3 N = normalize(vNormalView);
+                vec3 V = vec3(0.0, 0.0, 1.0);
+                float ndotv = max(dot(N, V), 0.0);
+                float shade = pow(ndotv, 0.5);
+                vec3 dark   = baseColor * 0.45;
+                vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+                vec3 color  = mix(dark, bright, shade);
+                vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+                vec3 H = normalize(L + V);
+                float spec = pow(max(dot(N, H), 0.0), 52.0);
+                color += vec3(1.0) * spec * 1.1;
+                float fresnel = pow(1.0 - ndotv, 3.0);
+                color += baseColor * fresnel * 0.45;
+                gl_FragColor = vec4(color, 1.0);
+              }
+            `,
+          });
+          // 2D・赤・青・明線をすべてONに設定
+          s6Mode2d = true;
+          document.getElementById('btn2D').classList.add('active');
+          s6ShowRed = true;  s6ShowBlue = true;  s6ShowFringes = true;
+          s6ShowRedArc = true;  s6ShowBlueArc = true;
+          document.getElementById('s6BtnRed').classList.add('active');
+          document.getElementById('s6BtnRedArc').style.display = '';
+          document.getElementById('s6BtnRedArc').classList.add('active');
+          document.getElementById('s6BtnBlue').classList.add('active');
+          document.getElementById('s6BtnBlueArc').style.display = '';
+          document.getElementById('s6BtnBlueArc').classList.add('active');
+          document.getElementById('s6BtnFringe').classList.add('active');
+          document.querySelectorAll('.s6BtnOrder').forEach(b => { b.style.display = ''; b.classList.add('active'); });
+          // バリア壁: z=±5 のみスリット（2本固定）
+          for (const z of [0, 1, -1, 2, -2, 3, -3]) {
+            const b = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+            b.position.set(15, 0, z);
+            autoScene.add(b); autoSceneObjects.push(b);
+          }
+          for (let z = 4; z <= 20; z++) {
+            if (z === 5) continue;
+            for (const sign of [1, -1]) {
+              const b = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+              b.position.set(15, 0, sign * z);
+              autoScene.add(b); autoSceneObjects.push(b);
+            }
+          }
+          // 第1壁: x=0（球の位置）、z=0 のみスリット
+          for (let z = 1; z <= 20; z++) {
+            for (const sign of [1, -1]) {
+              const b1 = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+              b1.position.set(0, 0, sign * z);
+              autoScene.add(b1); autoSceneObjects.push(b1);
+            }
+          }
+          // ▶押下前から t=45 状態を静止表示
+          this.play();
+          autoS7FadeStart = null;  // setup()呼び出し分はリセット
+          autoWavePaused = true;
+          autoWavePauseWallTime = nowSec();
+          updateS6LineGroup(45);
+          // フリンジ線の末端に黄緑球を生成（▶でフェードイン）
+          autoS7Spheres = [];
+          const sphMat = new THREE.MeshBasicMaterial({ color: 0x99ff33, transparent: true, opacity: 0 });
+          const sphGeo = new THREE.SphereGeometry(1.5, 16, 8);
+          autoS6FringeGroup.children.forEach(line => {
+            const arr = line.geometry.attributes.position.array;
+            if (arr.length < 3) return;
+            const sph = new THREE.Mesh(sphGeo, sphMat);
+            sph.position.set(arr[arr.length - 3], arr[arr.length - 2], arr[arr.length - 1]);
+            autoScene.add(sph); autoSceneObjects.push(sph);
+            autoS7Spheres.push(sph);
+          });
+          const playBtnInit = document.getElementById('autoPlay');
+          if (playBtnInit) playBtnInit.textContent = '▶';
+        },
+        play() {
+          const playBtn = document.getElementById('autoPlay');
+          if (autoPlayStartTime !== null) {
+            if (autoWavePaused) {
+              autoPlayStartTime += nowSec() - autoWavePauseWallTime;
+              autoWavePaused = false;
+              if (playBtn) playBtn.textContent = '‖';
+            } else {
+              autoWavePauseWallTime = nowSec();
+              autoWavePaused = true;
+              if (playBtn) playBtn.textContent = '▶';
+            }
+            return;
+          }
+          autoS5Geo = new THREE.PlaneGeometry(S5_GRID_X, S5_GRID_SIZE, S5_GRID_SEGS_X, S5_GRID_SEGS);
+          autoS5Geo.rotateX(-Math.PI / 2);
+          const s5Mat = new THREE.ShaderMaterial({
+            uniforms: {
+              uFront:      { value: S5_WAVE_SPEED * 45 },
+              uWavelength: { value: S5_WAVELENGTH },
+              uTime:       { value: 45 },
+              uSlitMode:   { value: 0.0 },
+            },
+            transparent: true,
+            side: THREE.DoubleSide,
+            vertexShader: `
+              uniform float uTime;
+              uniform float uFront;
+              uniform float uWavelength;
+              uniform float uSlitMode;
+              varying vec3 vWorldPos;
+
+              const float SPEED    = 2.5;
+              const float AMP      = 1.5;
+              const float DECAY    = 0.08;
+              const float BARRIER  = 15.0;
+              const float OFFSET_X = 45.0;
+              const float PI       = 3.14159265358979;
+
+              float waveAt(float wx, float wz) {
+                float k     = 2.0 * PI / uWavelength;
+                float omega = SPEED * k;
+                float y     = 0.0;
+                if (wx <= 0.0) {
+                  // 領域1: 平面波（球 x=-15 → 第1スリット x=0、z範囲は第1壁±20）
+                  float xDist = wx + 15.0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (xDist > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - xDist) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * xDist - omega * uTime) * eF * zFade;
+                  }
+                } else if (wx <= BARRIER) {
+                  // 領域2: 第1スリット(0,0)からの円形波（z範囲は壁±20に制限）
+                  float r0    = length(vec2(wx, wz));
+                  float path0 = 15.0 + r0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (r0 > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - path0) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * path0 - omega * uTime) * eF * zFade;
+                  }
+                } else {
+                  // 領域3: 第2スリット(15,±5/±15)からの円形波の合成
+                  float L      = wx - BARRIER;
+                  float r1     = length(vec2(L, wz -  5.0));
+                  float r2     = length(vec2(L, wz +  5.0));
+                  float r3     = length(vec2(L, wz - 15.0));
+                  float r4     = length(vec2(L, wz + 15.0));
+                  float d12    = sqrt(225.0 + 25.0);
+                  float d34    = sqrt(225.0 + 225.0);
+                  float base12 = 15.0 + d12;
+                  float base34 = 15.0 + d34;
+                  float rMin = (uSlitMode < 0.5)
+                               ? min(r1, r2)
+                               : min(min(r1, r2), min(r3, r4));
+                  if (rMin > 0.001) {
+                    float eF1 = clamp((uFront - base12 - r1) / uWavelength, 0.0, 1.0);
+                    float eF2 = clamp((uFront - base12 - r2) / uWavelength, 0.0, 1.0);
+                    float w1  = sin(k * (base12 + r1) - omega * uTime) * eF1;
+                    float w2  = sin(k * (base12 + r2) - omega * uTime) * eF2;
+                    if (uSlitMode < 0.5) {
+                      y = AMP * 0.5 * (w1 + w2);
+                    } else {
+                      float eF3 = clamp((uFront - base34 - r3) / uWavelength, 0.0, 1.0);
+                      float eF4 = clamp((uFront - base34 - r4) / uWavelength, 0.0, 1.0);
+                      float w3  = sin(k * (base34 + r3) - omega * uTime) * eF3;
+                      float w4  = sin(k * (base34 + r4) - omega * uTime) * eF4;
+                      y = AMP * 0.25 * (w1 + w2 + w3 + w4);
+                    }
+                  }
+                  // 第2壁中心(x=15,z=0)から半径70の半円でフェードアウト
+                  y *= smoothstep(70.0, 67.0, length(vec2(L, wz)));
+                }
+                return y;
+              }
+
+              void main() {
+                float wx = position.x + OFFSET_X;
+                float wz = position.z;
+                float y  = waveAt(wx, wz);
+
+                vec3 displaced = vec3(position.x, y, position.z);
+                vWorldPos = (modelMatrix * vec4(displaced, 1.0)).xyz;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform float uFront;
+              uniform float uWavelength;
+              uniform float uSlitMode;
+              uniform float uTime;
+              varying vec3 vWorldPos;
+
+              const float PI      = 3.14159265358979;
+              const float SPEED   = 2.5;
+              const float AMP     = 1.5;
+              const float BARRIER = 15.0;
+
+              float waveAt(float wx, float wz) {
+                float k     = 2.0 * PI / uWavelength;
+                float omega = SPEED * k;
+                float y     = 0.0;
+                if (wx <= 0.0) {
+                  float xDist = wx + 15.0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (xDist > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - xDist) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * xDist - omega * uTime) * eF * zFade;
+                  }
+                } else if (wx <= BARRIER) {
+                  float r0    = length(vec2(wx, wz));
+                  float path0 = 15.0 + r0;
+                  float zFade = smoothstep(21.0, 19.0, abs(wz));
+                  if (r0 > 0.001 && zFade > 0.0) {
+                    float eF = clamp((uFront - path0) / uWavelength, 0.0, 1.0);
+                    y = AMP * sin(k * path0 - omega * uTime) * eF * zFade;
+                  }
+                } else {
+                  float L      = wx - BARRIER;
+                  float r1     = length(vec2(L, wz -  5.0));
+                  float r2     = length(vec2(L, wz +  5.0));
+                  float r3     = length(vec2(L, wz - 15.0));
+                  float r4     = length(vec2(L, wz + 15.0));
+                  float d12    = sqrt(225.0 + 25.0);
+                  float d34    = sqrt(225.0 + 225.0);
+                  float base12 = 15.0 + d12;
+                  float base34 = 15.0 + d34;
+                  float rMin = (uSlitMode < 0.5)
+                               ? min(r1, r2)
+                               : min(min(r1, r2), min(r3, r4));
+                  if (rMin > 0.001) {
+                    float eF1 = clamp((uFront - base12 - r1) / uWavelength, 0.0, 1.0);
+                    float eF2 = clamp((uFront - base12 - r2) / uWavelength, 0.0, 1.0);
+                    float w1  = sin(k * (base12 + r1) - omega * uTime) * eF1;
+                    float w2  = sin(k * (base12 + r2) - omega * uTime) * eF2;
+                    if (uSlitMode < 0.5) {
+                      y = AMP * 0.5 * (w1 + w2);
+                    } else {
+                      float eF3 = clamp((uFront - base34 - r3) / uWavelength, 0.0, 1.0);
+                      float eF4 = clamp((uFront - base34 - r4) / uWavelength, 0.0, 1.0);
+                      float w3  = sin(k * (base34 + r3) - omega * uTime) * eF3;
+                      float w4  = sin(k * (base34 + r4) - omega * uTime) * eF4;
+                      y = AMP * 0.25 * (w1 + w2 + w3 + w4);
+                    }
+                  }
+                  y *= smoothstep(70.0, 67.0, length(vec2(L, wz)));
+                }
+                return y;
+              }
+
+              void main() {
+                float alpha;
+                if (vWorldPos.x <= 0.0) {
+                  // 平面波波面（z範囲を第1壁±20に制限）
+                  if (abs(vWorldPos.z) > 21.0) discard;
+                  float xDist = vWorldPos.x + 15.0;
+                  if (xDist > uFront) discard;
+                  float zFade = smoothstep(21.0, 19.0, abs(vWorldPos.z));
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), xDist) * zFade;
+                } else if (vWorldPos.x <= 15.0) {
+                  // 第1スリット(0,0)からの円形波面（z範囲は壁±20に制限）
+                  if (abs(vWorldPos.z) > 21.0) discard;
+                  float r0    = length(vec2(vWorldPos.x, vWorldPos.z));
+                  float path0 = 15.0 + r0;
+                  if (path0 > uFront) discard;
+                  float zFade = smoothstep(21.0, 19.0, abs(vWorldPos.z));
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), path0) * zFade;
+                } else {
+                  // 第2スリットからの合成波面
+                  float Lf     = vWorldPos.x - 15.0;
+                  // 第2壁中心(x=15,z=0)から半径70の半円クリップ
+                  float distC  = length(vec2(Lf, vWorldPos.z));
+                  if (distC > 70.0) discard;
+                  float d12    = sqrt(250.0);
+                  float base12 = 15.0 + d12;
+                  float rMin12 = min(length(vec2(Lf, vWorldPos.z -  5.0)),
+                                     length(vec2(Lf, vWorldPos.z +  5.0)));
+                  float minT;
+                  if (uSlitMode >= 0.5) {
+                    float d34    = sqrt(450.0);
+                    float base34 = 15.0 + d34;
+                    float rMin34 = min(length(vec2(Lf, vWorldPos.z - 15.0)),
+                                       length(vec2(Lf, vWorldPos.z + 15.0)));
+                    minT = min(base12 + rMin12, base34 + rMin34);
+                  } else {
+                    minT = base12 + rMin12;
+                  }
+                  if (minT > uFront) discard;
+                  alpha = smoothstep(uFront, max(uFront - uWavelength, 0.0), minT)
+                        * smoothstep(70.0, 67.0, distC);
+                }
+                vec3 base = vec3(1.0, 0.94, 0.50);
+                float nEps = 0.3;
+                float dydx = (waveAt(vWorldPos.x + nEps, vWorldPos.z)
+                            - waveAt(vWorldPos.x - nEps, vWorldPos.z)) / (2.0 * nEps);
+                float dydz = (waveAt(vWorldPos.x, vWorldPos.z + nEps)
+                            - waveAt(vWorldPos.x, vWorldPos.z - nEps)) / (2.0 * nEps);
+                vec3 N = normalize(vec3(-dydx, 1.0, -dydz));
+                vec3 L = normalize(vec3(0.4, 1.0, 0.5));
+                float diff = clamp(dot(N, L), 0.0, 1.0);
+                vec3 color = base * (0.35 + 0.65 * diff);
+                gl_FragColor = vec4(color, 0.96 * alpha);
+              }
+            `,
+          });
+          autoS5Mesh = new THREE.Mesh(autoS5Geo, s5Mat);
+          autoS5Mesh.position.set(S5_MESH_OFFSET_X, 0, 0);
+          autoS5Mesh.visible = !s6Mode2d;  // 2DモードONなので非表示
+          autoScene.add(autoS5Mesh); autoSceneObjects.push(autoS5Mesh);
+
+          autoS6LineGroup = createS6LineGroup();
+          autoS6LineGroup.visible = s6Mode2d;  // 2DモードONなので表示
+          autoScene.add(autoS6LineGroup); autoSceneObjects.push(autoS6LineGroup);
+
+          autoS6FringeGroup = createS6FringeGroup();
+          autoS6FringeGroup.visible = s6ShowFringes;  // 明線ONなので表示
+          autoScene.add(autoS6FringeGroup); autoSceneObjects.push(autoS6FringeGroup);
+
+          autoPlayStartTime = nowSec() - 45;
+          autoS7FadeStart = nowSec();
+          if (playBtn) playBtn.textContent = '‖';
+        },
+      },
+      // ===== 場面8 =====
+      {
+        label: '場面8',
+        setup() {
+          clearAutoSceneObjects();
+          // 2D空間: OrthographicCamera でXZ平面を真上から（奥行き感なし）
+          autoS8WasActive = true;
+          const s8Aspect = window.innerWidth / window.innerHeight;
+          const s8Half = 28;
+          autoOrthoCamera = new THREE.OrthographicCamera(
+            -s8Half * s8Aspect, s8Half * s8Aspect,
+            s8Half, -s8Half,
+            0.1, 500
+          );
+          autoOrthoCamera.position.set(30, 100, 0);
+          autoOrthoCamera.up.set(0, 0, -1);
+          autoOrthoCamera.lookAt(30, 0, 0);
+          // 場面8専用OrbitControls: パン＆ズームのみ
+          autoOrthoControls = new OrbitControls(autoOrthoCamera, renderer.domElement);
+          autoOrthoControls.enableRotate = false;
+          autoOrthoControls.enablePan    = true;
+          autoOrthoControls.enableZoom   = true;
+          autoOrthoControls.mouseButtons = {
+            LEFT:   null,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT:  THREE.MOUSE.PAN,
+          };
+          autoOrthoControls.touches = {
+            ONE: THREE.TOUCH.PAN,
+            TWO: THREE.TOUCH.DOLLY_PAN,
+          };
+          autoOrthoControls.target.set(30, 0, 0);
+          autoOrthoControls.update();
+          controls.enableRotate = false;
+          controls.update();
+          const boxMat = new THREE.ShaderMaterial({
+            uniforms: { baseColor: { value: new THREE.Color(0x999999) } },
+            vertexShader: `
+              varying vec3 vNormalView;
+              void main() {
+                vNormalView = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 baseColor;
+              varying vec3 vNormalView;
+              void main() {
+                vec3 N = normalize(vNormalView);
+                vec3 V = vec3(0.0, 0.0, 1.0);
+                float ndotv = max(dot(N, V), 0.0);
+                float shade = pow(ndotv, 0.5);
+                vec3 dark   = baseColor * 0.45;
+                vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+                vec3 color  = mix(dark, bright, shade);
+                vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+                vec3 H = normalize(L + V);
+                float spec = pow(max(dot(N, H), 0.0), 52.0);
+                color += vec3(1.0) * spec * 1.1;
+                float fresnel = pow(1.0 - ndotv, 3.0);
+                color += baseColor * fresnel * 0.45;
+                gl_FragColor = vec4(color, 1.0);
+              }
+            `,
+          });
+          // バリア壁: z=±13 のみスリット（2本固定）
+          for (const z of [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8, 9, -9, 10, -10, 11, -11, 12, -12]) {
+            const b = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+            b.position.set(0, 0, z);
+            autoScene.add(b); autoSceneObjects.push(b);
+          }
+          for (let z = 13; z <= 20; z++) {
+            if (z === 13) continue;
+            for (const sign of [1, -1]) {
+              const b = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1.75), boxMat);
+              b.position.set(0, 0, sign * z);
+              autoScene.add(b); autoSceneObjects.push(b);
+            }
+          }
+          // 上スリット(z=+9)から青、下スリット(z=-9)から赤の波
+          const S8_LAM = 7.0, S8_AMP = 4.55, S8_N = 800, S8_XEND = 120, S8_XSTART = 0.5;
+          const s8k = 2 * Math.PI / S8_LAM;
+          autoS8WaveGeos = []; autoS8AxGeos = []; autoS8KnobZ = 0;
+
+          const mkWave = (color, zCenter) => {
+            // 軸線（半透明）: 更新可能なBufferGeometry
+            const axArr = new Float32Array(6);
+            axArr[0]=S8_XSTART; axArr[1]=0; axArr[2]=zCenter;
+            axArr[3]=S8_XEND;   axArr[4]=0; axArr[5]=zCenter;
+            const axGeo = new THREE.BufferGeometry();
+            axGeo.setAttribute('position', new THREE.BufferAttribute(axArr, 3));
+            const axLine = new THREE.Line(axGeo,
+              new THREE.LineBasicMaterial({ color, opacity: 0.25, transparent: true }));
+            axLine.frustumCulled = false;
+            autoScene.add(axLine); autoSceneObjects.push(axLine);
+            autoS8AxGeos.push({ geo: axGeo, zCenter });
+            // sin波（初期点をinitPtsに保存して剛体回転に使う）
+            const initPts = new Float32Array((S8_N + 1) * 2); // [dx, dz] per point
+            for (let i = 0; i <= S8_N; i++) {
+              const x = S8_XSTART + (S8_XEND - S8_XSTART) * (i / S8_N);
+              initPts[i*2]   = x - S8_XSTART;
+              initPts[i*2+1] = S8_AMP * Math.sin(s8k * (x - S8_XSTART));
+            }
+            const wArr = new Float32Array((S8_N + 1) * 3);
+            const wGeo = new THREE.BufferGeometry();
+            wGeo.setAttribute('position', new THREE.BufferAttribute(wArr, 3));
+            const wLine = new THREE.Line(wGeo, new THREE.LineBasicMaterial({ color }));
+            wLine.frustumCulled = false;
+            autoScene.add(wLine); autoSceneObjects.push(wLine);
+            autoS8WaveGeos.push({ geo: wGeo, zCenter, initPts });
+          };
+          mkWave(0x2244dd,  13);
+          mkWave(0xdd2222, -13);
+
+          // 初期位置の軸の点線（静的・固定）
+          const mkInitDash = (zCenter) => {
+            const geo = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(S8_XSTART, 0, zCenter),
+              new THREE.Vector3(S8_XEND,   0, zCenter),
+            ]);
+            const ln = new THREE.Line(geo,
+              new THREE.LineDashedMaterial({ color: 0x888888, dashSize: 1.2, gapSize: 0.6 }));
+            ln.frustumCulled = false;
+            ln.computeLineDistances();
+            autoScene.add(ln); autoSceneObjects.push(ln);
+          };
+          mkInitDash( 13);  // 青軸の初期位置
+          mkInitDash(-13);  // 赤軸の初期位置
+
+          // 赤の左端→青の軸への垂直点線
+          const perpArr = new Float32Array(6);
+          const perpGeo = new THREE.BufferGeometry();
+          perpGeo.setAttribute('position', new THREE.BufferAttribute(perpArr, 3));
+          const perpLine = new THREE.Line(perpGeo,
+            new THREE.LineDashedMaterial({ color: 0x000000, dashSize: 1.2, gapSize: 0.6 }));
+          perpLine.frustumCulled = false;
+          autoScene.add(perpLine); autoSceneObjects.push(perpLine);
+
+          // 青の左端→赤の軸への垂直点線
+          const perp2Arr = new Float32Array(6);
+          const perp2Geo = new THREE.BufferGeometry();
+          perp2Geo.setAttribute('position', new THREE.BufferAttribute(perp2Arr, 3));
+          const perp2Line = new THREE.Line(perp2Geo,
+            new THREE.LineDashedMaterial({ color: 0x000000, dashSize: 1.2, gapSize: 0.6 }));
+          perp2Line.frustumCulled = false;
+          autoScene.add(perp2Line); autoSceneObjects.push(perp2Line);
+
+          // 延長ジオメトリ（赤・青それぞれ軸と波）
+          const EXT_N = 300;
+          const mkExt = (color) => {
+            const axArr = new Float32Array(6);
+            const axGeo = new THREE.BufferGeometry();
+            axGeo.setAttribute('position', new THREE.BufferAttribute(axArr, 3));
+            const axLn = new THREE.Line(axGeo,
+              new THREE.LineBasicMaterial({ color, opacity: 0.25, transparent: true }));
+            axLn.frustumCulled = false;
+            autoScene.add(axLn); autoSceneObjects.push(axLn);
+            const wArr = new Float32Array((EXT_N + 1) * 3);
+            const wGeo = new THREE.BufferGeometry();
+            wGeo.setAttribute('position', new THREE.BufferAttribute(wArr, 3));
+            const wLn = new THREE.Line(wGeo, new THREE.LineBasicMaterial({ color }));
+            wLn.frustumCulled = false;
+            autoScene.add(wLn); autoSceneObjects.push(wLn);
+            return { axArr, axGeo, axLn, wArr, wGeo, wLn };
+          };
+          const redExt  = mkExt(0xdd2222);
+          const blueExt = mkExt(0x2244dd);
+
+          // 波形固定・左端中心で剛体回転
+          const drawS8Waves = () => {
+            const knobDx = autoS8KnobXPos - S8_XSTART;
+            const theta  = Math.atan2(autoS8KnobZ, knobDx);
+            const cosT = Math.cos(theta), sinT = Math.sin(theta);
+            autoS8WaveGeos.forEach(({ geo, zCenter, initPts }) => {
+              const arr = geo.attributes.position.array;
+              for (let i = 0; i <= S8_N; i++) {
+                const dx = initPts[i*2], dz = initPts[i*2+1];
+                arr[i*3]   = S8_XSTART + dx*cosT - dz*sinT;
+                arr[i*3+1] = 0;
+                arr[i*3+2] = zCenter   + dx*sinT + dz*cosT;
+              }
+              geo.attributes.position.needsUpdate = true;
+            });
+            const axDx = S8_XEND - S8_XSTART;
+            autoS8AxGeos.forEach(({ geo, zCenter }) => {
+              const arr = geo.attributes.position.array;
+              arr[0] = S8_XSTART;              arr[1] = 0; arr[2] = zCenter;
+              arr[3] = S8_XSTART + axDx*cosT; arr[4] = 0; arr[5] = zCenter + axDx*sinT;
+              geo.attributes.position.needsUpdate = true;
+            });
+            const slitDist = 26; // |13 - (-13)|
+            // 赤の左端→青の軸への垂直点線: t = 26*cosT
+            const t1 = slitDist * cosT;
+            perpArr[0] = S8_XSTART;               perpArr[1] = 0; perpArr[2] = -13;
+            perpArr[3] = S8_XSTART + t1*(-sinT);  perpArr[4] = 0; perpArr[5] = -13 + t1*cosT;
+            perpGeo.attributes.position.needsUpdate = true;
+            perpLine.computeLineDistances();
+            // 青の左端→赤の軸への垂直点線: t = -26*cosT
+            const t2 = -slitDist * cosT;
+            perp2Arr[0] = S8_XSTART;               perp2Arr[1] = 0; perp2Arr[2] = 13;
+            perp2Arr[3] = S8_XSTART + t2*(-sinT);  perp2Arr[4] = 0; perp2Arr[5] = 13 + t2*cosT;
+            perp2Geo.attributes.position.needsUpdate = true;
+            perp2Line.computeLineDistances();
+            // Z>0: 赤→青の点線のみ表示、Z<0: 青→赤の点線のみ表示
+            perpLine.visible  = autoS8KnobZ <  0;
+            perp2Line.visible = autoS8KnobZ >= 0;
+            // 右端の延長（経路長差分だけ短い方を伸ばして揃える）
+            const baseDx   = S8_XEND - S8_XSTART;
+            const extension = slitDist * Math.abs(sinT);
+            const updateExt = (ext, zCenter, visible) => {
+              ext.axLn.visible = visible;
+              ext.wLn.visible  = visible;
+              if (!visible) return;
+              const s0 = baseDx, s1 = baseDx + extension;
+              // 軸の延長
+              ext.axArr[0] = S8_XSTART + s0*cosT; ext.axArr[1] = 0; ext.axArr[2] = zCenter + s0*sinT;
+              ext.axArr[3] = S8_XSTART + s1*cosT; ext.axArr[4] = 0; ext.axArr[5] = zCenter + s1*sinT;
+              ext.axGeo.attributes.position.needsUpdate = true;
+              // 波の延長
+              for (let i = 0; i <= EXT_N; i++) {
+                const dx = s0 + extension * (i / EXT_N);
+                const dz = S8_AMP * Math.sin(s8k * dx);
+                ext.wArr[i*3]   = S8_XSTART + dx*cosT - dz*sinT;
+                ext.wArr[i*3+1] = 0;
+                ext.wArr[i*3+2] = zCenter   + dx*sinT + dz*cosT;
+              }
+              ext.wGeo.attributes.position.needsUpdate = true;
+            };
+            updateExt(blueExt,  13, autoS8KnobZ < 0);
+            updateExt(redExt,  -13, autoS8KnobZ > 0);
+            if (autoS8Knob) {
+              autoS8Knob.position.x = S8_XSTART + knobDx*cosT;
+              autoS8Knob.position.z = knobDx*sinT;
+            }
+          };
+
+          // 9波長目・中心に黒い球（つまみ）
+          autoS8KnobXPos = S8_XSTART + 9 * S8_LAM;
+          autoS8Knob = new THREE.Mesh(
+            new THREE.SphereGeometry(1.0, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0x000000 })
+          );
+          autoS8Knob.position.set(autoS8KnobXPos, 0, 0);
+          autoScene.add(autoS8Knob); autoSceneObjects.push(autoS8Knob);
+          drawS8Waves();
+
+          // ドラッグイベント（左クリックのみ）
+          _s8PD = (e) => {
+            if (!autoS8WasActive || !autoOrthoCamera || e.button !== 0) return;
+            const raycaster = new THREE.Raycaster();
+            const ndcX = (e.clientX / window.innerWidth) * 2 - 1;
+            const ndcY = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), autoOrthoCamera);
+            if (raycaster.intersectObject(autoS8Knob).length > 0) {
+              autoS8Dragging = true;
+              autoS8DragStartZ     = new THREE.Vector3(ndcX, ndcY, 0).unproject(autoOrthoCamera).z;
+              autoS8DragStartKnobZ = autoS8KnobZ;
+              if (autoOrthoControls) autoOrthoControls.enabled = false;
+              e.stopPropagation();
+            }
+          };
+          _s8PM = (e) => {
+            if (!autoS8Dragging || !autoOrthoCamera) return;
+            const ndcX = (e.clientX / window.innerWidth) * 2 - 1;
+            const ndcY = -(e.clientY / window.innerHeight) * 2 + 1;
+            const worldZ = new THREE.Vector3(ndcX, ndcY, 0).unproject(autoOrthoCamera).z;
+            autoS8KnobZ = autoS8DragStartKnobZ + (worldZ - autoS8DragStartZ) * 1.5;
+            drawS8Waves();
+            e.stopPropagation();
+          };
+          _s8PU = () => {
+            if (autoS8Dragging) {
+              autoS8Dragging = false;
+              if (autoOrthoControls) autoOrthoControls.enabled = true;
+            }
+          };
+          renderer.domElement.addEventListener('pointerdown', _s8PD, true);
+          renderer.domElement.addEventListener('pointermove', _s8PM, true);
+          renderer.domElement.addEventListener('pointerup',   _s8PU, true);
+        },
+      },
+    ];
+
+    let autoMode = false;
+    let autoSceneIndex = 0;
+    let _savedCamPos = null, _savedCamTarget = null;
+
+    function updateAutoNav() {
+      document.getElementById('autoSceneLabel').textContent =
+        `${autoSceneIndex + 1} / ${scenes.length}`;
+      document.getElementById('autoPrev').disabled = autoSceneIndex <= 0;
+      document.getElementById('autoNext').disabled = autoSceneIndex >= scenes.length - 1;
+      document.getElementById('autoPlay').style.display = '';
+      // 場面5でのみスリット切替ボタンを表示
+      document.getElementById('s5SlitBtns').style.display =
+        (autoMode && autoSceneIndex === 4) ? 'flex' : 'none';
+      // 場面6・7で2Dボタン・カラーボタンを表示
+      const showS6Btns = autoMode && (autoSceneIndex === 5 || autoSceneIndex === 6);
+      document.getElementById('btn2D').style.display =
+        showS6Btns ? '' : 'none';
+      document.getElementById('s6ColorBtns').style.display =
+        showS6Btns ? 'flex' : 'none';
+    }
+
+    function goToScene(index) {
+      autoSceneIndex = Math.max(0, Math.min(scenes.length - 1, index));
+      updateAutoNav();
+      scenes[autoSceneIndex].setup();
+    }
+
+    function enterAutoMode() {
+      autoMode = true;
+      // メインシミュレーションを停止
+      circ.active = false;
+      updateCircToggleBtn();
+      toolboxPanel.style.display = 'none';
+      document.getElementById('autoNav').style.display  = 'flex';
+      document.getElementById('autoExit').style.display = 'block';
+      document.getElementById('btnAutoSim').classList.add('active');
+      document.getElementById('inkToolbar').style.display = 'flex';
+      // カメラ位置を退避して別シーン用の視点へ
+      _savedCamPos    = camera.position.clone();
+      _savedCamTarget = controls.target.clone();
+      viewTween = {
+        startPos:    camera.position.clone(),
+        endPos:      AUTO_CAM_POS.clone(),
+        startTarget: controls.target.clone(),
+        endTarget:   AUTO_CAM_TARGET.clone(),
+        startTime:   nowSec(),
+        dur: 0.5,
+      };
+      goToScene(0);
+    }
+
+    function exitAutoMode() {
+      autoMode = false;
+      clearAutoSceneObjects();
+      toolboxPanel.style.display = '';
+      document.getElementById('autoNav').style.display  = 'none';
+      document.getElementById('autoExit').style.display = 'none';
+      document.getElementById('s5SlitBtns').style.display = 'none';
+      document.getElementById('btn2D').style.display = 'none';
+      document.getElementById('s6ColorBtns').style.display = 'none';
+      s6Mode2d = false;
+      document.getElementById('btn2D').classList.remove('active');
+      s6ShowRed = true;  s6ShowBlue = true;  s6ShowFringes = false;
+      s6ShowRedArc = true;  s6ShowBlueArc = true;
+      document.getElementById('s6BtnRed').classList.add('active');
+      document.getElementById('s6BtnRedArc').style.display = '';
+      document.getElementById('s6BtnRedArc').classList.add('active');
+      document.getElementById('s6BtnBlue').classList.add('active');
+      document.getElementById('s6BtnBlueArc').style.display = '';
+      document.getElementById('s6BtnBlueArc').classList.add('active');
+      document.getElementById('s6BtnFringe').classList.remove('active');
+      document.querySelectorAll('.s6BtnOrder').forEach(b => { b.style.display = ''; b.classList.add('active'); });
+      s6PointMode = false;
+      document.getElementById('s6BtnPoint').classList.remove('active');
+      document.getElementById('s6BtnPointClear').style.display = 'none';
+      document.getElementById('btnAutoSim').classList.remove('active');
+      document.getElementById('inkToolbar').style.display = 'none';
+      inkMode = 'none';
+      document.getElementById('autoPen').classList.remove('active');
+      document.getElementById('autoEraser').classList.remove('active');
+      if (_savedCamPos) {
+        viewTween = {
+          startPos:    camera.position.clone(),
+          endPos:      _savedCamPos,
+          startTarget: controls.target.clone(),
+          endTarget:   _savedCamTarget,
+          startTime:   nowSec(),
+          dur: 0.5,
+        };
+      }
+    }
+
+    // ===== 場面6: 3D空間内 実線/点線 波ライン =====
+    const S6_MAX_RINGS  = 40;  // ceil(118/3)+1 → メッシュ角(x=105,z=±70)まで届くリング数
+    const S6_N_HALF     = 32;  // 弧の分割数
+    const S6_SLIT_MAX_R = 75;  // 半径70の半円クリップ + スリットオフセット5 = 最大75
+    const S6_Z_BOUND    = 70;  // 長方形クリップ：z方向の境界
+    const S6_X_MAX      = S5_MESH_OFFSET_X + S5_GRID_X / 2; // メッシュ右端 x=105
+
+    function createS6LineGroup() {
+      const group = new THREE.Group();
+      const DASH = 0.5, GAP = 0.5;
+      const mats = {
+        rightS:  new THREE.LineBasicMaterial({ color: 0xdd2222 }),
+        rightT:  new THREE.LineDashedMaterial({ color: 0xdd2222, dashSize: DASH, gapSize: GAP }),
+        leftS:   new THREE.LineBasicMaterial({ color: 0x2244dd }),
+        leftT:   new THREE.LineDashedMaterial({ color: 0x2244dd, dashSize: DASH, gapSize: GAP }),
+        firstS:  new THREE.LineBasicMaterial({ color: 0x888888 }),
+        firstT:  new THREE.LineDashedMaterial({ color: 0x888888, dashSize: DASH, gapSize: GAP }),
+      };
+
+      function makeRings(mat) {
+        const arr = [];
+        for (let i = 0; i < S6_MAX_RINGS; i++) {
+          const makeLine = () => {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((S6_N_HALF + 1) * 3), 3));
+            const ln = new THREE.Line(geo, mat);
+            ln.userData.dashed = mat instanceof THREE.LineDashedMaterial;
+            ln.frustumCulled = false;
+            ln.visible = false;
+            group.add(ln);
+            return ln;
+          };
+          // ペア[下弧/全弧, 上弧] — r>S6_X_MAX-cx のとき2本に分割
+          arr.push([makeLine(), makeLine()]);
+        }
+        return arr;
+      }
+
+      group.userData.rings = {
+        rightPeak:       makeRings(mats.rightS),
+        rightTrough:     makeRings(mats.rightT),
+        leftPeak:        makeRings(mats.leftS),
+        leftTrough:      makeRings(mats.leftT),
+        firstSlitPeak:   makeRings(mats.firstS),
+        firstSlitTrough: makeRings(mats.firstT),
+      };
+      group.userData.mats = mats;  // 色ON/OFFのためにマテリアルを外部から参照できるよう保存
+      return group;
+    }
+
+    function updateS6LineGroup(dt) {
+      if (!autoS6LineGroup) return;
+      const rings = autoS6LineGroup.userData.rings;
+      const SPEED = 2.5, LAM = 3.0, BARRIER = 15.0;
+      const BASE_PATH = 15 + Math.sqrt(250);  // 平面波15 + 第1→第2スリット距離√250 ≈ 30.81
+      const R_slit = Math.max(0, SPEED * dt - BASE_PATH);
+
+      // pair = [lineA, lineB] を受け取る（lineB は今後の拡張用、常に非表示）
+      function updateHalfArc(pair, cx, cz, r) {
+        const [lineA, lineB] = pair;
+        lineB.visible = false;
+        const RADIAL_MAX = 70.0;
+        const dxMax = Math.min(S6_X_MAX - cx, RADIAL_MAX + Math.abs(cz));
+        if (r <= 0.05 || r > dxMax) { lineA.visible = false; return; }
+
+        // θ-parametrization（角度均等配置）で直線化を防ぐ
+        // z-clip → sin(θ) の範囲に変換: z = cz + r*sin(θ)
+        let sinLo = Math.max(-1, (-S6_Z_BOUND - cz) / r);
+        let sinHi = Math.min( 1, ( S6_Z_BOUND - cz) / r);
+        // 第2壁中心(cx,0)から半径70の半円クリップ: r²+cz²+2·cz·r·sin(θ) ≤ RADIAL_MAX²
+        const D = RADIAL_MAX * RADIAL_MAX - r * r - cz * cz;
+        if      (cz > 0) sinHi = Math.min(sinHi, D / (2 * cz * r));
+        else if (cz < 0) sinLo = Math.max(sinLo, D / (2 * cz * r));
+        sinLo = Math.max(-1, sinLo);
+        sinHi = Math.min( 1, sinHi);
+        const thLo  = Math.asin(sinLo);
+        const thHi  = Math.asin(sinHi);
+        if (thHi <= thLo + 1e-6) { lineA.visible = false; return; }
+
+        const pos = lineA.geometry.attributes.position.array;
+        for (let j = 0; j <= S6_N_HALF; j++) {
+          const th = thLo + (thHi - thLo) * j / S6_N_HALF;
+          pos[j*3]   = cx + r * Math.cos(th);
+          pos[j*3+1] = 0;
+          pos[j*3+2] = cz + r * Math.sin(th);
+        }
+        lineA.geometry.attributes.position.needsUpdate = true;
+        lineA.visible = true;
+        if (lineA.userData.dashed) lineA.computeLineDistances();
+      }
+
+      // 常に可視範囲(0 < r ≤ SLIT_MAX_R)に入るリング番号から開始する
+      // R_slit - offset - n*LAM ≤ SLIT_MAX_R → n ≥ (R_slit - offset - SLIT_MAX_R)/LAM
+      const peakN0   = Math.max(0, Math.ceil((R_slit - 0.75 * LAM - S6_SLIT_MAX_R) / LAM));
+      const troughN0 = Math.max(0, Math.ceil((R_slit - 0.25 * LAM - S6_SLIT_MAX_R) / LAM));
+
+      for (let i = 0; i < S6_MAX_RINGS; i++) {
+        const rP = R_slit - 0.75 * LAM - (peakN0 + i) * LAM;
+        const rT = R_slit - 0.25 * LAM - (troughN0 + i) * LAM;
+        updateHalfArc(rings.rightPeak[i],   BARRIER,  5, rP);
+        updateHalfArc(rings.rightTrough[i], BARRIER,  5, rT);
+        updateHalfArc(rings.leftPeak[i],    BARRIER, -5, rP);
+        updateHalfArc(rings.leftTrough[i],  BARRIER, -5, rT);
+      }
+
+      // 第1スリット(0,0)からの円形波弧（x=[0,BARRIER], z=[-20,20]に制限）
+      function updateFirstSlitArc(pair, r) {
+        const [lineA, lineB] = pair;
+        lineB.visible = false;
+        if (r <= 0.05 || r > BARRIER) { lineA.visible = false; return; }
+        const Z0 = 20.0;
+        const sinLo = Math.max(-1, -Z0 / r);
+        const sinHi = Math.min( 1,  Z0 / r);
+        const thLo  = Math.asin(sinLo);
+        const thHi  = Math.asin(sinHi);
+        if (thHi <= thLo + 1e-6) { lineA.visible = false; return; }
+        const pos = lineA.geometry.attributes.position.array;
+        for (let j = 0; j <= S6_N_HALF; j++) {
+          const th = thLo + (thHi - thLo) * j / S6_N_HALF;
+          pos[j*3]   = r * Math.cos(th);
+          pos[j*3+1] = 0;
+          pos[j*3+2] = r * Math.sin(th);
+        }
+        lineA.geometry.attributes.position.needsUpdate = true;
+        lineA.visible = true;
+        if (lineA.userData.dashed) lineA.computeLineDistances();
+      }
+
+      const R_slit0    = Math.max(0, SPEED * dt - 15);
+      const peakN0_0   = Math.max(0, Math.ceil((R_slit0 - 0.75 * LAM - BARRIER) / LAM));
+      const troughN0_0 = Math.max(0, Math.ceil((R_slit0 - 0.25 * LAM - BARRIER) / LAM));
+      for (let i = 0; i < S6_MAX_RINGS; i++) {
+        const rP0 = R_slit0 - 0.75 * LAM - (peakN0_0 + i) * LAM;
+        const rT0 = R_slit0 - 0.25 * LAM - (troughN0_0 + i) * LAM;
+        updateFirstSlitArc(rings.firstSlitPeak[i],   rP0);
+        updateFirstSlitArc(rings.firstSlitTrough[i], rT0);
+      }
+    }
+
+    // ===== 場面7: スリット→球の線アニメーション =====
+    function createS7PathLines() {
+      const N = 1000;
+      const redMat  = new THREE.LineBasicMaterial({ color: 0xdd2222 });
+      const blueMat = new THREE.LineBasicMaterial({ color: 0x2244dd });
+      autoS7PathLines = [];
+      autoS7Spheres.forEach((sph, i) => {
+        const ordVis = i < s6ShowOrders.length ? s6ShowOrders[i] : true;
+        const mkCenter = (mat, vis) => {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+          const ln = new THREE.Line(geo, mat);
+          ln.frustumCulled = false; ln.visible = vis;
+          autoScene.add(ln); autoSceneObjects.push(ln);
+          return ln;
+        };
+        const mkWave = (mat, vis) => {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((N + 1) * 3), 3));
+          geo.setDrawRange(0, 0);
+          const ln = new THREE.Line(geo, mat);
+          ln.frustumCulled = false; ln.visible = vis;
+          autoScene.add(ln); autoSceneObjects.push(ln);
+          return ln;
+        };
+        autoS7PathLines.push({
+          red:    mkCenter(redMat,  s6ShowRed  && ordVis),
+          blue:   mkCenter(blueMat, s6ShowBlue && ordVis),
+          redWav: mkWave(redMat,    s6ShowRed  && ordVis),
+          bluWav: mkWave(blueMat,   s6ShowBlue && ordVis),
+          target: sph.position.clone(),
+          N,
+        });
+      });
+    }
+
+    function updateS7PathLines(elapsed) {
+      const t = Math.min(1, elapsed / 1.0);
+      const LAM = 3.0, SPEED = 2.5;
+      const k         = 2 * Math.PI / LAM;
+      const BASE_PATH = 15 + Math.sqrt(250);
+      const omega     = SPEED * k;
+      const TIME = 45, AMP = 0.7;
+      const SLITS = [[15, 0, 5], [15, 0, -5]];
+
+      autoS7PathLines.forEach(({ red, redWav, blue, bluWav, target, N }) => {
+        const entries = [[red, redWav, SLITS[0]], [blue, bluWav, SLITS[1]]];
+        entries.forEach(([ctr, wav, s]) => {
+          // 中心軸線
+          const ca = ctr.geometry.attributes.position.array;
+          ca[0]=s[0]; ca[1]=0; ca[2]=s[2];
+          ca[3]=s[0]+(target.x-s[0])*t; ca[4]=0; ca[5]=s[2]+(target.z-s[2])*t;
+          ctr.geometry.attributes.position.needsUpdate = true;
+
+          // 連続sin曲線（Y方向に振動）
+          const dx=target.x-s[0], dz=target.z-s[2];
+          const dist=Math.sqrt(dx*dx+dz*dz);
+          const dirX=dx/dist, dirZ=dz/dist;
+          const nPts = Math.floor(t * N) + 1;
+          const wa = wav.geometry.attributes.position.array;
+          for (let i=0; i<nPts; i++) {
+            const si = (i / N) * dist;
+            wa[i*3]   = s[0] + dirX * si;
+            wa[i*3+1] = AMP * Math.sin(k * (BASE_PATH + si) - omega * TIME);
+            wa[i*3+2] = s[2] + dirZ * si;
+          }
+          wav.geometry.attributes.position.needsUpdate = true;
+          wav.geometry.setDrawRange(0, nPts);
+        });
+      });
+    }
+
+    // ===== 場面6: 明線（干渉強め合い）グループ =====
+    function createS6FringeGroup() {
+      const group   = new THREE.Group();
+      const BARRIER = 15.0, LAM = 3.0, SLIT_Z = 5.0;
+      const Z_BOUND = S5_GRID_SIZE / 2;       // 70
+      const X_MAX   = S6_X_MAX; // 105（メッシュ右端）
+      const N_X     = 300;
+      const mat     = new THREE.LineBasicMaterial({ color: 0x66ee22 });
+
+      // 光路差 = sqrt(L²+(z-SLIT_Z)²) - sqrt(L²+(z+SLIT_Z)²)
+      // 単調減少関数（z増→値減）、z=0で0
+      function pathDiff(L, z) {
+        return Math.sqrt(L*L + (z-SLIT_Z)*(z-SLIT_Z))
+             - Math.sqrt(L*L + (z+SLIT_Z)*(z+SLIT_Z));
+      }
+
+      // 二分探索で光路差 = target となる z を返す（見つからない場合 null）
+      function findZ(L, target) {
+        if (Math.abs(target) < 1e-9) return 0;
+        let a, b;
+        if (target > 0) {
+          a = -Z_BOUND; b = 0;
+          if (pathDiff(L, a) < target) return null; // z=-Z_BOUND でも target に届かない
+        } else {
+          a = 0; b = Z_BOUND;
+          if (pathDiff(L, b) > target) return null;
+        }
+        for (let k = 0; k < 60; k++) {
+          const m = (a + b) / 2;
+          if (pathDiff(L, m) > target) a = m; else b = m;
+        }
+        return (a + b) / 2;
+      }
+
+      // n = -3〜+3 の明線（光路差 = n*λ）をそれぞれ折れ線で描画
+      for (let n = -3; n <= 3; n++) {
+        const target = n * LAM;
+        const pts = [];
+        for (let ix = 0; ix <= N_X; ix++) {
+          const x = BARRIER + (X_MAX - BARRIER) * ix / N_X;
+          const L = x - BARRIER;
+          const z = findZ(L, target);
+          if (z === null) break; // 表示範囲外に出た
+          if (L * L + z * z > 4900) break; // 第2壁中心から半径70の半円クリップ
+          pts.push(x, 0, z);
+        }
+        if (pts.length >= 6) {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+          const line = new THREE.Line(geo, mat);
+          line.frustumCulled = false;
+          group.add(line);
+        }
+      }
+      return group;
+    }
+
+    document.getElementById('btnAutoSim').addEventListener('click', () => {
+      autoMode ? exitAutoMode() : enterAutoMode();
+    });
+    document.getElementById('autoExit').addEventListener('click', exitAutoMode);
+    document.getElementById('autoPrev').addEventListener('click', () => goToScene(autoSceneIndex - 1));
+    document.getElementById('autoNext').addEventListener('click', () => goToScene(autoSceneIndex + 1));
+    document.getElementById('autoPlay').addEventListener('click', () => scenes[autoSceneIndex].play?.());
+
+    document.getElementById('btn2D').addEventListener('click', () => {
+      s6Mode2d = !s6Mode2d;
+      document.getElementById('btn2D').classList.toggle('active', s6Mode2d);
+      if (autoS5Mesh) autoS5Mesh.visible = !s6Mode2d;
+      if (autoS6LineGroup) {
+        autoS6LineGroup.visible = s6Mode2d;
+        if (s6Mode2d && autoS5Mesh) {
+          updateS6LineGroup(autoS5Mesh.material.uniforms.uTime.value);
+        }
+      }
+    });
+
+    document.getElementById('s6BtnRed').addEventListener('click', () => {
+      s6ShowRed = !s6ShowRed;
+      document.getElementById('s6BtnRed').classList.toggle('active', s6ShowRed);
+      document.getElementById('s6BtnRedArc').style.display = s6ShowRed ? '' : 'none';
+      if (autoS6LineGroup) {
+        const m = autoS6LineGroup.userData.mats;
+        m.rightS.visible = s6ShowRed && s6ShowRedArc;
+        m.rightT.visible = s6ShowRed && s6ShowRedArc;
+      }
+      autoS7PathLines.forEach((p, i) => { const v = s6ShowRed && (i < s6ShowOrders.length ? s6ShowOrders[i] : true); p.red.visible = v; p.redWav.visible = v; });
+    });
+    document.getElementById('s6BtnRedArc').addEventListener('click', () => {
+      s6ShowRedArc = !s6ShowRedArc;
+      document.getElementById('s6BtnRedArc').classList.toggle('active', s6ShowRedArc);
+      if (autoS6LineGroup) {
+        const m = autoS6LineGroup.userData.mats;
+        m.rightS.visible = s6ShowRedArc;
+        m.rightT.visible = s6ShowRedArc;
+      }
+    });
+    document.getElementById('s6BtnBlue').addEventListener('click', () => {
+      s6ShowBlue = !s6ShowBlue;
+      document.getElementById('s6BtnBlue').classList.toggle('active', s6ShowBlue);
+      document.getElementById('s6BtnBlueArc').style.display = s6ShowBlue ? '' : 'none';
+      if (autoS6LineGroup) {
+        const m = autoS6LineGroup.userData.mats;
+        m.leftS.visible = s6ShowBlue && s6ShowBlueArc;
+        m.leftT.visible = s6ShowBlue && s6ShowBlueArc;
+      }
+      autoS7PathLines.forEach((p, i) => { const v = s6ShowBlue && (i < s6ShowOrders.length ? s6ShowOrders[i] : true); p.blue.visible = v; p.bluWav.visible = v; });
+    });
+    document.getElementById('s6BtnBlueArc').addEventListener('click', () => {
+      s6ShowBlueArc = !s6ShowBlueArc;
+      document.getElementById('s6BtnBlueArc').classList.toggle('active', s6ShowBlueArc);
+      if (autoS6LineGroup) {
+        const m = autoS6LineGroup.userData.mats;
+        m.leftS.visible = s6ShowBlueArc;
+        m.leftT.visible = s6ShowBlueArc;
+      }
+    });
+    document.querySelectorAll('.s6BtnOrder').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.dataset.idx);
+        s6ShowOrders[i] = !s6ShowOrders[i];
+        btn.classList.toggle('active', s6ShowOrders[i]);
+        if (i < autoS7PathLines.length) {
+          const p = autoS7PathLines[i];
+          p.red.visible    = s6ShowRed  && s6ShowOrders[i];
+          p.redWav.visible = s6ShowRed  && s6ShowOrders[i];
+          p.blue.visible   = s6ShowBlue && s6ShowOrders[i];
+          p.bluWav.visible = s6ShowBlue && s6ShowOrders[i];
+        }
+      });
+    });
+    document.getElementById('s6BtnFringe').addEventListener('click', () => {
+      s6ShowFringes = !s6ShowFringes;
+      document.getElementById('s6BtnFringe').classList.toggle('active', s6ShowFringes);
+      if (autoS6FringeGroup) autoS6FringeGroup.visible = s6ShowFringes;
+    });
+    document.getElementById('s6BtnPoint').addEventListener('click', () => {
+      s6PointMode = !s6PointMode;
+      document.getElementById('s6BtnPoint').classList.toggle('active', s6PointMode);
+      document.getElementById('s6BtnPointClear').style.display = s6PointMode ? '' : 'none';
+    });
+    document.getElementById('s6BtnPointClear').addEventListener('click', () => {
+      s6PointSpheres.forEach(sphere => {
+        autoScene.remove(sphere);
+        sphere.geometry?.dispose();
+        sphere.material?.dispose();
+        const idx = autoSceneObjects.indexOf(sphere);
+        if (idx !== -1) autoSceneObjects.splice(idx, 1);
+      });
+      s6PointSpheres = [];
+    });
+
+    // ===== 場面6: ポイント配置クリックハンドラー =====
+    {
+      let _pdownX = 0, _pdownY = 0, _pdragged = false;
+      canvas.addEventListener('pointerdown', e => {
+        _pdownX = e.clientX; _pdownY = e.clientY; _pdragged = false;
+      });
+      canvas.addEventListener('pointermove', e => {
+        if (Math.hypot(e.clientX - _pdownX, e.clientY - _pdownY) > 5) _pdragged = true;
+      });
+      canvas.addEventListener('pointerup', e => {
+        if (e.button !== 0) return;
+        if (inkMode !== 'none') return;
+        if (_pdragged) return;
+        if (!s6PointMode || !autoMode || autoSceneIndex !== 5) return;
+        if (autoPlayStartTime === null) return;
+
+        // y=0 平面へのレイキャスト
+        const rect = canvas.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+        const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const hit = new THREE.Vector3();
+        if (!raycaster.ray.intersectPlane(groundPlane, hit)) return;
+
+        const wx = hit.x, wz = hit.z;
+        const BARRIER = 15.0, SPEED = 2.5, LAM = 3.0;
+        const BASE_PATH = 15 + Math.sqrt(250);
+        if (wx < BARRIER) return;
+
+        // ポーズ中は停止時刻のdt、再生中は現在のdt
+        const dt = autoWavePaused
+          ? autoWavePauseWallTime - autoPlayStartTime
+          : nowSec() - autoPlayStartTime;
+        const R_slit = Math.max(0, SPEED * dt - BASE_PATH);
+        if (R_slit <= 0) return;
+
+        // 第2スリット(BARRIER, ±5)からの距離
+        const dx = wx - BARRIER;
+        const r1 = Math.sqrt(dx*dx + (wz - 5)*(wz - 5));  // 右スリット z=+5
+        const r2 = Math.sqrt(dx*dx + (wz + 5)*(wz + 5));  // 左スリット z=-5
+
+        // 実線(ピーク)と点線(トラフ)の両方を対象に最近傍リングを求める
+        // ピーク輪: R_slit - 0.75*LAM - n*LAM
+        // トラフ輪: R_slit - 0.25*LAM - n*LAM
+        const refP = R_slit - 0.75 * LAM;
+        const refT = R_slit - 0.25 * LAM;
+
+        // 赤スリット(r1)の最近傍リング
+        const r1_nearP = refP - Math.round((refP - r1) / LAM) * LAM;
+        const r1_nearT = refT - Math.round((refT - r1) / LAM) * LAM;
+        const r1_useP  = Math.abs(r1 - r1_nearP) <= Math.abs(r1 - r1_nearT);
+        const r1t      = r1_useP ? r1_nearP : r1_nearT;
+        const r1_err   = Math.abs(r1 - r1t);
+
+        // 青スリット(r2)の最近傍リング
+        const r2_nearP = refP - Math.round((refP - r2) / LAM) * LAM;
+        const r2_nearT = refT - Math.round((refT - r2) / LAM) * LAM;
+        const r2_useP  = Math.abs(r2 - r2_nearP) <= Math.abs(r2 - r2_nearT);
+        const r2t      = r2_useP ? r2_nearP : r2_nearT;
+        const r2_err   = Math.abs(r2 - r2t);
+
+        const TOL = 1.2;
+        if (r1_err > TOL || r2_err > TOL) return;
+        if (r1t <= 0 || r2t <= 0) return;
+
+        // 2円の交点を解析的に計算
+        // C1=(15,5), C2=(15,-5), d=10, a = (r1t²-r2t²+d²)/(2d)
+        const d = 10;
+        const a = (r1t*r1t - r2t*r2t + d*d) / (2 * d);
+        const h2 = r1t*r1t - a*a;
+        if (h2 < 0) return;
+        const h = Math.sqrt(h2);
+        // 交点: (BARRIER+h, 5-a) ← 第2スリット前方（wx > BARRIER）
+        const snap_wx = BARRIER + h;
+        const snap_wz = 5 - a;
+
+        const geo = new THREE.SphereGeometry(0.4, 16, 12);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x88ee22, transparent: true, opacity: 0.55 });
+        const sphere = new THREE.Mesh(geo, mat);
+        sphere.position.set(snap_wx, 0, snap_wz);
+        autoScene.add(sphere);
+        autoSceneObjects.push(sphere);
+        s6PointSpheres.push(sphere);
+      });
+    }
+
+    // ===== 場面6: ポイント右クリック削除 =====
+    {
+      const _ctxMenu   = document.getElementById('s6PointCtxMenu');
+      const _deleteBtn = document.getElementById('s6PointDeleteBtn');
+      let _ctxTarget = null;
+
+      function hideS6CtxMenu() {
+        _ctxMenu.style.display = 'none';
+        _ctxTarget = null;
+      }
+      function showS6CtxMenu(sphere, cx, cy) {
+        _ctxTarget = sphere;
+        _ctxMenu.style.left    = cx + 'px';
+        _ctxMenu.style.top     = cy + 'px';
+        _ctxMenu.style.display = 'block';
+      }
+
+      canvas.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        if (inkMode !== 'none') { hideS6CtxMenu(); return; }
+        if (!autoMode || autoSceneIndex !== 5 || s6PointSpheres.length === 0) {
+          hideS6CtxMenu();
+          return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(s6PointSpheres, false);
+        if (hits.length > 0) {
+          showS6CtxMenu(hits[0].object, e.clientX, e.clientY);
+        } else {
+          hideS6CtxMenu();
+        }
+      });
+
+      _deleteBtn.addEventListener('click', () => {
+        if (!_ctxTarget) return;
+        const sphere = _ctxTarget;
+        hideS6CtxMenu();
+        autoScene.remove(sphere);
+        sphere.geometry?.dispose();
+        sphere.material?.dispose();
+        const idx = s6PointSpheres.indexOf(sphere);
+        if (idx !== -1) s6PointSpheres.splice(idx, 1);
+        const idx2 = autoSceneObjects.indexOf(sphere);
+        if (idx2 !== -1) autoSceneObjects.splice(idx2, 1);
+      });
+
+      // 他の場所をクリックしたらメニューを閉じる
+      document.addEventListener('pointerdown', e => {
+        if (!_ctxMenu.contains(e.target)) hideS6CtxMenu();
+      });
+    }
+
+    document.getElementById('s5Btn2').addEventListener('click', () => {
+      if (s5SlitMode === 2) return;
+      s5SlitMode = 2;
+      document.getElementById('s5Btn2').classList.add('active');
+      document.getElementById('s5Btn4').classList.remove('active');
+      autoS5OuterBoxes.forEach(b => { b.visible = true; });
+      if (autoS5Mesh) autoS5Mesh.material.uniforms.uSlitMode.value = 0.0;
+    });
+    document.getElementById('s5Btn4').addEventListener('click', () => {
+      if (s5SlitMode === 4) return;
+      s5SlitMode = 4;
+      document.getElementById('s5Btn2').classList.remove('active');
+      document.getElementById('s5Btn4').classList.add('active');
+      autoS5OuterBoxes.forEach(b => { b.visible = false; });
+      if (autoS5Mesh) autoS5Mesh.material.uniforms.uSlitMode.value = 1.0;
+    });
+
+    // ===== ペン/消しゴム オーバーレイ =====
+    {
+      const inkCanvas = document.getElementById('inkCanvas');
+      const inkCtx = inkCanvas.getContext('2d');
+      inkCanvas.width  = window.innerWidth;
+      inkCanvas.height = window.innerHeight;
+      inkCtx.lineCap  = 'round';
+      inkCtx.lineJoin = 'round';
+
+      const inkUndoStack = [];
+      const inkRedoStack = [];
+      const INK_MAX_UNDO = 30;
+
+      function _saveInkSnapshot() {
+        inkUndoStack.push(inkCtx.getImageData(0, 0, inkCanvas.width, inkCanvas.height));
+        if (inkUndoStack.length > INK_MAX_UNDO) inkUndoStack.shift();
+        inkRedoStack.length = 0;
+        _updateUndoRedoBtns();
+      }
+      function _updateUndoRedoBtns() {
+        document.getElementById('inkUndo').disabled = inkUndoStack.length === 0;
+        document.getElementById('inkRedo').disabled = inkRedoStack.length === 0;
+      }
+      function undoInk() {
+        if (inkUndoStack.length === 0) return;
+        inkRedoStack.push(inkCtx.getImageData(0, 0, inkCanvas.width, inkCanvas.height));
+        inkCtx.putImageData(inkUndoStack.pop(), 0, 0);
+        _updateUndoRedoBtns();
+      }
+      function redoInk() {
+        if (inkRedoStack.length === 0) return;
+        inkUndoStack.push(inkCtx.getImageData(0, 0, inkCanvas.width, inkCanvas.height));
+        inkCtx.putImageData(inkRedoStack.pop(), 0, 0);
+        _updateUndoRedoBtns();
+      }
+      function setInkMode(next) {
+        inkMode = (inkMode === next) ? 'none' : next;
+        document.getElementById('autoPen').classList.toggle('active', inkMode === 'pen');
+        document.getElementById('autoEraser').classList.toggle('active', inkMode === 'eraser');
+      }
+      function clearInkAll() {
+        _saveInkSnapshot();
+        inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
+      }
+      function screenToInkXY(ev) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: (ev.clientX - rect.left) / rect.width  * inkCanvas.width,
+          y: (ev.clientY - rect.top)  / rect.height * inkCanvas.height,
+        };
+      }
+      function tryStartInk(ev) {
+        if (inkMode === 'none' || ev.button !== 0) return false;
+        _saveInkSnapshot(); // ストローク開始前に状態を保存
+        const { x, y } = screenToInkXY(ev);
+        inkLastX = x; inkLastY = y;
+        inkDrawing = true;
+        if (inkMode === 'pen') {
+          inkCtx.globalCompositeOperation = 'source-over';
+          inkCtx.strokeStyle = inkPenColor;
+          inkCtx.lineWidth = 3;
+        } else {
+          inkCtx.globalCompositeOperation = 'destination-out';
+          inkCtx.strokeStyle = 'rgba(0,0,0,1)';
+          inkCtx.lineWidth = 24;
+        }
+        inkCtx.beginPath();
+        inkCtx.moveTo(inkLastX, inkLastY);
+        inkCtx.lineTo(inkLastX + 0.01, inkLastY + 0.01);
+        inkCtx.stroke();
+        return true;
+      }
+      function updateInk(ev) {
+        if (!inkDrawing) return;
+        const { x, y } = screenToInkXY(ev);
+        inkCtx.beginPath();
+        inkCtx.moveTo(inkLastX, inkLastY);
+        inkCtx.lineTo(x, y);
+        inkCtx.stroke();
+        inkLastX = x; inkLastY = y;
+      }
+      function endInk() { inkDrawing = false; }
+
+      // キャプチャフェーズで左クリックを横取りし、OrbitControlsや他のハンドラへ到達させない
+      canvas.addEventListener('pointerdown', ev => {
+        if (!autoMode || inkMode === 'none' || ev.button !== 0) return;
+        if (tryStartInk(ev)) { ev.stopPropagation(); ev.preventDefault(); }
+      }, true);
+      window.addEventListener('pointermove', ev => { if (autoMode) updateInk(ev); }, { passive: true });
+      window.addEventListener('pointerup',     () => { endInk(); });
+      window.addEventListener('pointercancel', () => { endInk(); });
+
+      document.getElementById('autoPen').addEventListener('click', () => setInkMode('pen'));
+      document.getElementById('autoEraser').addEventListener('click', () => setInkMode('eraser'));
+      document.getElementById('autoInkClear').addEventListener('click', clearInkAll);
+      document.getElementById('inkUndo').addEventListener('click', undoInk);
+      document.getElementById('inkRedo').addEventListener('click', redoInk);
+
+      // ペンボタン右クリック → 色選択メニュー
+      const _penColorMenu = document.getElementById('penColorMenu');
+      document.getElementById('autoPen').addEventListener('contextmenu', e => {
+        e.preventDefault();
+        _penColorMenu.style.display = 'flex';
+        _penColorMenu.style.left = e.clientX + 'px';
+        _penColorMenu.style.top  = (e.clientY - _penColorMenu.offsetHeight - 4) + 'px';
+      });
+      document.querySelectorAll('.pen-color-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          inkPenColor = btn.dataset.color;
+          _penColorMenu.style.display = 'none';
+          // ペンモードに切り替え（まだでなければ）
+          if (inkMode !== 'pen') setInkMode('pen');
+        });
+      });
+      document.addEventListener('pointerdown', e => {
+        if (!_penColorMenu.contains(e.target)) _penColorMenu.style.display = 'none';
+      });
+    }
+
+    updateAutoNav();
+
+    // ===== 描画ループ =====
+    function tick() {
+      requestAnimationFrame(tick);
+      updateViewSnap(nowSec());
+      controls.update();
+      if (autoOrthoControls) autoOrthoControls.update();
+
+      if (circ.active) {
+        redrawGraphs(circ.frozenElapsed + (nowSec() - circ.startTime));
+      }
+
+      // アニメーション解説：波パルスを進める
+      if (autoMode && autoPlayStartTime !== null && !autoWavePaused) {
+        let dt = nowSec() - autoPlayStartTime - (autoSceneIndex <= 1 ? 0.5 : 0);
+        // サイクル終了でリセット（場面1・2のみ；場面3は連続再生）
+        if (autoSceneIndex <= 1 && dt > AUTO_WAVE_CYCLE_DUR) {
+          autoPlayStartTime += AUTO_WAVE_CYCLE_DUR;
+          dt -= AUTO_WAVE_CYCLE_DUR;
+          autoWaveCycle++;
+        }
+        // 場面1：5回目衝突の6割地点で自動一時停止
+        if (autoSceneIndex === 0 && autoWaveCycle === AUTO_PAUSE_CYCLE && dt >= AUTO_PAUSE_DT) {
+          autoWavePaused = true;
+          autoWavePauseWallTime = nowSec();
+          const btn = document.getElementById('autoPlay');
+          if (btn) btn.textContent = '▶';
+        }
+        // 場面2：2回目衝突で合成波が全点0になる瞬間に自動一時停止
+        // dt をクランプして描画をゼロ交差時刻で止める
+        if (autoSceneIndex === 1 && autoWaveCycle === AUTO2_PAUSE_CYCLE && dt >= AUTO2_PAUSE_DT) {
+          dt = AUTO2_PAUSE_DT;
+          autoWavePaused = true;
+          autoWavePauseWallTime = nowSec();
+          const btn = document.getElementById('autoPlay');
+          if (btn) btn.textContent = '▶';
+        }
+        if (dt >= 0) {
+          if (autoSceneIndex <= 1) {
+            // 場面1・2：左右からパルス波が衝突するアニメーション
+            const xFront  = AUTO_WAVE_X_START + AUTO_WAVE_SPEED * dt;
+            const xRear   = xFront - AUTO_WAVE_HALF_LAMBDA;
+            const xFront2 = AUTO_WAVE_X_END - AUTO_WAVE_SPEED * dt;
+            const xRear2  = xFront2 + AUTO_WAVE_HALF_LAMBDA;
+            // 1点分のステップ幅：波端の外側にy=0のブリッジ点を置いて軸と接続する
+            const step = (AUTO_WAVE_X_END - AUTO_WAVE_X_START) / (AUTO_WAVE_N - 1);
+
+            const ovX = [], ovYR = [], ovYB = [];
+            for (let i = 0; i < AUTO_WAVE_N; i++) {
+              const x        = autoWavePositions[i*3];
+              const inRed    = x >= xRear          && x <= xFront;
+              const nearRed  = x >= xRear  - step  && x <= xFront  + step;
+              const inBlue   = x >= xFront2         && x <= xRear2;
+              const nearBlue = x >= xFront2 - step  && x <= xRear2 + step;
+              const redAmp   = (autoSceneIndex === 1) ? AUTO_WAVE_AMP : AUTO_WAVE_AMP * 1.5;
+              const yRed     = inRed  ? redAmp * Math.sin(Math.PI * (x - xRear)  / AUTO_WAVE_HALF_LAMBDA) : 0;
+              // 場面2では青波のY符号を反転（X軸下側を伝わる波）
+              const blueSign = (autoSceneIndex === 1) ? -1 : 1;
+              const yBlue    = inBlue ? blueSign * AUTO_WAVE_AMP * Math.sin(Math.PI * (xRear2 - x) / AUTO_WAVE_HALF_LAMBDA) : 0;
+              const overlap  = inRed && inBlue;
+
+              // 実線：重なりのない部分（境界外1点y=0で軸と接続）
+              autoWavePositions[i*3+1]    = (nearRed  && !inBlue) ? yRed  : NaN;
+              autoWave2Positions[i*3+1]   = (nearBlue && !inRed)  ? yBlue : NaN;
+              // 緑：重なり部分のみ合成波
+              autoWaveResPositions[i*3+1] = overlap ? yRed + yBlue : NaN;
+              // 点線用：重なり部のXY収集
+              if (overlap) { ovX.push(x); ovYR.push(yRed); ovYB.push(yBlue); }
+            }
+
+            if (autoWaveLine)    updateLine2Y(autoWaveGeo,    autoWavePositions,    AUTO_WAVE_N);
+            if (autoWave2Line)   updateLine2Y(autoWave2Geo,   autoWave2Positions,   AUTO_WAVE_N);
+            if (autoWaveResLine) updateLine2Y(autoWaveResGeo, autoWaveResPositions, AUTO_WAVE_N);
+
+            // 点線：重なり部のみをコンパクトな点群でinstanceCountにより描画
+            const nOv = ovX.length;
+            if (nOv > 1) {
+              if (autoWaveDashGeo)  { updateLine2XY(autoWaveDashGeo,  ovX, ovYR, nOv); autoWaveDashGeo.instanceCount  = nOv - 1; autoWaveDashLine.computeLineDistances(); }
+              if (autoWave2DashGeo) { updateLine2XY(autoWave2DashGeo, ovX, ovYB, nOv); autoWave2DashGeo.instanceCount = nOv - 1; autoWave2DashLine.computeLineDistances(); }
+            } else {
+              if (autoWaveDashGeo)  autoWaveDashGeo.instanceCount  = 0;
+              if (autoWave2DashGeo) autoWave2DashGeo.instanceCount = 0;
+            }
+          } else if (autoSceneIndex === 2) {
+            // 場面3：波先端が左から右へ伸びていく連続正弦波
+            const omega3  = 2 * Math.PI / S3_T;
+            const xFront3 = AUTO_WAVE_X_START + AUTO_WAVE_SPEED * dt;
+            for (let i = 0; i < AUTO_WAVE_N; i++) {
+              const x = autoWavePositions[i*3];
+              if (x <= xFront3) {
+                const phase = omega3 * (dt - (x - AUTO_WAVE_X_START) / AUTO_WAVE_SPEED);
+                const y     = S3_AMP * Math.sin(phase);
+                autoWavePositions[i*3+1]  =  4.5 + y;
+                autoWave2Positions[i*3+1] =  4.5 + y + S3_Y2_OFFSET;
+                autoWave3Positions[i*3+1] = -4.5 + y;
+                autoWave4Positions[i*3+1] = -4.5 - y + S3_Y2_OFFSET;
+              } else {
+                autoWavePositions[i*3+1]  = NaN;
+                autoWave2Positions[i*3+1] = NaN;
+                autoWave3Positions[i*3+1] = NaN;
+                autoWave4Positions[i*3+1] = NaN;
+              }
+            }
+            if (autoWaveLine)  { updateLine2Y(autoWaveGeo,  autoWavePositions,  AUTO_WAVE_N); autoWaveLine.computeLineDistances(); }
+            if (autoWave2Line) { updateLine2Y(autoWave2Geo, autoWave2Positions, AUTO_WAVE_N); autoWave2Line.computeLineDistances(); }
+            if (autoWave3Line) { updateLine2Y(autoWave3Geo, autoWave3Positions, AUTO_WAVE_N); autoWave3Line.computeLineDistances(); }
+            if (autoWave4Line) { updateLine2Y(autoWave4Geo, autoWave4Positions, AUTO_WAVE_N); autoWave4Line.computeLineDistances(); }
+          } else if (autoSceneIndex === 3) {
+            // 場面4：場面3 + 合成波
+            const omega3  = 2 * Math.PI / S3_T;
+            const xFront3 = AUTO_WAVE_X_START + AUTO_WAVE_SPEED * dt;
+            for (let i = 0; i < AUTO_WAVE_N; i++) {
+              const x = autoWavePositions[i*3];
+              if (x <= xFront3) {
+                const phase = omega3 * (dt - (x - AUTO_WAVE_X_START) / AUTO_WAVE_SPEED);
+                const y = S3_AMP * Math.sin(phase);
+                autoWavePositions[i*3+1]     =  4.5 + y;
+                autoWave2Positions[i*3+1]    =  4.5 + y + S3_Y2_OFFSET;
+                autoWaveResPositions[i*3+1]  =  4.5 + 2 * y;
+                autoWave3Positions[i*3+1]    = -4.5 + y;
+                autoWave4Positions[i*3+1]    = -4.5 - y + S3_Y2_OFFSET;
+                autoWaveRes2Positions[i*3+1] = -4.5;
+              } else {
+                autoWavePositions[i*3+1]     = NaN;
+                autoWave2Positions[i*3+1]    = NaN;
+                autoWaveResPositions[i*3+1]  = NaN;
+                autoWave3Positions[i*3+1]    = NaN;
+                autoWave4Positions[i*3+1]    = NaN;
+                autoWaveRes2Positions[i*3+1] = NaN;
+              }
+            }
+            if (autoWaveLine)    { updateLine2Y(autoWaveGeo,    autoWavePositions,    AUTO_WAVE_N); autoWaveLine.computeLineDistances(); }
+            if (autoWave2Line)   { updateLine2Y(autoWave2Geo,   autoWave2Positions,   AUTO_WAVE_N); autoWave2Line.computeLineDistances(); }
+            if (autoWaveResLine) updateLine2Y(autoWaveResGeo, autoWaveResPositions, AUTO_WAVE_N);
+            if (autoWave3Line)   { updateLine2Y(autoWave3Geo,   autoWave3Positions,   AUTO_WAVE_N); autoWave3Line.computeLineDistances(); }
+            if (autoWave4Line)   { updateLine2Y(autoWave4Geo,   autoWave4Positions,   AUTO_WAVE_N); autoWave4Line.computeLineDistances(); }
+            if (autoWaveRes2Line) updateLine2Y(autoWaveRes2Geo, autoWaveRes2Positions, AUTO_WAVE_N);
+          } else if (autoSceneIndex === 4 || autoSceneIndex === 5 || autoSceneIndex === 6) {
+            // 場面5・6・7：波計算はGPU頂点シェーダーで実行、uniformを更新するだけ
+            if (autoS5Mesh) {
+              autoS5Mesh.material.uniforms.uFront.value = S5_WAVE_SPEED * dt;
+              autoS5Mesh.material.uniforms.uTime.value  = dt;
+            }
+            if (autoSceneIndex === 5 && s6Mode2d) updateS6LineGroup(dt);
+          }
+        }
+      }
+
+      if (autoMode && autoSceneIndex === 6 && autoS7Spheres.length > 0) {
+        if (autoPlayStartTime !== null && !autoWavePaused && autoS7FadeStart === null) {
+          autoS7FadeStart = nowSec();
+        }
+        if (autoS7FadeStart !== null) {
+          const elapsed = nowSec() - autoS7FadeStart;
+          autoS7Spheres[0].material.opacity = Math.min(0.7, elapsed / 1.0);
+          if (!autoWavePaused && elapsed >= 1.5 && !autoS7FadeDone) {
+            autoS7FadeDone = true;
+            autoWavePaused = true;
+            autoWavePauseWallTime = nowSec();
+            const btn = document.getElementById('autoPlay');
+            if (btn) btn.textContent = '▶';
+          }
+        }
+        if (autoPlayStartTime !== null && !autoWavePaused && autoS7FadeDone && autoS7LineStart === null) {
+          autoS7LineStart = nowSec();
+          createS7PathLines();
+        }
+        if (autoS7LineStart !== null) {
+          updateS7PathLines(nowSec() - autoS7LineStart);
+        }
+      }
+      renderer.render(autoMode ? autoScene : scene,
+        (autoMode && autoS8WasActive && autoOrthoCamera) ? autoOrthoCamera : camera);
+    }
+    // ページ読み込み時から常に表示（初期状態 t=2T）
+    ensureYxGraph();
+    ensureYx2Graph();
+    ensureYxResGraph();
+    redrawGraphs(0);
+    tick();
+
+  </script>
+</body>
+</html>

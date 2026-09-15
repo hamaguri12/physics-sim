@@ -1,0 +1,2019 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>単振動｜力学｜高校物理シミュ集</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:rgba(240,243,252,0.95);
+      --border:rgba(70,90,160,0.30);
+      --text:#1a2040;
+      --muted:#5566aa;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    #app{position:fixed;inset:0;overflow:hidden}
+
+    /* 3Dキャンバス */
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+    /* 上バー */
+    .topbar{
+      position:absolute;left:0;top:0;right:0;z-index:5;
+      display:flex;gap:8px;align-items:center;
+      padding:10px 12px;
+      background:linear-gradient(to bottom, rgba(255,255,255,.80), rgba(255,255,255,0));
+      pointer-events:none;
+    }
+    .topbar a, .topbar button, .topbar .pill{pointer-events:auto}
+    .btn, .pill{
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);
+      border-radius:12px;
+      padding:8px 10px;
+      font-size:12px;
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .btn:hover{opacity:.9}
+    .pill{cursor:default;color:var(--muted)}
+
+    .btn.active{ outline:2px solid rgba(120,170,255,.6); }
+
+    /* 左サイドバー */
+    .sidebar{
+      position:absolute;left:10px;top:56px;bottom:10px;z-index:6;
+      width:280px;max-width:85vw;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      overflow:auto;
+      backdrop-filter: blur(6px);
+    }
+    .h{font-weight:800;font-size:13px;margin:0 0 8px}
+    .group{margin:10px 0 12px}
+    .tool{
+      width:100%;
+      text-align:left;
+      border:1px solid var(--border);
+      background:rgba(240,243,252,0.80);
+      color:var(--text);
+      border-radius:14px;
+      padding:10px 10px;
+      cursor:pointer;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      margin-bottom:8px;
+    }
+    .tool:hover{opacity:.92}
+    .tool small{color:var(--muted);font-size:11px}
+    .tool.active{outline:2px solid rgba(120,170,255,.6)}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .row .btn{flex:1;justify-content:center}
+    .lbl{color:var(--muted);font-size:12px;align-self:center}
+    .num{width:72px;max-width:90px;background:rgba(240,243,252,0.80);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:6px 8px;font-size:12px}
+
+    /* 右上：物理量パネル */
+    #infoPanel{
+      position:absolute;right:10px;top:52px;z-index:6;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:20px;
+      padding:20px 28px;
+      font-size:26px;
+      line-height:1.9;
+      color:var(--muted);
+      pointer-events:none;
+    }
+    #infoPanel b{color:var(--text);font-weight:700}
+    #infoPanel .val{color:#7ecfff;font-weight:700;font-variant-numeric:tabular-nums}
+
+    /* ===== 道具箱の開閉（初期は閉じる） ===== */
+    #toolboxPanel{
+      position: fixed;
+      left: 16px;
+      top: 72px;
+      z-index: 1000;
+      transition: transform 180ms ease;
+      transform: translateX(0);
+    }
+
+    #toolboxPanel.is-collapsed{
+      transform: translateX(calc(-100% + 36px));
+    }
+
+    #toolboxToggle.toolboxToggle{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      border: 1px solid rgba(70,90,160,0.25);
+      background: rgba(240,243,252,0.90);
+      color: #1a2040;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    #toolboxPanel.is-collapsed #toolboxToggle{
+      right: 4px;
+    }
+
+    #toolboxPanel{
+      overflow: hidden auto;              /* 中身が画面より長いときは縦にスクロール（横は出さない） */
+      overscroll-behavior: contain;
+      max-height: calc(100vh - 82px);
+    }
+
+    #toolboxPanel.is-collapsed{
+      overflow: hidden;
+    }
+
+    #toolboxPanel.is-collapsed > :not(#toolboxToggle){
+      display: none !important;
+    }
+
+    /* 右下ヘルプ */
+    .help{
+      position:absolute;right:10px;bottom:10px;z-index:6;
+      background:rgba(240,243,252,0.92);
+      border:1px solid rgba(70,90,160,0.20);
+      border-radius:14px;
+      padding:10px 12px;
+      font-size:12px;
+      color:var(--muted);
+      max-width:420px;
+    }
+    .help b{color:var(--text)}
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="c"></canvas>
+
+    <!-- 上バー -->
+    <div class="topbar">
+      <a class="btn" href="../mechanics-circular.html">← 円運動へ</a>
+      <a class="btn" href="../index.html">ホーム</a>
+      <button class="btn" id="resetAll">リセット</button>
+      <button class="btn" id="view2DBtn">2D</button>
+      <button class="btn active" id="view3DBtn">3D</button>
+      <span class="pill">単振動</span>
+    </div>
+
+    <!-- 左サイドバー：道具箱 -->
+    <aside class="sidebar" id="toolboxPanel">
+      <button id="toolboxToggle" class="toolboxToggle" type="button" aria-expanded="false">＞</button>
+
+      <p class="h">道具箱</p>
+
+      <div class="group">
+        <p class="h" style="margin-top:0">等速円運動</p>
+        <div class="row" style="margin-top:10px">
+          <span class="lbl">r</span>
+          <input id="circR" class="num" type="number" value="2" step="0.5" min="0.5" />
+          <span class="lbl">ω</span>
+          <div style="position:relative;display:inline-block">
+            <input id="circOmega" class="num" type="number" value="1.5707963267948966" step="0.1" min="0.01" />
+            <span id="omegaLabel" style="display:none;position:absolute;inset:0;background:rgba(240,243,252,1);border:1px solid rgba(70,90,160,0.30);border-radius:10px;padding:6px 8px;font-size:12px;color:#1a2040;cursor:text;user-select:none;align-items:center"></span>
+          </div>
+          <button class="btn" id="omegaPresetBtn" style="padding:5px 7px;min-width:26px;flex:0" title="プリセット">﹀</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="circToggle">開始 / 停止</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="circStep">1秒だけ動かす</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="saveSnapshot">保存</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h" style="margin-top:0">表示</p>
+        <div class="row">
+          <button class="btn" id="toggleCenter">中心</button>
+          <button class="btn" id="toggleTrajectory">軌跡</button>
+          <button class="btn" id="toggleCenterLine">中心線</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="toggleVelVector">速度ベクトル</button>
+          <button class="btn" id="toggleAccelVector">加速度ベクトル</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="toggleMirrorVelVector">速度ベクトル（Y軸）</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h" style="margin-top:0">グラフ</p>
+        <div class="row">
+          <button class="btn" id="graphDisp">変位</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h" style="margin-top:0">図形</p>
+        <div class="row">
+          <button class="btn" id="toolCircle">円</button>
+          <button class="btn" id="toolArrow">矢印</button>
+        </div>
+        <div class="row" id="arrowLengthRow" style="display:none;margin-top:4px">
+          <span class="lbl">長さ</span>
+          <input id="arrowLength" class="num" type="number" min="0.1" step="0.5" style="width:72px" />
+        </div>
+        <div class="row">
+          <button class="btn" id="shapeDeleteSelected" style="display:none">選択図形を消す</button>
+          <button class="btn" id="shapeClear">図形を全消し</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="row">
+          <button class="btn" id="toolPen">ペン</button>
+          <button class="btn" id="toolEraser">消しゴム</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="inkClear">ペンを全消し</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h" style="margin-top:4px">視点</p>
+        <div class="row">
+          <button class="btn" id="viewXY">XY視点（正面）</button>
+          <button class="btn" id="viewYZ">YZ視点（横）</button>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- 右上：物理量表示 -->
+    <div id="infoPanel">
+      <b>T</b> = <span class="val" id="infoT">—</span> s<br>
+      <b>v</b> = <span class="val" id="infoV">—</span> m/s<br>
+      <b>a</b> = <span class="val" id="infoA">—</span> m/s²
+    </div>
+
+    <div class="help">
+      <b>操作</b>：ドラッグ＝平行移動／ホイール＝ズーム<br>
+      <b>ペン</b>：ペンを選んでYZ平面上をドラッグで描画
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 基本セットアップ =====
+    const canvas = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    const FRUSTUM_SIZE = 14;
+    const aspect0 = window.innerWidth / window.innerHeight;
+
+    // 2D用カメラ（平行投影）
+    const orthoCamera = new THREE.OrthographicCamera(
+      -FRUSTUM_SIZE * aspect0 / 2,
+       FRUSTUM_SIZE * aspect0 / 2,
+       FRUSTUM_SIZE / 2,
+      -FRUSTUM_SIZE / 2,
+      0.1, 200
+    );
+    orthoCamera.position.set(0, 5, 20);
+    orthoCamera.lookAt(0, 5, 0);
+
+    // 3D用カメラ（透視投影）
+    const perspCamera = new THREE.PerspectiveCamera(50, aspect0, 0.1, 200);
+    perspCamera.position.set(6, 5, 10);
+    perspCamera.lookAt(0, 5, 0);
+
+    // 初期は3Dカメラ
+    let activeCamera = perspCamera;
+
+    const controls = new OrbitControls(activeCamera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 5, 0);
+    controls.enableRotate = true;
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.zoomToCursor = true;
+
+    // ライト
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.70);
+    dir.position.set(6, 10, 6);
+    scene.add(dir);
+
+    // XZグリッド（3D用・地面）
+    const gridXZ = (function(){
+      const sizeX = 32, sizeZ = 16;
+      const divX  = 32, divZ  = 16;
+      const pts = [];
+      for (let i = 0; i <= divZ; i++){
+        const z = -sizeZ/2 + (i/divZ)*sizeZ;
+        pts.push(-sizeX/2, 0, z,  sizeX/2, 0, z);
+      }
+      for (let i = 0; i <= divX; i++){
+        const x = -sizeX/2 + (i/divX)*sizeX;
+        pts.push(x, 0, -sizeZ/2,  x, 0, sizeZ/2);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      const colors = [];
+      const cCenter = new THREE.Color(0x9bb0d0);
+      const cGrid   = new THREE.Color(0xc8d6e8);
+      const totalLines = (divZ+1) + (divX+1);
+      for (let i = 0; i < totalLines; i++){
+        const c = (i === Math.floor(divZ/2) || i === divZ + Math.floor(divX/2))
+          ? cCenter : cGrid;
+        colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+      }
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      const mat = new THREE.LineBasicMaterial({ vertexColors: true });
+      const mesh = new THREE.LineSegments(geo, mat);
+      mesh.visible = true; // 初期は3Dモードなので表示
+      scene.add(mesh);
+      return mesh;
+    })();
+
+    // ===== 球と円運動 =====
+    const ORBIT_CENTER = new THREE.Vector3(0, 5, 0);
+    const MIRROR_OFFSET_X = 2.7; // 右隣の球のX方向オフセット（円軌道端にギリギリ当たらない距離）
+
+    const placedGroup = new THREE.Group();
+    scene.add(placedGroup);
+    let placedSphere = null;
+    let mirrorSphere = null;
+    let connectLine = null;
+
+    function ensureCirc(obj){
+      if (!obj.userData.circ){
+        obj.userData.circ = { active:false, center:ORBIT_CENTER.clone(), r:2, omega:Math.PI/2, startTime:0, startTheta:0 };
+      }
+      return obj.userData.circ;
+    }
+
+    function startCircular(obj, r, omega){
+      const d = ensureCirc(obj);
+      d.center.copy(ORBIT_CENTER);
+      d.r     = Math.max(0, r);
+      d.omega = Math.max(0.01, omega);
+      const dx = obj.position.x - d.center.x;
+      const dy = obj.position.y - d.center.y;
+      d.startTheta = Math.atan2(dy, dx);
+      d.startTime  = nowSec();
+      d.active = true;
+    }
+
+    function stopCircular(obj){
+      const d = obj.userData.circ;
+      if (d) d.active = false;
+    }
+
+    function toggleCircular(obj, r, omega){
+      const d = ensureCirc(obj);
+      if (d.active) stopCircular(obj);
+      else startCircular(obj, r, omega);
+    }
+
+    function updateCircular(obj, t){
+      const d = obj.userData.circ;
+      if (!d || !d.active) return;
+      const theta = d.startTheta + d.omega * (t - d.startTime);
+      obj.position.set(
+        d.center.x + d.r * Math.cos(theta),
+        d.center.y + d.r * Math.sin(theta),
+        d.center.z
+      );
+      vectorsDirty = true;
+    }
+
+    function spawnSphere(){
+      const geo = new THREE.SphereGeometry(0.25, 32, 16);
+      const mat = new THREE.MeshStandardMaterial({ color:0xffff00, metalness:0.15, roughness:0.55 });
+      const mesh = new THREE.Mesh(geo, mat);
+      const { r: spawnR } = readCircParams();
+      mesh.position.set(ORBIT_CENTER.x + spawnR, ORBIT_CENTER.y, ORBIT_CENTER.z);
+      placedGroup.add(mesh);
+      placedSphere = mesh;
+      controls.target.copy(ORBIT_CENTER);
+      controls.update();
+    }
+
+    function readCircParams(){
+      const r     = parseFloat(document.getElementById('circR').value)     || 2;
+      const omega = parseFloat(document.getElementById('circOmega').value) || 1;
+      return { r: Math.max(0.01, r), omega: Math.max(0.01, omega) };
+    }
+
+    function updateInfoPanel(){
+      const { r, omega } = readCircParams();
+      const T = (2 * Math.PI / omega).toFixed(2);
+      const v = (r * omega).toFixed(2);
+      const a = (r * omega * omega).toFixed(2);
+      document.getElementById('infoT').textContent = T;
+      document.getElementById('infoV').textContent = v;
+      document.getElementById('infoA').textContent = a;
+    }
+
+    // ===== ストロボ保存（1組のみ・トグル） =====
+    let currentSnapshot = null;
+    let snapshotActive = false;
+
+    function removeSnapshot(){
+      if (currentSnapshot){
+        scene.remove(currentSnapshot.sphereMesh);
+        currentSnapshot.sphereMesh.geometry?.dispose();
+        currentSnapshot.sphereMesh.material?.dispose();
+        scene.remove(currentSnapshot.lineMesh);
+        currentSnapshot.lineMesh.geometry?.dispose();
+        currentSnapshot.lineMesh.material?.dispose();
+        currentSnapshot = null;
+      }
+      snapshotActive = false;
+      document.getElementById('saveSnapshot')?.classList.remove('active');
+    }
+
+    function toggleSnapshot(){
+      if (snapshotActive){
+        removeSnapshot();
+        return;
+      }
+      if (!placedSphere){ alert('先に球を出してください。'); return; }
+      if (placedSphere.userData.circ?.active){ alert('円運動を停止してから保存してください。'); return; }
+
+      const snapSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 32, 16),
+        new THREE.MeshStandardMaterial({ color:0xffff00, metalness:0.15, roughness:0.55, transparent:true, opacity:0.5 })
+      );
+      snapSphere.position.copy(placedSphere.position);
+      scene.add(snapSphere);
+
+      const snapLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([ORBIT_CENTER.clone(), placedSphere.position.clone()]),
+        new THREE.LineBasicMaterial({ color:0xffee00, transparent:true, opacity:0.5 })
+      );
+      scene.add(snapLine);
+
+      currentSnapshot = { sphereMesh: snapSphere, lineMesh: snapLine };
+      snapshotActive = true;
+      document.getElementById('saveSnapshot').classList.add('active');
+    }
+
+    const clearSnapshots = removeSnapshot;
+
+    // ===== 中心・軌跡・中心線 =====
+    const TRAJ_SEGMENTS = 128;
+
+    let centerDot = null;
+    let centerDotVisible = false;
+
+    function ensureCenterDot(){
+      if (centerDot) return;
+      centerDot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0xff3344 })
+      );
+      centerDot.position.copy(ORBIT_CENTER);
+      centerDot.visible = false;
+      scene.add(centerDot);
+    }
+
+    let trajectoryLine = null;
+    let trajectoryVisible = false;
+
+    function buildCirclePoints(r){
+      const pts = [];
+      for (let i = 0; i <= TRAJ_SEGMENTS; i++){
+        const theta = (i / TRAJ_SEGMENTS) * Math.PI * 2;
+        pts.push(new THREE.Vector3(
+          ORBIT_CENTER.x + r * Math.cos(theta),
+          ORBIT_CENTER.y + r * Math.sin(theta),
+          ORBIT_CENTER.z
+        ));
+      }
+      return pts;
+    }
+
+    function ensureTrajectory(){
+      if (trajectoryLine) return;
+      const { r } = readCircParams();
+      trajectoryLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(buildCirclePoints(r)),
+        new THREE.LineBasicMaterial({ color: 0xffee00 })
+      );
+      trajectoryLine.visible = false;
+      scene.add(trajectoryLine);
+    }
+
+    function updateTrajectory(){
+      if (!trajectoryLine || !trajectoryVisible) return;
+      const { r } = readCircParams();
+      trajectoryLine.geometry.setFromPoints(buildCirclePoints(r));
+    }
+
+    let centerLineMesh = null;
+    let centerLineVisible = false;
+
+    // ===== 速度・加速度ベクトル =====
+    let velArrow   = null;
+    let accelArrow = null;
+    let showVelVector   = false;
+    let showAccelVector = false;
+
+    let mirrorVelArrow = null;
+    let showMirrorVelVector = false;
+
+    let velTipLine = null; // 両速度ベクトルの先端を結ぶ点線
+
+    function ensureCenterLine(){
+      if (centerLineMesh) return;
+      centerLineMesh = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([ORBIT_CENTER.clone(), ORBIT_CENTER.clone()]),
+        new THREE.LineBasicMaterial({ color: 0xffee00 })
+      );
+      centerLineMesh.visible = false;
+      scene.add(centerLineMesh);
+    }
+
+    function updateCenterLine(){
+      if (!centerLineMesh || !centerLineVisible || !placedSphere) return;
+      centerLineMesh.geometry.setFromPoints([ORBIT_CENTER, placedSphere.position]);
+    }
+
+    function updateVectors(){
+      if (!vectorsDirty) return;
+      vectorsDirty = false;
+      const { r, omega } = readCircParams();
+      const v = r * omega;
+      const a = r * omega * omega;
+
+      function applyArrow(arrow, show, dir, len, color){
+        if (!placedSphere || !show || len < 0.001){
+          if (arrow) arrow.visible = false;
+          return arrow;
+        }
+        const headL = Math.min(len * 0.3, 0.7);
+        const headW = headL * 0.55;
+        if (!arrow){
+          arrow = new THREE.ArrowHelper(dir, placedSphere.position, len, color, headL, headW);
+          scene.add(arrow);
+        } else {
+          arrow.position.copy(placedSphere.position);
+          arrow.setDirection(dir);
+          arrow.setLength(len, headL, headW);
+          arrow.visible = true;
+        }
+        return arrow;
+      }
+
+      if (placedSphere){
+        const dx = placedSphere.position.x - ORBIT_CENTER.x;
+        const dy = placedSphere.position.y - ORBIT_CENTER.y;
+        const theta = Math.atan2(dy, dx);
+        const velDir   = new THREE.Vector3(-Math.sin(theta),  Math.cos(theta), 0);
+        const accelDir = new THREE.Vector3(-Math.cos(theta), -Math.sin(theta), 0);
+        velArrow   = applyArrow(velArrow,   showVelVector,   velDir,   v / 3, 0xff2828);
+        accelArrow = applyArrow(accelArrow, showAccelVector, accelDir, a / 3, 0x4488ff);
+      } else {
+        if (velArrow)   velArrow.visible   = false;
+        if (accelArrow) accelArrow.visible = false;
+      }
+
+      // ミラー球のY軸速度ベクトル（単振動の速度）
+      if (mirrorSphere && showMirrorVelVector && placedSphere) {
+        const dx = placedSphere.position.x - ORBIT_CENTER.x;
+        const dy = placedSphere.position.y - ORBIT_CENTER.y;
+        const theta = Math.atan2(dy, dx);
+        const vy = v * Math.cos(theta); // Y方向速度成分
+        const len = Math.abs(vy) / 3;
+        const dir = new THREE.Vector3(0, vy >= 0 ? 1 : -1, 0);
+        if (len < 0.001) {
+          if (mirrorVelArrow) mirrorVelArrow.visible = false;
+        } else {
+          const headL = Math.min(len * 0.3, 0.7);
+          const headW = headL * 0.55;
+          if (!mirrorVelArrow) {
+            mirrorVelArrow = new THREE.ArrowHelper(dir, mirrorSphere.position, len, 0xff2828, headL, headW);
+            scene.add(mirrorVelArrow);
+          } else {
+            mirrorVelArrow.position.copy(mirrorSphere.position);
+            mirrorVelArrow.setDirection(dir);
+            mirrorVelArrow.setLength(len, headL, headW);
+            mirrorVelArrow.visible = true;
+          }
+        }
+      } else {
+        if (mirrorVelArrow) mirrorVelArrow.visible = false;
+      }
+
+      // 両速度ベクトルが表示中のときだけ先端同士を点線で結ぶ
+      const showTipLine = showVelVector && showMirrorVelVector && placedSphere && mirrorSphere;
+      if (showTipLine) {
+        const dx = placedSphere.position.x - ORBIT_CENTER.x;
+        const dy = placedSphere.position.y - ORBIT_CENTER.y;
+        const theta = Math.atan2(dy, dx);
+        const vy = v * Math.cos(theta);
+        const velDir = new THREE.Vector3(-Math.sin(theta), Math.cos(theta), 0);
+        const tipA = placedSphere.position.clone().addScaledVector(velDir, v / 3);
+        const tipB = mirrorSphere.position.clone().add(new THREE.Vector3(0, vy / 3, 0));
+        if (!velTipLine) {
+          const geo = new THREE.BufferGeometry().setFromPoints([tipA, tipB]);
+          const mat = new THREE.LineDashedMaterial({ color: 0xff2828, dashSize: 0.3, gapSize: 0.2 });
+          velTipLine = new THREE.Line(geo, mat);
+          velTipLine.computeLineDistances();
+          scene.add(velTipLine);
+        } else {
+          velTipLine.geometry.setFromPoints([tipA, tipB]);
+          velTipLine.computeLineDistances();
+          velTipLine.visible = true;
+        }
+      } else {
+        if (velTipLine) velTipLine.visible = false;
+      }
+    }
+
+    // ===== 視点スナップ =====
+    function nowSec(){ return performance.now() / 1000; }
+
+    const orbitCenter = new THREE.Vector3(0, 5, 0);
+    let viewTween = null;
+
+    function startViewSnapAroundCenter(dirVec, duration = 0.35){
+      const center = orbitCenter.clone();
+      const dist = activeCamera.position.distanceTo(controls.target);
+      const dir = dirVec.clone().normalize();
+      const endPos = center.clone().add(dir.multiplyScalar(dist));
+      viewTween = {
+        startPos: activeCamera.position.clone(),
+        endPos,
+        startTarget: controls.target.clone(),
+        endTarget: center,
+        startTime: nowSec(),
+        dur: duration,
+      };
+    }
+
+    function updateViewSnap(t){
+      if (!viewTween) return;
+      const u = Math.min(1, (t - viewTween.startTime) / viewTween.dur);
+      const k = u * u * (3 - 2 * u);
+      activeCamera.position.lerpVectors(viewTween.startPos, viewTween.endPos, k);
+      controls.target.lerpVectors(viewTween.startTarget, viewTween.endTarget, k);
+      controls.update();
+      if (u >= 1) viewTween = null;
+    }
+
+    function snapToXY(){ startViewSnapAroundCenter(new THREE.Vector3(0, 0, 1)); }
+    function snapToYZ(){ startViewSnapAroundCenter(new THREE.Vector3(1, 0, 0)); }
+
+    // ===== ペン／インクボード =====
+    const INK_BOARD_CENTER = new THREE.Vector3(0, 5, 0);
+    const INK_BOARD_WIDTH  = 60;
+    const INK_BOARD_HEIGHT = 40;
+
+    let inkMode = 'none';
+    let inkDrawing = false;
+    let inkPointerId = null;
+
+    let inkBoardMesh = null;
+    let inkBoardCanvas = null;
+    let inkBoardCtx = null;
+    let inkBoardTexture = null;
+
+    let activeInkCanvas = null;
+    let activeInkCtx = null;
+    let inkDirty     = false;
+    let shapeDirty   = false;
+    let vectorsDirty = true;
+
+    // ===== 変位グラフ =====
+    const DISP_GRAPH_CENTER = new THREE.Vector3(0, 10.0, 0);
+    const DISP_GRAPH_WIDTH  = 8.0;
+    const DISP_GRAPH_HEIGHT = 4.0;
+    const DISP_TIME_WINDOW  = 8.0;
+    const DISP_SAMPLE_DT    = 1 / 30;
+
+    let dispGraphGroup   = null;
+    let dispGraphCanvas  = null;
+    let dispGraphCtx     = null;
+    let dispGraphTexture = null;
+    let dispGraphVisible = false;
+    let dispGraphDirty   = false;
+    let dispData         = [];
+    let dispTime         = 0;
+    let dispLastTickSec  = 0;
+    let dispLastSampleT  = -1e9;
+
+    const PEN_COLOR = 'rgba(255, 40, 40, 1.0)';
+    const PEN_WIDTH = 2;
+    const ERASER_WIDTH = 20;
+
+    let lastInkX = 0;
+    let lastInkY = 0;
+
+    // ===== 図形描画（ペンとは独立したレイヤー） =====
+    let shapeMode = 'none';
+    let shapeDrawing = false;
+    let shapeStartX = 0, shapeStartY = 0;
+    let shapeSaved = null;
+
+    let shapeBoardCanvas = null;
+    let shapeBoardCtx = null;
+    let shapeBoardTexture = null;
+    let shapeBoardMesh = null;
+
+    const shapes = [];
+    let selectedShapeIdx = -1;
+    let selectDragging = false;
+    let selectDragHandle = null;
+    let selectDragOrigin = null;
+    let selectDragShapeSnap = null;
+    let shapeCurrentX = 0, shapeCurrentY = 0;
+
+    // ===== 図形描画・選択ヘルパー =====
+
+    function drawHandle(ctx, x, y, isMid = false){
+      ctx.save();
+      ctx.fillStyle = isMid ? '#88ccff' : '#ffffff';
+      ctx.strokeStyle = '#4499ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawShapeOnCanvas(ctx, shape, selected){
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = PEN_COLOR;
+      ctx.lineWidth = PEN_WIDTH;
+      if (shape.type === 'circle'){
+        ctx.beginPath();
+        ctx.arc(shape.cx, shape.cy, shape.r, 0, Math.PI * 2);
+        ctx.stroke();
+        if (selected){
+          drawHandle(ctx, shape.cx, shape.cy);
+          drawHandle(ctx, shape.cx + shape.r, shape.cy);
+        }
+      } else if (shape.type === 'arrow'){
+        drawArrowOnCanvas(ctx, shape.x1, shape.y1, shape.x2, shape.y2);
+        if (selected){
+          drawHandle(ctx, shape.x1, shape.y1);
+          drawHandle(ctx, shape.x2, shape.y2);
+          const mx = (shape.x1 + shape.x2) / 2;
+          const my = (shape.y1 + shape.y2) / 2;
+          drawHandle(ctx, mx, my, true);
+        }
+      }
+    }
+
+    const CANVAS_PX_PER_UNIT = 2048 / 60;
+
+
+    function redrawShapes(){
+      if (!shapeBoardCtx) return;
+      shapeBoardCtx.clearRect(0, 0, shapeBoardCanvas.width, shapeBoardCanvas.height);
+      shapes.forEach((shape, i) => drawShapeOnCanvas(shapeBoardCtx, shape, i === selectedShapeIdx));
+      shapeDirty = true;
+      updateArrowLengthUI();
+    }
+
+    function updateArrowLengthUI(){
+      const row = document.getElementById('arrowLengthRow');
+      const inp = document.getElementById('arrowLength');
+      const delBtn = document.getElementById('shapeDeleteSelected');
+      if (!row || !inp) return;
+      const shape = selectedShapeIdx >= 0 ? shapes[selectedShapeIdx] : null;
+      if (shape?.type === 'arrow'){
+        if (document.activeElement !== inp) {
+          const lenPx = Math.hypot(shape.x2 - shape.x1, shape.y2 - shape.y1);
+          inp.value = (lenPx / CANVAS_PX_PER_UNIT).toFixed(2);
+        }
+        row.style.display = 'flex';
+      } else {
+        row.style.display = 'none';
+      }
+      if (delBtn) delBtn.style.display = selectedShapeIdx >= 0 ? '' : 'none';
+    }
+
+    function distToSegment(px, py, x1, y1, x2, y2){
+      const dx = x2 - x1, dy = y2 - y1;
+      const len2 = dx * dx + dy * dy;
+      if (len2 === 0) return Math.hypot(px - x1, py - y1);
+      const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+      return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
+
+    function hitTestShape(shape, cx, cy, thr = 12){
+      if (shape.type === 'circle'){
+        const d = Math.hypot(cx - shape.cx, cy - shape.cy);
+        return Math.abs(d - shape.r) < thr || d < thr;
+      } else if (shape.type === 'arrow'){
+        return distToSegment(cx, cy, shape.x1, shape.y1, shape.x2, shape.y2) < thr;
+      }
+      return false;
+    }
+
+    function hitTestHandles(shape, cx, cy, thr = 20){
+      if (shape.type === 'circle'){
+        if (Math.hypot(cx - shape.cx, cy - shape.cy) < thr) return 'circle-center';
+        if (Math.hypot(cx - (shape.cx + shape.r), cy - shape.cy) < thr) return 'circle-edge';
+      } else if (shape.type === 'arrow'){
+        if (Math.hypot(cx - shape.x1, cy - shape.y1) < thr) return 'arrow-start';
+        if (Math.hypot(cx - shape.x2, cy - shape.y2) < thr) return 'arrow-end';
+        const mx = (shape.x1 + shape.x2) / 2;
+        const my = (shape.y1 + shape.y2) / 2;
+        if (Math.hypot(cx - mx, cy - my) < thr) return 'arrow-mid';
+      }
+      return null;
+    }
+
+    function ensureShapeBoard(){
+      if (shapeBoardMesh) return;
+
+      shapeBoardCanvas = document.createElement('canvas');
+      shapeBoardCanvas.width  = 2048;
+      shapeBoardCanvas.height = 1365;
+
+      shapeBoardCtx = shapeBoardCanvas.getContext('2d');
+      shapeBoardCtx.lineCap  = 'round';
+      shapeBoardCtx.lineJoin = 'round';
+
+      shapeBoardTexture = new THREE.CanvasTexture(shapeBoardCanvas);
+      shapeBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      shapeBoardTexture.generateMipmaps = false;
+      shapeBoardTexture.minFilter = THREE.LinearFilter;
+
+      const mat = new THREE.MeshBasicMaterial({
+        map: shapeBoardTexture, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -2;
+      mat.polygonOffsetUnits  = -2;
+
+      const geo = new THREE.PlaneGeometry(INK_BOARD_WIDTH, INK_BOARD_HEIGHT);
+      shapeBoardMesh = new THREE.Mesh(geo, mat);
+      shapeBoardMesh.position.copy(INK_BOARD_CENTER);
+      scene.add(shapeBoardMesh);
+    }
+
+    function clearShapeAll(){
+      shapes.length = 0;
+      selectedShapeIdx = -1;
+      if (shapeBoardCtx && shapeBoardCanvas){
+        shapeBoardCtx.clearRect(0, 0, shapeBoardCanvas.width, shapeBoardCanvas.height);
+        if (shapeBoardTexture) shapeBoardTexture.needsUpdate = true;
+      }
+    }
+
+    function setShapeMode(next){
+      if (shapeMode === next) shapeMode = 'none';
+      else shapeMode = next;
+      if (shapeMode !== 'none'){
+        ensureShapeBoard();
+        selectedShapeIdx = -1;
+        if (shapeBoardMesh) redrawShapes();
+        inkMode = 'none';
+        document.getElementById('toolPen')?.classList.remove('active');
+        document.getElementById('toolEraser')?.classList.remove('active');
+        if (inkDrawing) endGraphInk();
+      }
+      document.getElementById('toolCircle')?.classList.toggle('active', shapeMode === 'circle');
+      document.getElementById('toolArrow')?.classList.toggle('active', shapeMode === 'arrow');
+    }
+
+    function drawArrowOnCanvas(ctx, x1, y1, x2, y2){
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      if (len < 2) return;
+      const angle = Math.atan2(dy, dx);
+      const hw = Math.max(8, Math.min(24, len * 0.10));
+      const ha = Math.PI / 8;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2 - hw * Math.cos(angle), y2 - hw * Math.sin(angle));
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - hw * Math.cos(angle - ha), y2 - hw * Math.sin(angle - ha));
+      ctx.lineTo(x2 - hw * Math.cos(angle + ha), y2 - hw * Math.sin(angle + ha));
+      ctx.closePath();
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+    }
+
+    function tryStartShapeDraw(ev){
+      if (shapeMode === 'none') return false;
+      ensureShapeBoard();
+
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+      const hits = raycaster.intersectObject(shapeBoardMesh, false);
+      if (!hits.length || !hits[0].uv) return false;
+
+      const xy = uvToCanvasXY(hits[0].uv, shapeBoardCanvas);
+
+      shapeStartX = xy.x;
+      shapeStartY = xy.y;
+      shapeCurrentX = xy.x;
+      shapeCurrentY = xy.y;
+      shapeDrawing = true;
+
+      controls.enabled = false;
+      try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+      ev.preventDefault();
+      ev.stopPropagation();
+      return true;
+    }
+
+    function updateShapeDraw(ev){
+      if (!shapeDrawing) return;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+      const hits = raycaster.intersectObject(shapeBoardMesh, false);
+      if (!hits.length || !hits[0].uv) return;
+
+      const xy = uvToCanvasXY(hits[0].uv, shapeBoardCanvas);
+      const x = xy.x, y = xy.y;
+      shapeCurrentX = x;
+      shapeCurrentY = y;
+
+      shapeBoardCtx.clearRect(0, 0, shapeBoardCanvas.width, shapeBoardCanvas.height);
+      shapes.forEach((s, i) => drawShapeOnCanvas(shapeBoardCtx, s, i === selectedShapeIdx));
+      shapeBoardCtx.globalCompositeOperation = 'source-over';
+      shapeBoardCtx.strokeStyle = PEN_COLOR;
+      shapeBoardCtx.lineWidth = PEN_WIDTH;
+
+      if (shapeMode === 'circle'){
+        const r = Math.hypot(x - shapeStartX, y - shapeStartY);
+        shapeBoardCtx.beginPath();
+        shapeBoardCtx.arc(shapeStartX, shapeStartY, r, 0, Math.PI * 2);
+        shapeBoardCtx.stroke();
+      } else if (shapeMode === 'arrow'){
+        drawArrowOnCanvas(shapeBoardCtx, shapeStartX, shapeStartY, x, y);
+      }
+
+      shapeDirty = true;
+      ev.preventDefault();
+    }
+
+    function endShapeDraw(ev){
+      if (!shapeDrawing) return;
+      shapeDrawing = false;
+      shapeSaved   = null;
+      controls.enabled = true;
+      if (ev?.pointerId != null){
+        try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+      }
+      const len = Math.hypot(shapeCurrentX - shapeStartX, shapeCurrentY - shapeStartY);
+      if (len >= 4){
+        const modeNow = shapeMode;
+        if (modeNow === 'circle'){
+          shapes.push({ type: 'circle', cx: shapeStartX, cy: shapeStartY, r: len });
+        } else if (modeNow === 'arrow'){
+          shapes.push({ type: 'arrow', x1: shapeStartX, y1: shapeStartY, x2: shapeCurrentX, y2: shapeCurrentY });
+        }
+      }
+      redrawShapes();
+      shapeMode = 'none';
+      document.getElementById('toolCircle')?.classList.remove('active');
+      document.getElementById('toolArrow')?.classList.remove('active');
+    }
+
+    function setInkMode(next){
+      if (inkMode === next) inkMode = 'none';
+      else inkMode = next;
+      if (inkMode !== 'none'){
+        ensureInkBoard();
+        shapeMode = 'none';
+        selectedShapeIdx = -1;
+        if (shapeBoardMesh) redrawShapes();
+        document.getElementById('toolCircle')?.classList.remove('active');
+        document.getElementById('toolArrow')?.classList.remove('active');
+        if (shapeDrawing) endShapeDraw();
+      }
+
+      document.getElementById('toolPen')?.classList.toggle('active', inkMode === 'pen');
+      document.getElementById('toolEraser')?.classList.toggle('active', inkMode === 'eraser');
+
+      if (inkDrawing) endGraphInk();
+    }
+
+    function ensureInkBoard(){
+      if (inkBoardMesh) return;
+
+      inkBoardCanvas = document.createElement('canvas');
+      inkBoardCanvas.width  = 2048;
+      inkBoardCanvas.height = 1365;
+
+      inkBoardCtx = inkBoardCanvas.getContext('2d');
+      inkBoardCtx.lineCap  = 'round';
+      inkBoardCtx.lineJoin = 'round';
+
+      inkBoardTexture = new THREE.CanvasTexture(inkBoardCanvas);
+      inkBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      inkBoardTexture.generateMipmaps = false;
+      inkBoardTexture.minFilter = THREE.LinearFilter;
+
+      const mat = new THREE.MeshBasicMaterial({
+        map: inkBoardTexture, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: false,
+      });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -1;
+      mat.polygonOffsetUnits  = -1;
+
+      const geo = new THREE.PlaneGeometry(INK_BOARD_WIDTH, INK_BOARD_HEIGHT);
+      inkBoardMesh = new THREE.Mesh(geo, mat);
+      inkBoardMesh.position.copy(INK_BOARD_CENTER);
+      scene.add(inkBoardMesh);
+    }
+
+    function uvToCanvasXY(uv, cvs){
+      return {
+        x: uv.x * cvs.width,
+        y: (1 - uv.y) * cvs.height,
+      };
+    }
+
+    function clearInkAll(){
+      if (inkBoardCtx && inkBoardCanvas){
+        inkBoardCtx.clearRect(0, 0, inkBoardCanvas.width, inkBoardCanvas.height);
+        if (inkBoardTexture) inkBoardTexture.needsUpdate = true;
+      }
+    }
+
+    // ===== レイキャスター =====
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function getPointerNDC(ev){
+      const rect = canvas.getBoundingClientRect();
+      mouse.set(
+        ( (ev.clientX - rect.left) / rect.width ) * 2 - 1,
+        -( (ev.clientY - rect.top) / rect.height ) * 2 + 1
+      );
+    }
+
+    // ===== 変位グラフ ドラッグ・リサイズ用定数 =====
+    const DISP_DRAG_PLANE = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // z=0 平面
+    const DISP_CORNER_DIRS     = { BL:[-1,-1], BR:[1,-1], TL:[-1,1], TR:[1,1] };
+    const DISP_OPPOSITE_CORNER = { BL:'TR', BR:'TL', TL:'BR', TR:'BL' };
+    const DISP_SCALE_MIN = 0.25;
+    const DISP_SCALE_MAX = 4.0;
+
+    const _dispDiagLen = Math.hypot(DISP_GRAPH_WIDTH, DISP_GRAPH_HEIGHT);
+    const _dispUnitW   = DISP_GRAPH_WIDTH  / _dispDiagLen;
+    const _dispUnitH   = DISP_GRAPH_HEIGHT / _dispDiagLen;
+
+    let dispGraphPlaneMesh = null; // ensureDispGraph() で代入
+    let dispEntry          = null; // { planeMesh, handles }
+
+    let dispDragging      = false;
+    let dispDragPointerId = null;
+    const _dispDragOffset = new THREE.Vector3();
+    const _dHit           = new THREE.Vector3();
+
+    let dispResizing          = false;
+    let dispResizePointerId   = null;
+    let dispResizeAnchorCorner = 'BL';
+    let dispStartScale        = 1;
+    let dispStartProj         = 1;
+    const _dispAnchor   = new THREE.Vector3();
+    const _drHit        = new THREE.Vector3();
+    const _drShift      = new THREE.Vector3();
+    const _drQ          = new THREE.Quaternion();
+    const _drWidthDir   = new THREE.Vector3();
+    const _drHeightDir  = new THREE.Vector3();
+    const _drDelta      = new THREE.Vector3();
+    const _dcLocal      = new THREE.Vector3();
+    const _dcWorld      = new THREE.Vector3();
+
+    let selectedDispEntry = null;
+    let dispResizeEntry   = null;
+    let dispDragEntry     = null;
+
+    function tryStartGraphInk(ev){
+      if (inkMode === 'none') return false;
+
+      ensureInkBoard();
+
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+
+      const hitsB = raycaster.intersectObject(inkBoardMesh, false);
+      if (!hitsB.length || !hitsB[0].uv) return false;
+
+      activeInkCanvas = inkBoardCanvas;
+      activeInkCtx = inkBoardCtx;
+
+      const xy = uvToCanvasXY(hitsB[0].uv, inkBoardCanvas);
+      lastInkX = xy.x;
+      lastInkY = xy.y;
+
+      inkDrawing = true;
+      inkPointerId = ev.pointerId ?? null;
+
+      if (inkMode === 'pen'){
+        activeInkCtx.globalCompositeOperation = 'source-over';
+        activeInkCtx.strokeStyle = PEN_COLOR;
+        activeInkCtx.lineWidth = PEN_WIDTH;
+      } else {
+        activeInkCtx.globalCompositeOperation = 'destination-out';
+        activeInkCtx.strokeStyle = 'rgba(0,0,0,1)';
+        activeInkCtx.lineWidth = ERASER_WIDTH;
+      }
+
+      activeInkCtx.beginPath();
+      activeInkCtx.moveTo(lastInkX, lastInkY);
+      activeInkCtx.lineTo(lastInkX + 0.01, lastInkY + 0.01);
+      activeInkCtx.stroke();
+
+      controls.enabled = false;
+      try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+
+      inkDirty = true;
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      return true;
+    }
+
+    function updateGraphInk(ev){
+      if (!inkDrawing) return;
+
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+
+      const hitsB = raycaster.intersectObject(inkBoardMesh, false);
+      if (!hitsB.length || !hitsB[0].uv) return;
+
+      const xy = uvToCanvasXY(hitsB[0].uv, inkBoardCanvas);
+      const x = xy.x;
+      const y = xy.y;
+
+      activeInkCtx.beginPath();
+      activeInkCtx.moveTo(lastInkX, lastInkY);
+      activeInkCtx.lineTo(x, y);
+      activeInkCtx.stroke();
+
+      lastInkX = x;
+      lastInkY = y;
+
+      inkDirty = true;
+
+      ev.preventDefault();
+    }
+
+    function endGraphInk(ev){
+      if (!inkDrawing) return;
+      inkDrawing = false;
+      controls.enabled = true;
+
+      if (ev?.pointerId != null){
+        try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+      }
+      inkPointerId = null;
+    }
+
+    // ===== 選択ドラッグ =====
+    function tryStartSelectDrag(ev){
+      if (shapeMode !== 'none' || inkMode !== 'none' || !shapeBoardMesh) return false;
+
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+      const hits = raycaster.intersectObject(shapeBoardMesh, false);
+      if (!hits.length || !hits[0].uv) return false;
+
+      const xy = uvToCanvasXY(hits[0].uv, shapeBoardCanvas);
+      const cx = xy.x, cy = xy.y;
+
+      if (selectedShapeIdx >= 0){
+        const handle = hitTestHandles(shapes[selectedShapeIdx], cx, cy);
+        if (handle){
+          selectDragHandle = handle;
+          selectDragOrigin = { x: cx, y: cy };
+          selectDragShapeSnap = { ...shapes[selectedShapeIdx] };
+          selectDragging = true;
+          controls.enabled = false;
+          try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+          ev.preventDefault();
+          ev.stopPropagation();
+          return true;
+        }
+      }
+
+      for (let i = shapes.length - 1; i >= 0; i--){
+        if (hitTestShape(shapes[i], cx, cy)){
+          selectedShapeIdx = i;
+          selectDragHandle = null;
+          selectDragging = false;
+          redrawShapes();
+          ev.preventDefault();
+          ev.stopPropagation();
+          return true;
+        }
+      }
+
+      if (selectedShapeIdx >= 0){
+        selectedShapeIdx = -1;
+        redrawShapes();
+      }
+      return false;
+    }
+
+    function updateSelectDrag(ev){
+      if (!selectDragging || selectDragHandle === null || selectedShapeIdx < 0) return;
+
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+      const hits = raycaster.intersectObject(shapeBoardMesh, false);
+      if (!hits.length || !hits[0].uv) return;
+
+      const xy = uvToCanvasXY(hits[0].uv, shapeBoardCanvas);
+      const x = xy.x, y = xy.y;
+      const shape = shapes[selectedShapeIdx];
+
+      if (shape.type === 'circle'){
+        if (selectDragHandle === 'circle-center'){ shape.cx = x; shape.cy = y; }
+        else if (selectDragHandle === 'circle-edge'){ shape.r = Math.max(4, Math.hypot(x - shape.cx, y - shape.cy)); }
+      } else if (shape.type === 'arrow'){
+        if (selectDragHandle === 'arrow-start'){ shape.x1 = x; shape.y1 = y; }
+        else if (selectDragHandle === 'arrow-end'){ shape.x2 = x; shape.y2 = y; }
+        else if (selectDragHandle === 'arrow-mid' && selectDragOrigin && selectDragShapeSnap){
+          const dx = x - selectDragOrigin.x;
+          const dy = y - selectDragOrigin.y;
+          shape.x1 = selectDragShapeSnap.x1 + dx;
+          shape.y1 = selectDragShapeSnap.y1 + dy;
+          shape.x2 = selectDragShapeSnap.x2 + dx;
+          shape.y2 = selectDragShapeSnap.y2 + dy;
+        }
+      }
+
+      redrawShapes();
+      ev.preventDefault();
+    }
+
+    function endSelectDrag(ev){
+      if (!selectDragging) return;
+      selectDragging = false;
+      selectDragHandle = null;
+      selectDragOrigin = null;
+      selectDragShapeSnap = null;
+      controls.enabled = true;
+      if (ev?.pointerId != null){
+        try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+      }
+    }
+
+    // ===== ポインターイベント =====
+    canvas.addEventListener('pointerdown', (ev) => {
+      if (tryStartShapeDraw(ev)) return;
+      if (tryStartSelectDrag(ev)) return;
+      if (tryStartGraphInk(ev)) return;
+      if (tryStartDispResize(ev)) return;
+      if (tryStartDispDrag(ev)) return;
+      deselectDispGraph();
+    });
+
+    window.addEventListener('pointermove', (ev) => {
+      if (shapeDrawing) updateShapeDraw(ev);
+      else if (selectDragging) updateSelectDrag(ev);
+      else if (inkDrawing) updateGraphInk(ev);
+      else if (dispResizing) updateDispResize(ev);
+      else if (dispDragging) updateDispDrag(ev);
+    }, { passive: false });
+
+    window.addEventListener('pointerup', (ev) => {
+      endShapeDraw(ev);
+      endSelectDrag(ev);
+      endGraphInk(ev);
+      endDispResize(ev);
+      endDispDrag(ev);
+    });
+
+    window.addEventListener('pointercancel', (ev) => {
+      endShapeDraw(ev);
+      endSelectDrag(ev);
+      endGraphInk(ev);
+      endDispResize(ev);
+      endDispDrag(ev);
+    });
+
+    window.addEventListener('keydown', (ev) => {
+      const tag = document.activeElement?.tagName;
+      if (selectedShapeIdx >= 0 && (ev.key === 'Delete' || ev.key === 'Backspace')
+          && tag !== 'INPUT' && tag !== 'TEXTAREA'){
+        shapes.splice(selectedShapeIdx, 1);
+        selectedShapeIdx = -1;
+        redrawShapes();
+        ev.preventDefault();
+      }
+    });
+
+    // ===== UIボタン =====
+    document.getElementById('toolCircle').addEventListener('click', () => { setShapeMode('circle'); });
+    document.getElementById('toolArrow').addEventListener('click',  () => { setShapeMode('arrow');  });
+    document.getElementById('toolPen').addEventListener('click', () => { setInkMode('pen'); });
+    document.getElementById('toolEraser').addEventListener('click', () => { setInkMode('eraser'); });
+    document.getElementById('inkClear').addEventListener('click', () => { clearInkAll(); });
+    document.getElementById('shapeDeleteSelected').addEventListener('click', () => {
+      if (selectedShapeIdx >= 0) {
+        shapes.splice(selectedShapeIdx, 1);
+        selectedShapeIdx = -1;
+        redrawShapes();
+        updateArrowLengthUI();
+      }
+    });
+    document.getElementById('shapeClear').addEventListener('click', () => {
+      shapes.length = 0;
+      selectedShapeIdx = -1;
+      redrawShapes();
+      updateArrowLengthUI();
+    });
+    document.getElementById('arrowLength').addEventListener('input', () => {
+      if (selectedShapeIdx < 0) return;
+      const shape = shapes[selectedShapeIdx];
+      if (shape?.type !== 'arrow') return;
+      const newLen = parseFloat(document.getElementById('arrowLength').value);
+      if (!isFinite(newLen) || newLen < 0.1) return;
+      const dx = shape.x2 - shape.x1;
+      const dy = shape.y2 - shape.y1;
+      const curLen = Math.hypot(dx, dy);
+      if (curLen < 0.01) return;
+      const newLenPx = newLen * CANVAS_PX_PER_UNIT;
+      const scale = newLenPx / curLen;
+      shape.x2 = shape.x1 + dx * scale;
+      shape.y2 = shape.y1 + dy * scale;
+      redrawShapes();
+    });
+    document.getElementById('viewXY').addEventListener('click', () => { snapToXY(); });
+    document.getElementById('viewYZ').addEventListener('click', () => { snapToYZ(); });
+    document.getElementById('graphDisp').addEventListener('click', toggleDispGraph);
+
+    // ===== 2D / 3D 切り替え =====
+    let viewMode = '3d';
+
+    function setView2D(){
+      viewMode = '2d';
+      // orthoCamera の位置を現在の controls.target 正面にセット
+      orthoCamera.position.set(controls.target.x, controls.target.y, controls.target.z + 20);
+      orthoCamera.lookAt(controls.target);
+      activeCamera = orthoCamera;
+      controls.object = orthoCamera;
+      controls.enableRotate = false;
+      controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+      controls.update();
+      gridXZ.visible = false;
+      document.getElementById('view2DBtn')?.classList.add('active');
+      document.getElementById('view3DBtn')?.classList.remove('active');
+    }
+
+    function setView3D(){
+      viewMode = '3d';
+      activeCamera = perspCamera;
+      controls.object = perspCamera;
+      controls.enableRotate = true;
+      controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+      controls.target.set(0, 5, 0);
+      perspCamera.position.set(6, 5, 10);
+      controls.update();
+      gridXZ.visible = true;
+      document.getElementById('view3DBtn')?.classList.add('active');
+      document.getElementById('view2DBtn')?.classList.remove('active');
+    }
+
+    document.getElementById('view2DBtn').addEventListener('click', setView2D);
+    document.getElementById('view3DBtn').addEventListener('click', setView3D);
+
+    // ===== リセット =====
+    function resetAll(){
+      if (placedSphere){
+        stopCircular(placedSphere);
+        const { r: spawnR } = readCircParams();
+        placedSphere.position.set(ORBIT_CENTER.x + spawnR, ORBIT_CENTER.y, ORBIT_CENTER.z);
+      }
+
+      if (centerDot)     { centerDot.visible     = false; centerDotVisible     = false; }
+      if (trajectoryLine){ trajectoryLine.visible = false; trajectoryVisible    = false; }
+      if (centerLineMesh){ centerLineMesh.visible = false; centerLineVisible    = false; }
+      if (velArrow)      { velArrow.visible       = false; showVelVector        = false; }
+      if (accelArrow)    { accelArrow.visible     = false; showAccelVector      = false; }
+      if (mirrorVelArrow){ mirrorVelArrow.visible = false; showMirrorVelVector  = false; }
+      if (velTipLine)    { velTipLine.visible     = false; }
+      ['toggleCenter','toggleTrajectory','toggleCenterLine',
+       'toggleVelVector','toggleAccelVector','toggleMirrorVelVector'].forEach(id => {
+        document.getElementById(id)?.classList.remove('active');
+      });
+
+      clearSnapshots();
+
+      clearInkAll();
+      clearShapeAll();
+      inkMode = 'none';
+      shapeMode = 'none';
+      document.getElementById('toolPen')?.classList.remove('active');
+      document.getElementById('toolEraser')?.classList.remove('active');
+      document.getElementById('toolCircle')?.classList.remove('active');
+      document.getElementById('toolArrow')?.classList.remove('active');
+
+      document.getElementById('circR').value     = '2';
+      document.getElementById('circOmega').value = (Math.PI / 2).toString();
+      document.getElementById('circOmega').style.visibility = 'visible';
+      document.getElementById('omegaLabel').style.display = 'none';
+      updateInfoPanel();
+      updateTrajectory();
+
+      controls.target.set(0, 5, 0);
+      controls.update();
+      viewTween = null;
+      if (viewMode === '2d') setView2D();
+      else setView3D();
+    }
+    document.getElementById('resetAll').addEventListener('click', resetAll);
+    let circStepEndSec = null;
+
+    document.getElementById('circStep').addEventListener('click', () => {
+      if (!placedSphere){ alert('先に「球を出す」を押してください。'); return; }
+      const { r, omega } = readCircParams();
+      startCircular(placedSphere, r, omega);
+      circStepEndSec = nowSec() + 1.0;
+    });
+    document.getElementById('saveSnapshot').addEventListener('click', toggleSnapshot);
+    document.getElementById('circToggle').addEventListener('click', () => {
+      if (!placedSphere){ alert('先に「球を出す」を押してください。'); return; }
+      const { r, omega } = readCircParams();
+      toggleCircular(placedSphere, r, omega);
+    });
+    document.getElementById('circR').addEventListener('input', () => {
+      const { r } = readCircParams();
+      updateInfoPanel();
+      updateTrajectory();
+      if (placedSphere && !placedSphere.userData.circ?.active) {
+        const dx = placedSphere.position.x - ORBIT_CENTER.x;
+        const dy = placedSphere.position.y - ORBIT_CENTER.y;
+        const theta = Math.atan2(dy, dx);
+        placedSphere.position.set(
+          ORBIT_CENTER.x + r * Math.cos(theta),
+          ORBIT_CENTER.y + r * Math.sin(theta),
+          ORBIT_CENTER.z
+        );
+      }
+    });
+    document.getElementById('circOmega').addEventListener('input', () => {
+      document.getElementById('omegaLabel').style.display = 'none';
+      document.getElementById('circOmega').style.visibility = 'visible';
+      updateInfoPanel();
+    });
+    document.getElementById('omegaLabel').addEventListener('click', () => {
+      document.getElementById('omegaLabel').style.display = 'none';
+      const inp = document.getElementById('circOmega');
+      inp.style.visibility = 'visible';
+      inp.focus();
+      inp.select();
+    });
+    updateInfoPanel();
+    spawnSphere(); // 起動時に球を自動生成
+
+    // ミラー球（常設・軌跡等の影響を受けない）
+    {
+      const geo = new THREE.SphereGeometry(0.25, 32, 16);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xffff00, metalness: 0.15, roughness: 0.55 });
+      mirrorSphere = new THREE.Mesh(geo, mat);
+      mirrorSphere.position.set(
+        ORBIT_CENTER.x + MIRROR_OFFSET_X,
+        placedSphere.position.y,
+        placedSphere.position.x - ORBIT_CENTER.x
+      );
+      scene.add(mirrorSphere);
+
+      // 二球をつなぐ点線
+      const linePts = [placedSphere.position.clone(), mirrorSphere.position.clone()];
+      const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+      const lineMat = new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.3, gapSize: 0.2 });
+      connectLine = new THREE.Line(lineGeo, lineMat);
+      connectLine.computeLineDistances();
+      scene.add(connectLine);
+    }
+
+    // ===== ω プリセットドロップダウン =====
+    const OMEGA_PRESETS = [
+      { label: 'π/6',  value: Math.PI / 6           },
+      { label: 'π/4',  value: Math.PI / 4           },
+      { label: 'π/3',  value: Math.PI / 3           },
+      { label: 'π/2',  value: Math.PI / 2           },
+      { label: '2π/3', value: 2 * Math.PI / 3       },
+      { label: '3π/4', value: 3 * Math.PI / 4       },
+      { label: '5π/6', value: 5 * Math.PI / 6       },
+      { label: 'π',    value: Math.PI               },
+    ];
+
+    const omegaMenu = document.createElement('div');
+    omegaMenu.style.cssText = [
+      'display:none',
+      'position:fixed',
+      'background:rgba(240,243,252,0.97)',
+      'border:1px solid rgba(70,90,160,0.30)',
+      'border-radius:12px',
+      'padding:4px',
+      'z-index:3000',
+      'min-width:108px',
+      'box-shadow:0 4px 20px rgba(0,0,0,.55)',
+    ].join(';');
+
+    OMEGA_PRESETS.forEach(preset => {
+      const item = document.createElement('button');
+      item.textContent = preset.label;
+      item.style.cssText = [
+        'display:block','width:100%','text-align:left',
+        'background:none','border:none','color:#1a2040',
+        'padding:6px 14px','cursor:pointer','border-radius:8px',
+        'font-size:13px',
+      ].join(';');
+      item.addEventListener('mouseenter', () => item.style.background = 'rgba(70,90,160,0.12)');
+      item.addEventListener('mouseleave', () => item.style.background = 'none');
+      item.addEventListener('click', () => {
+        document.getElementById('circOmega').value = preset.value.toString();
+        document.getElementById('circOmega').style.visibility = 'hidden';
+        const lbl = document.getElementById('omegaLabel');
+        lbl.textContent = preset.label;
+        lbl.style.display = 'flex';
+        updateInfoPanel();
+        updateTrajectory();
+        closeOmegaMenu();
+      });
+      omegaMenu.appendChild(item);
+    });
+    document.body.appendChild(omegaMenu);
+
+    let omegaMenuOpen = false;
+
+    function openOmegaMenu(){
+      const rect = document.getElementById('omegaPresetBtn').getBoundingClientRect();
+      omegaMenu.style.left = rect.left + 'px';
+      omegaMenu.style.top  = (rect.bottom + 4) + 'px';
+      omegaMenu.style.display = 'block';
+      omegaMenuOpen = true;
+    }
+    function closeOmegaMenu(){
+      omegaMenu.style.display = 'none';
+      omegaMenuOpen = false;
+    }
+
+    document.getElementById('omegaPresetBtn').addEventListener('click', ev => {
+      ev.stopPropagation();
+      omegaMenuOpen ? closeOmegaMenu() : openOmegaMenu();
+    });
+    document.addEventListener('click', () => { if (omegaMenuOpen) closeOmegaMenu(); });
+
+    function makeDisplayToggle(btnId, ensureFn, getObj, setVisible){
+      document.getElementById(btnId).addEventListener('click', () => {
+        ensureFn();
+        const next = !getObj().visible;
+        getObj().visible = next;
+        setVisible(next);
+        document.getElementById(btnId).classList.toggle('active', next);
+      });
+    }
+    makeDisplayToggle('toggleCenter',
+      ensureCenterDot,
+      () => centerDot,
+      v => { centerDotVisible = v; }
+    );
+    makeDisplayToggle('toggleTrajectory',
+      ensureTrajectory,
+      () => trajectoryLine,
+      v => { trajectoryVisible = v; if (v) updateTrajectory(); }
+    );
+    makeDisplayToggle('toggleCenterLine',
+      ensureCenterLine,
+      () => centerLineMesh,
+      v => { centerLineVisible = v; }
+    );
+
+    document.getElementById('toggleVelVector').addEventListener('click', () => {
+      showVelVector = !showVelVector;
+      document.getElementById('toggleVelVector').classList.toggle('active', showVelVector);
+      vectorsDirty = true;
+      updateVectors();
+    });
+    document.getElementById('toggleAccelVector').addEventListener('click', () => {
+      showAccelVector = !showAccelVector;
+      document.getElementById('toggleAccelVector').classList.toggle('active', showAccelVector);
+      vectorsDirty = true;
+      updateVectors();
+    });
+    document.getElementById('toggleMirrorVelVector').addEventListener('click', () => {
+      showMirrorVelVector = !showMirrorVelVector;
+      document.getElementById('toggleMirrorVelVector').classList.toggle('active', showMirrorVelVector);
+      vectorsDirty = true;
+      updateVectors();
+    });
+
+    // ===== 道具箱の開閉 =====
+    (function setupToolboxToggle(){
+      const panel = document.getElementById('toolboxPanel');
+      const btn = document.getElementById('toolboxToggle');
+      if (!panel || !btn) return;
+
+      let open = true;
+
+      function apply(){
+        panel.classList.toggle('is-collapsed', !open);
+        btn.textContent = open ? '＜' : '＞';
+        btn.setAttribute('aria-expanded', String(open));
+      }
+
+      apply();
+
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        open = !open;
+        apply();
+      });
+    })();
+
+    // ===== リサイズ＆描画ループ =====
+    // hor+: 16:9基準で水平方向の見え方を固定するためのFOV計算
+    const BASE_FOV    = 50;
+    const BASE_ASPECT = 16 / 9;
+    const BASE_H_HALF = FRUSTUM_SIZE * BASE_ASPECT / 2; // 直交投影の基準水平半幅
+    function hPlusFov(aspect){
+      return aspect >= BASE_ASPECT
+        ? BASE_FOV
+        : 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * BASE_ASPECT / aspect) * 180 / Math.PI;
+    }
+    function resize(){
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      const aspect = w / h;
+      if (aspect >= BASE_ASPECT) {
+        // 横長：横を広げる（設計通り）
+        orthoCamera.left   = -FRUSTUM_SIZE * aspect / 2;
+        orthoCamera.right  =  FRUSTUM_SIZE * aspect / 2;
+        orthoCamera.top    =  FRUSTUM_SIZE / 2;
+        orthoCamera.bottom = -FRUSTUM_SIZE / 2;
+      } else {
+        // 縦長：横幅を16:9基準に固定し、縦を広げる
+        orthoCamera.left   = -BASE_H_HALF;
+        orthoCamera.right  =  BASE_H_HALF;
+        orthoCamera.top    =  BASE_H_HALF / aspect;
+        orthoCamera.bottom = -BASE_H_HALF / aspect;
+      }
+      orthoCamera.updateProjectionMatrix();
+      perspCamera.fov    = hPlusFov(aspect);
+      perspCamera.aspect = aspect;
+      perspCamera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function drawDispGraph(){
+      if (!dispGraphCtx || !dispGraphCanvas || !dispGraphTexture) return;
+      const ctx = dispGraphCtx;
+      const W = dispGraphCanvas.width, H = dispGraphCanvas.height;
+      const mL = 96, mR = 28, mT = 28, mB = 86;
+      const x0 = mL, y0 = H - mB, x1 = W - mR, y1 = mT;
+
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(12, 18, 30, 0.88)';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.strokeStyle = 'rgba(200, 220, 255, 0.30)';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x0, y1, x1 - x0, y0 - y1);
+
+      ctx.strokeStyle = 'rgba(200, 220, 255, 0.10)';
+      ctx.lineWidth = 2;
+      for (let i = 1; i < 10; i++){
+        const x = x0 + (x1 - x0) * (i / 10);
+        ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y0); ctx.stroke();
+      }
+      for (let j = 1; j < 6; j++){
+        const y = y0 - (y0 - y1) * (j / 6);
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+      }
+
+      ctx.strokeStyle = 'rgba(232, 238, 252, 0.95)';
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(x1, y0); ctx.lineTo(x0 - 10, y0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y1 - 10); ctx.stroke();
+
+      const xMin = -6, xMax = 6;
+      const yZero = y0 - ((0 - xMin) / (xMax - xMin)) * (y0 - y1);
+      ctx.strokeStyle = 'rgba(232, 238, 252, 0.35)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x0, yZero); ctx.lineTo(x1, yZero); ctx.stroke();
+
+      ctx.fillStyle = 'rgba(167, 178, 201, 0.95)';
+      ctx.font = '20px system-ui,-apple-system,Segoe UI,sans-serif';
+      const tEnd = dispTime, tStart = Math.max(0, tEnd - DISP_TIME_WINDOW);
+      ctx.fillText(`${tEnd.toFixed(1)}s`,   x0,       y0 + 34);
+      ctx.fillText(`${tStart.toFixed(1)}s`, x1 - 86,  y0 + 34);
+      ctx.fillText(`${xMax.toFixed(1)}`,    x0 - 72,  y1 + 10);
+      ctx.fillText('0',                     x0 - 30,  yZero + 8);
+      ctx.fillText(`${xMin.toFixed(1)}`,    x0 - 72,  y0 + 10);
+
+      if (dispData.length >= 2){
+        ctx.strokeStyle = 'rgba(120, 190, 255, 0.95)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        let started = false;
+        for (let i = dispData.length - 1; i >= 0; i--){
+          const p = dispData[i];
+          if (p.t < tStart || p.t > tEnd) continue;
+          const u = (tEnd - p.t) / DISP_TIME_WINDOW;
+          if (u < 0 || u > 1) continue;
+          const sx = x0 + u * (x1 - x0);
+          const sv = (p.x - xMin) / (xMax - xMin);
+          const sy = y0 - sv * (y0 - y1);
+          if (!started){ ctx.moveTo(sx, sy); started = true; }
+          else { ctx.lineTo(sx, sy); }
+        }
+        if (started) ctx.stroke();
+      }
+      dispGraphDirty = true;
+    }
+
+    function ensureDispGraph(){
+      if (dispGraphGroup) return;
+      dispGraphCanvas = document.createElement('canvas');
+      dispGraphCanvas.width = 1024;
+      dispGraphCanvas.height = 512;
+      dispGraphCtx = dispGraphCanvas.getContext('2d');
+      dispGraphTexture = new THREE.CanvasTexture(dispGraphCanvas);
+      dispGraphTexture.colorSpace = THREE.SRGBColorSpace;
+      drawDispGraph();
+      const mat = new THREE.MeshBasicMaterial({ map: dispGraphTexture, transparent: true, side: THREE.DoubleSide });
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(DISP_GRAPH_WIDTH, DISP_GRAPH_HEIGHT), mat);
+      dispGraphPlaneMesh = plane;
+      dispGraphGroup = new THREE.Group();
+      dispGraphGroup.position.copy(DISP_GRAPH_CENTER);
+      dispGraphGroup.add(plane);
+      dispGraphGroup.visible = false;
+      scene.add(dispGraphGroup);
+      const handles = makeDispCornerHandles(plane);
+      dispEntry = { group: dispGraphGroup, planeMesh: plane, handles };
+    }
+
+    function toggleDispGraph(){
+      ensureDispGraph();
+      dispGraphVisible = !dispGraphVisible;
+      dispGraphGroup.visible = dispGraphVisible;
+      document.getElementById('graphDisp')?.classList.toggle('active', dispGraphVisible);
+      if (dispGraphVisible){
+        dispLastTickSec = nowSec();
+        dispData = [];
+        dispTime = 0;
+        dispLastSampleT = -1e9;
+        drawDispGraph();
+      }
+    }
+
+    function updateDispGraphTick(tNow){
+      if (!dispGraphVisible) return;
+      const dt = Math.max(0, tNow - dispLastTickSec);
+      dispLastTickSec = tNow;
+      const circ = placedSphere?.userData?.circ;
+      if (!placedSphere || !circ || !circ.active) return;
+      dispTime += dt;
+      if ((dispTime - dispLastSampleT) < DISP_SAMPLE_DT) return;
+      dispLastSampleT = dispTime;
+      dispData.push({ t: dispTime, x: placedSphere.position.y - ORBIT_CENTER.y });
+      const tMinKeep = Math.max(0, dispTime - DISP_TIME_WINDOW);
+      while (dispData.length && dispData[0].t < tMinKeep) dispData.shift();
+      drawDispGraph();
+    }
+
+    // ===== 変位グラフ ドラッグ・リサイズ関数 =====
+    function getDispCornerWorld(planeMesh, corner){
+      const [sx, sy] = DISP_CORNER_DIRS[corner];
+      _dcLocal.set(sx * DISP_GRAPH_WIDTH / 2, sy * DISP_GRAPH_HEIGHT / 2, 0);
+      return planeMesh.localToWorld(_dcWorld.copy(_dcLocal));
+    }
+
+    function makeDispCornerHandles(plane){
+      const handles = [];
+      for (const corner of ['BL','BR','TL','TR']){
+        const [sx, sy] = DISP_CORNER_DIRS[corner];
+        const h = new THREE.Mesh(
+          new THREE.SphereGeometry(0.09, 12, 8),
+          new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        h.position.set(sx * DISP_GRAPH_WIDTH / 2, sy * DISP_GRAPH_HEIGHT / 2, 0.02);
+        h.visible = false;
+        h.userData.corner = corner;
+        plane.add(h);
+        handles.push(h);
+      }
+      return handles;
+    }
+
+    function selectDispGraph(entry){
+      if (selectedDispEntry && selectedDispEntry !== entry){
+        for (const h of selectedDispEntry.handles) h.visible = false;
+      }
+      selectedDispEntry = entry;
+      if (entry) for (const h of entry.handles) h.visible = true;
+    }
+
+    function deselectDispGraph(){
+      if (selectedDispEntry){
+        for (const h of selectedDispEntry.handles) h.visible = false;
+      }
+      selectedDispEntry = null;
+    }
+
+    function tryStartDispResize(ev){
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+      let hitEntry = null, hitCorner = null;
+      if (selectedDispEntry){
+        for (const h of selectedDispEntry.handles){
+          if (h.visible && raycaster.intersectObject(h, false).length){
+            hitEntry  = selectedDispEntry;
+            hitCorner = h.userData.corner;
+            break;
+          }
+        }
+      }
+      if (!hitEntry) return false;
+      if (!raycaster.ray.intersectPlane(DISP_DRAG_PLANE, _drHit)) return false;
+      _drHit.z = 0;
+      dispResizeAnchorCorner = DISP_OPPOSITE_CORNER[hitCorner];
+      _dispAnchor.copy(getDispCornerWorld(hitEntry.planeMesh, dispResizeAnchorCorner));
+      dispStartScale = hitEntry.planeMesh.scale.x;
+      const [dx, dy] = DISP_CORNER_DIRS[hitCorner];
+      hitEntry.planeMesh.getWorldQuaternion(_drQ);
+      _drWidthDir.set(dx, 0, 0).applyQuaternion(_drQ).normalize();
+      _drHeightDir.set(0, dy, 0).applyQuaternion(_drQ).normalize();
+      _drDelta.copy(_drHit).sub(_dispAnchor);
+      const w0 = Math.max(0, _drDelta.dot(_drWidthDir));
+      const h0 = Math.max(0, _drDelta.dot(_drHeightDir));
+      dispStartProj = w0 * _dispUnitW + h0 * _dispUnitH;
+      if (dispStartProj < 1e-6) dispStartProj = 1e-6;
+      dispResizeEntry      = hitEntry;
+      dispResizing         = true;
+      dispResizePointerId  = ev.pointerId ?? null;
+      controls.enabled     = false;
+      try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+      ev.preventDefault();
+      ev.stopPropagation();
+      return true;
+    }
+
+    function updateDispResize(ev){
+      if (!dispResizing || !dispResizeEntry) return;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+      if (!raycaster.ray.intersectPlane(DISP_DRAG_PLANE, _drHit)) return;
+      _drHit.z = 0;
+      _drDelta.copy(_drHit).sub(_dispAnchor);
+      const w = Math.max(0, _drDelta.dot(_drWidthDir));
+      const h = Math.max(0, _drDelta.dot(_drHeightDir));
+      const proj = w * _dispUnitW + h * _dispUnitH;
+      let newScale = dispStartScale * (proj / dispStartProj);
+      newScale = Math.max(DISP_SCALE_MIN, Math.min(DISP_SCALE_MAX, newScale));
+      dispResizeEntry.planeMesh.scale.set(newScale, newScale, newScale);
+      dispResizeEntry.planeMesh.updateMatrixWorld(true);
+      const newAnchor = getDispCornerWorld(dispResizeEntry.planeMesh, dispResizeAnchorCorner);
+      _drShift.copy(_dispAnchor).sub(newAnchor);
+      dispResizeEntry.group.position.add(_drShift);
+      dispResizeEntry.group.position.z = 0;
+      dispResizeEntry.group.updateMatrixWorld(true);
+      ev.preventDefault();
+    }
+
+    function endDispResize(ev){
+      if (!dispResizing) return;
+      dispResizing    = false;
+      dispResizeEntry = null;
+      controls.enabled = true;
+      if (ev?.pointerId != null){
+        try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+      }
+      dispResizePointerId = null;
+    }
+
+    function tryStartDispDrag(ev){
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+      let hitEntry = null;
+      if (dispEntry && dispGraphGroup?.visible && dispGraphPlaneMesh){
+        if (raycaster.intersectObject(dispGraphPlaneMesh, false).length) hitEntry = dispEntry;
+      }
+      if (!hitEntry) return false;
+      selectDispGraph(hitEntry);
+      if (!raycaster.ray.intersectPlane(DISP_DRAG_PLANE, _dHit)) return false;
+      _dHit.z = 0;
+      _dispDragOffset.copy(hitEntry.group.position).sub(_dHit);
+      dispDragEntry      = hitEntry;
+      dispDragging       = true;
+      dispDragPointerId  = ev.pointerId ?? null;
+      controls.enabled   = false;
+      try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+      ev.preventDefault();
+      ev.stopPropagation();
+      return true;
+    }
+
+    function updateDispDrag(ev){
+      if (!dispDragging || !dispDragEntry) return;
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, activeCamera);
+      if (!raycaster.ray.intersectPlane(DISP_DRAG_PLANE, _dHit)) return;
+      _dHit.z = 0;
+      const newPos = _dHit.clone().add(_dispDragOffset);
+      dispDragEntry.group.position.set(newPos.x, newPos.y, 0);
+      ev.preventDefault();
+    }
+
+    function endDispDrag(ev){
+      if (!dispDragging) return;
+      dispDragging      = false;
+      dispDragEntry     = null;
+      controls.enabled  = true;
+      if (ev?.pointerId != null){
+        try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+      }
+      dispDragPointerId = null;
+    }
+
+    function tick(){
+      requestAnimationFrame(tick);
+      controls.update();
+      const t = nowSec();
+      updateViewSnap(t);
+      if (circStepEndSec !== null && t >= circStepEndSec) {
+        const d = placedSphere?.userData?.circ;
+        if (d && d.active) {
+          const exactTheta = d.startTheta + d.omega * 1.0;
+          stopCircular(placedSphere);
+          placedSphere.position.set(
+            ORBIT_CENTER.x + d.r * Math.cos(exactTheta),
+            ORBIT_CENTER.y + d.r * Math.sin(exactTheta),
+            ORBIT_CENTER.z
+          );
+        }
+        vectorsDirty = true;
+        circStepEndSec = null;
+      }
+      for (const obj of placedGroup.children) updateCircular(obj, t);
+      // ミラー球を主球に同期（X変位→Z方向に変換してXY視点で単振動に見せる）
+      if (placedSphere && mirrorSphere){
+        mirrorSphere.position.set(
+          ORBIT_CENTER.x + MIRROR_OFFSET_X,
+          placedSphere.position.y,
+          placedSphere.position.x - ORBIT_CENTER.x
+        );
+        // 点線を両球の位置に追従
+        if (connectLine){
+          connectLine.geometry.setFromPoints([placedSphere.position, mirrorSphere.position]);
+          connectLine.computeLineDistances();
+        }
+      }
+      updateCenterLine();
+      updateVectors();
+      updateDispGraphTick(t);
+      if (inkDirty)      { if (inkBoardTexture)    inkBoardTexture.needsUpdate    = true; inkDirty      = false; }
+      if (shapeDirty)    { if (shapeBoardTexture)  shapeBoardTexture.needsUpdate  = true; shapeDirty    = false; }
+      if (dispGraphDirty){ if (dispGraphTexture)   dispGraphTexture.needsUpdate   = true; dispGraphDirty = false; }
+      renderer.render(scene, activeCamera);
+    }
+    tick();
+  </script>
+</body>
+</html>

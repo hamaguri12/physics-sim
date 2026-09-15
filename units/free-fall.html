@@ -1,0 +1,3212 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>落体の運動｜平面運動｜力学｜高校物理シミュ集</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:rgba(240,243,252,0.95);
+      --border:rgba(70,90,160,0.30);
+      --text:#1a2040;
+      --muted:#5566aa;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    #app{position:fixed;inset:0;overflow:hidden}
+
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+    /* 上バー */
+    .topbar{
+      position:absolute;left:0;top:0;right:0;z-index:5;
+      display:flex;gap:8px;align-items:center;
+      padding:10px 12px;
+      background:linear-gradient(to bottom,rgba(0,0,0,.35),rgba(0,0,0,0));
+      pointer-events:none;
+    }
+    .topbar a,.topbar button,.topbar .pill{pointer-events:auto}
+    .btn,.pill{
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);
+      border-radius:12px;
+      padding:8px 10px;
+      font-size:12px;
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .btn:hover{opacity:.9}
+    .btn:disabled{opacity:.35;cursor:not-allowed}
+    .pill{cursor:default;color:var(--muted)}
+    .btn.active{outline:2px solid rgba(120,170,255,.6);outline-offset:-2px}
+
+    /* 道具箱パネル */
+    #toolboxPanel{
+      position:fixed;
+      left:16px;top:72px;
+      z-index:1000;
+      transition:transform 180ms ease;
+      transform:translateX(0);
+      min-height:48px;
+      overflow:hidden auto;              /* 中身が画面より長いときは縦にスクロール（横は出さない） */
+      overscroll-behavior:contain;
+      max-height:calc(100vh - 108px);   /* 上 72px・下 10px に収める（padding 24px と枠 2px のぶんを引く） */
+    }
+    #toolboxPanel.is-collapsed{
+      transform:translateX(calc(-100% + 36px));
+      overflow:hidden;
+    }
+    #toolboxPanel.is-collapsed > :not(#toolboxToggle){display:none !important}
+
+    #toolboxToggle{
+      position:absolute;top:10px;right:10px;
+      width:28px;height:28px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(20,28,45,.75);
+      color:rgba(235,242,255,.95);
+      cursor:pointer;
+      display:grid;place-items:center;
+      font-weight:700;line-height:1;
+    }
+    #toolboxPanel.is-collapsed #toolboxToggle{right:4px}
+
+    .sidebar{
+      width:200px;max-width:85vw;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      backdrop-filter:blur(6px);
+    }
+    .h{font-weight:800;font-size:13px;margin:0 0 8px}
+    .group{margin:10px 0 12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .row .btn{flex:1;justify-content:center}
+
+    /* 参考動画モーダル */
+    .vmodal{
+      position:fixed;inset:0;z-index:2000;
+      background:var(--bg);
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+    }
+    .vmodal-close{
+      position:absolute;top:16px;right:16px;
+      width:36px;height:36px;border-radius:50%;
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);font-size:16px;
+      cursor:pointer;display:grid;place-items:center;
+    }
+    .vmodal-close:hover{opacity:.8}
+    .vmodal-home{
+      display:flex;flex-direction:column;align-items:center;
+    }
+    .vmodal-title{
+      font-size:22px;font-weight:800;
+      margin:0 0 28px;color:var(--text);
+    }
+    .vmodal-btns{display:flex;flex-direction:column;gap:14px;}
+    .vmodal-vbtn{
+      padding:18px 48px;font-size:15px;font-weight:700;
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);border-radius:14px;cursor:pointer;
+    }
+    .vmodal-vbtn:hover{opacity:.8}
+    .vmodal-ref{
+      margin:4px 0 0;font-size:12px;color:var(--muted);text-align:center;
+    }
+    .vmodal-ref a{color:var(--muted);text-decoration:none;}
+    .vmodal-ref a:hover{text-decoration:underline;}
+    .vmodal-player{
+      display:flex;flex-direction:column;align-items:center;
+      width:90vw;max-width:900px;
+    }
+    .vmodal-back{
+      align-self:flex-start;margin-bottom:14px;
+      padding:8px 16px;
+      border:1px solid var(--border);background:var(--panel);
+      color:var(--text);border-radius:10px;font-size:13px;cursor:pointer;
+    }
+    .vmodal-back:hover{opacity:.85}
+    .vmodal-ptitle{
+      font-size:17px;font-weight:700;margin:0 0 14px;color:var(--text);
+    }
+    #vmVideo{
+      width:100%;border-radius:12px;
+      max-height:70vh;background:#000;
+    }
+
+    /* 重力マップ モーダル */
+    #gravityModal{
+      display:none;position:fixed;inset:0;z-index:3000;
+      background:#ffffff;
+      animation:gModalIn .25s ease;
+    }
+    #gravityModal.show{ display:block; }
+    @keyframes gModalIn{ from{opacity:0} to{opacity:1} }
+    #gravityModal iframe{
+      width:100%;height:100%;border:none;display:block;
+    }
+    #gravityModalClose{
+      position:fixed;top:14px;right:18px;z-index:3100;
+      background:rgba(240,243,252,0.95);border:1px solid rgba(70,90,160,0.30);
+      color:#1a2040;font-size:18px;line-height:1;padding:7px 11px;border-radius:8px;
+      cursor:pointer;backdrop-filter:blur(8px);transition:background .15s;
+    }
+    #gravityModalClose:hover{ background:rgba(200,210,240,0.80); }
+
+    /* 自動シミュレーション ナビ */
+    #autoNav{
+      display:none;
+      position:fixed;bottom:24px;left:16px;
+      z-index:1500;
+      align-items:center;gap:16px;
+    }
+    .auto-nav-btn{
+      width:48px;height:48px;border-radius:50%;
+      border:1px solid rgba(255,255,255,.25);
+      background:var(--panel);
+      color:var(--text);font-size:22px;font-weight:700;
+      cursor:pointer;display:grid;place-items:center;
+      backdrop-filter:blur(6px);
+    }
+    .auto-nav-btn:hover{background:rgba(50,80,140,.85)}
+    .auto-nav-btn:disabled{opacity:.3;cursor:not-allowed}
+    .auto-scene-label{
+      font-size:13px;color:var(--muted);
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:10px;padding:6px 14px;
+      backdrop-filter:blur(6px);
+      white-space:nowrap;
+    }
+    .auto-center{
+      display:flex;flex-direction:column;align-items:center;gap:8px;
+    }
+    #autoExit{
+      position:fixed;top:10px;right:10px;z-index:1500;
+      display:none;
+    }
+
+    /* 自動モード タイマー */
+    #autoTimer{
+      display:none;
+      position:fixed;top:60px;left:16px;
+      z-index:1500;
+      font-size:36px;font-weight:700;
+      color:var(--text);
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:8px 16px;
+      backdrop-filter:blur(6px);
+      font-variant-numeric:tabular-nums;
+    }
+
+    /* 通常モード タイマー */
+    #normalTimer{
+      display:none;
+      position:fixed;top:60px;right:16px;
+      z-index:1500;
+      font-size:36px;font-weight:700;
+      color:var(--text);
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:8px 16px;
+      backdrop-filter:blur(6px);
+      font-variant-numeric:tabular-nums;
+      cursor:move;
+      user-select:none;
+      white-space:nowrap;
+    }
+    #ntResize{
+      display:inline-block;
+      font-size:13px;
+      color:var(--muted);
+      cursor:nwse-resize;
+      opacity:0.45;
+      vertical-align:bottom;
+      margin-left:6px;
+    }
+    #ntResize:hover{ opacity:1; }
+
+    /* 右下ヘルプ */
+    .help{
+      position:absolute;right:10px;bottom:10px;z-index:6;
+      background:rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:14px;
+      padding:10px 12px;
+      font-size:12px;
+      color:var(--muted);
+      max-width:320px;
+    }
+    .help b{color:var(--text)}
+
+
+    /* 音量コントロール */
+    #volumeControl{
+      position:fixed;bottom:62px;right:16px;z-index:8;
+      display:flex;align-items:center;gap:8px;
+      background:rgba(20,24,40,0.82);border:1px solid rgba(255,255,255,0.14);
+      border-radius:24px;padding:7px 14px 7px 10px;
+      backdrop-filter:blur(8px);
+    }
+    #volMuteBtn{
+      background:none;border:none;cursor:pointer;padding:0;
+      color:rgba(255,255,255,0.90);display:flex;align-items:center;
+      flex-shrink:0;
+    }
+    #volMuteBtn:hover{ color:#fff }
+    #volSlider{
+      -webkit-appearance:none;appearance:none;
+      width:130px;height:4px;border-radius:2px;outline:none;cursor:pointer;
+      background:linear-gradient(to right,
+        #3b9eff 0%, #3b9eff var(--vp,50%),
+        rgba(255,255,255,0.22) var(--vp,50%), rgba(255,255,255,0.22) 100%);
+    }
+    #volSlider::-webkit-slider-thumb{
+      -webkit-appearance:none;width:16px;height:16px;
+      border-radius:50%;background:#fff;cursor:pointer;
+      box-shadow:0 1px 4px rgba(0,0,0,0.4);
+    }
+    #volSlider::-moz-range-thumb{
+      width:16px;height:16px;border:none;
+      border-radius:50%;background:#fff;cursor:pointer;
+    }
+
+    /* splitAuto起動時のフラッシュ防止 */
+    .split-auto-loading #c,
+    .split-auto-loading .topbar,
+    .split-auto-loading #toolboxPanel,
+    .split-auto-loading #normalTimer { visibility:hidden }
+    .split-auto-loading #volumeControl { display:none }
+
+    /* 二窓オーバーレイ */
+    #splitOverlay{
+      display:none;position:fixed;inset:0;z-index:9999;background:#000;
+    }
+    #splitOverlay.show{display:flex}
+    #splitOverlay iframe{flex:1;border:none;height:100%}
+    .split-divider{width:6px;background:#1e2d48;flex-shrink:0;cursor:col-resize}
+    .split-divider:hover{background:#2a4a7a}
+    #splitClose{
+      position:absolute;top:10px;right:10px;
+      z-index:10000;white-space:nowrap;pointer-events:auto;
+    }
+
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+
+  <!-- 上バー -->
+  <div class="topbar">
+    <a class="btn" href="../mechanics-planar.html">← 平面運動へ</a>
+    <span class="pill">落体の運動</span>
+    <button class="btn" id="btnVideoRef">🎬 動画</button>
+    <button class="btn" id="btnAutoSim">▶ アニメーション解説</button>
+    <button class="btn" id="btnGravityMap">🌍 重力マップ</button>
+    <button class="btn" id="btnSplitView">⊡ 2画面表示</button>
+  </div>
+
+  <!-- 二窓オーバーレイ -->
+  <div id="splitOverlay">
+    <iframe id="splitLeft"></iframe>
+    <div class="split-divider"></div>
+    <iframe id="splitRight"></iframe>
+    <button class="btn" id="splitClose">✕ 閉じる</button>
+  </div>
+
+  <!-- 重力マップ モーダル -->
+  <div id="gravityModal">
+    <button id="gravityModalClose">✕</button>
+    <iframe id="gravityFrame" allowfullscreen></iframe>
+  </div>
+
+  <!-- 自動シミュレーション ナビ -->
+  <button class="btn" id="autoExit">✕ 通常に戻る</button>
+  <div id="autoTimer">t = 0.00 s</div>
+  <div id="normalTimer"><span id="ntText">t = 0.00 s</span><span id="ntResize" title="ドラッグでサイズ変更">◢</span></div>
+  <div id="autoNav">
+    <button class="auto-nav-btn" id="autoPrev">＜</button>
+    <div class="auto-center">
+      <button class="auto-nav-btn" id="autoPlay">▶</button>
+      <span class="auto-scene-label" id="autoSceneLabel">1 / 1</span>
+    </div>
+    <button class="auto-nav-btn" id="autoNext">＞</button>
+  </div>
+
+  <!-- 参考動画モーダル -->
+  <div id="videoModal" class="vmodal" style="display:none">
+    <button class="vmodal-close" id="vmClose">✕</button>
+
+    <div id="vmHome" class="vmodal-home">
+      <p class="vmodal-title">参考動画</p>
+      <div class="vmodal-btns">
+        <button class="vmodal-vbtn" id="vmBtnAir">空気中の自由落下</button>
+        <button class="vmodal-vbtn" id="vmBtnVac">真空中の自由落下</button>
+        <p class="vmodal-ref">参考：<a href="https://www.youtube.com/watch?v=E43-CfukEgs" target="_blank" rel="noopener">https://www.youtube.com/watch?v=E43-CfukEgs</a></p>
+      </div>
+    </div>
+
+    <div id="vmPlayer" class="vmodal-player" style="display:none">
+      <button class="vmodal-back" id="vmBack">← 戻る</button>
+      <p class="vmodal-ptitle" id="vmPlayerTitle"></p>
+      <p class="vmodal-ref">参考：<a href="https://www.youtube.com/watch?v=E43-CfukEgs" target="_blank" rel="noopener">https://www.youtube.com/watch?v=E43-CfukEgs</a></p>
+      <video id="vmVideo" controls></video>
+    </div>
+  </div>
+
+  <!-- 道具箱 -->
+  <aside class="sidebar" id="toolboxPanel">
+    <button id="toolboxToggle" type="button" aria-expanded="true">＜</button>
+    <p class="h">道具箱</p>
+
+    <div class="group">
+      <div class="row">
+        <button class="btn" id="btnDrop">▶ 落とす</button>
+        <button class="btn" id="btnReset">↺ リセット</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnStrobe">📷 ストロボ写真</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnVelVec">速度ベクトル</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <p class="h">視点</p>
+      <div class="row">
+        <button class="btn" id="btnViewXY">正面から見る</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <p class="h">グラフ</p>
+      <div class="row">
+        <button class="btn" id="btnVtGraph">v-tグラフ</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnYtGraph">y-tグラフ</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <p class="h">図形</p>
+      <div class="row">
+        <button class="btn" id="toolPen">ペン</button>
+        <button class="btn" id="toolEraser">消しゴム</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="inkClear">ペンを全消し</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="toolArrow">矢印</button>
+        <button class="btn" id="shapeClear">矢印を全消し</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="shapeDeleteSelected" style="display:none">選択図形を消す</button>
+      </div>
+    </div>
+  </aside>
+
+
+  <!-- 左下ヘルプ -->
+  <div class="help">
+    <b>ドラッグ</b> 視点回転 &nbsp;|&nbsp; <b>ホイール</b> ズーム
+  </div>
+
+  <!-- 音量コントロール -->
+  <div id="volumeControl">
+    <button id="volMuteBtn" title="ミュート切替">
+      <svg id="volIcon" width="22" height="22" viewBox="0 0 24 24">
+        <!-- スピーカー本体 -->
+        <path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor"/>
+        <!-- 音波（通常時） -->
+        <g id="volWaves">
+          <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/>
+          <path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" fill="currentColor"/>
+        </g>
+        <!-- ×（ミュート時） -->
+        <g id="volMuteX" style="display:none">
+          <line x1="15" y1="9" x2="21" y2="15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="21" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+      </svg>
+    </button>
+    <input type="range" id="volSlider" min="0" max="100" value="50">
+  </div>
+</div>
+
+<script>
+if (location.search.includes('splitAuto=1')) {
+  document.documentElement.classList.add('split-auto-loading');
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── レンダラー ──────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// ── シーン ──────────────────────────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+scene.fog = new THREE.Fog(0xffffff, 120, 250);
+
+// ── カメラ ──────────────────────────────────────────────────────────────────
+const BASE_FOV    = 50;
+const BASE_ASPECT = 16 / 9;
+let _fixedFov = false; // splitNormal時はFOV固定
+function hPlusFov(aspect) {
+  return aspect >= BASE_ASPECT
+    ? BASE_FOV
+    : 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * BASE_ASPECT / aspect) * 180 / Math.PI;
+}
+const camera = new THREE.PerspectiveCamera(BASE_FOV, BASE_ASPECT, 0.1, 500);
+camera.position.set(0, 23.5, 52);
+scene.add(camera); // camera子要素（描画ボード）をシーングラフに含めるために必要
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  const aspect = w / h;
+  camera.fov    = _fixedFov ? camera.fov : hPlusFov(aspect);
+  camera.aspect = aspect;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── OrbitControls ───────────────────────────────────────────────────────────
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.12;
+controls.target.set(0, 23.5, 0);
+controls.update();
+
+// ── ライト ──────────────────────────────────────────────────────────────────
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(8, 20, 10);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.near = 0.5;
+dirLight.shadow.camera.far  = 80;
+dirLight.shadow.camera.left = dirLight.shadow.camera.bottom = -20;
+dirLight.shadow.camera.right = dirLight.shadow.camera.top  =  20;
+scene.add(dirLight);
+
+
+// 方眼グリッド（Z=0 XY鉛直面）
+let xyGrid = new THREE.GridHelper(60, 60, 0xd0dcf0, 0xeceff9);
+xyGrid.rotation.x = Math.PI / 2;
+xyGrid.position.y = 30;
+scene.add(xyGrid);
+
+// ── ボール ──────────────────────────────────────────────────────────────────
+const BALL_RADIUS  = 0.5;
+const BALL_START_Y     = 44.6; // ½·g·t² + r = ½·9.8·9 + 0.5  → t=3s でちょうど着地
+const AUTO_BALL_START_Y = 78.9; // ½·g·t² + r = ½·9.8·16 + 0.5 → t=4s (自動モード用)
+
+const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 32, 24);
+const ballMat = new THREE.MeshPhongMaterial({ color: 0xff5500, specular: 0xff9966, shininess: 90 });
+const ball = new THREE.Mesh(ballGeo, ballMat);
+ball.castShadow = true;
+scene.add(ball);
+
+// ── クレーンアーム ───────────────────────────────────────────────────────────
+const clawGroup = new THREE.Group();
+scene.add(clawGroup);
+
+const pinkMat = new THREE.MeshPhongMaterial({ color: 0x0088ff, specular: 0x88ccff, shininess: 80 });
+const grayMat = new THREE.MeshPhongMaterial({ color: 0x00aa44, specular: 0x66cc99, shininess: 70 });
+const darkMat = new THREE.MeshPhongMaterial({ color: 0x1a2e88, specular: 0x4455aa, shininess: 30 });
+
+// ── 寸法定数（ボール中心 y=BY を基準に上方向へ積み上げ）──────────────────────
+const BY        = BALL_START_Y;         // 20
+const BODY_SX   = 0.90;                 // ボディの x/z スケール
+const BODY_SY   = 0.52;                 // ボディの y スケール
+const BODY_Y    = BY + BALL_RADIUS + BODY_SY + 0.18; // ボール上端より0.18隙間 → 21.20
+const BODY_TOP  = BODY_Y + BODY_SY;    // 21.72
+const DOME_R    = 0.28;
+const DOME_Y    = BODY_TOP;            // ドームの平面部分 = ボディ上端
+const WIRE_LEN  = 5.0;
+const WIRE_Y    = DOME_Y + DOME_R + WIRE_LEN * 0.5; // 21.72+0.28+2.5 = 24.50
+
+// ワイヤー（画面上へ）
+const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, WIRE_LEN, 10), grayMat);
+wire.position.set(0, WIRE_Y, 0);
+clawGroup.add(wire);
+
+// 小ドーム：平面をボディ上端に合わせ、上半球のみ
+const topDome = new THREE.Mesh(
+  new THREE.SphereGeometry(DOME_R, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5),
+  pinkMat
+);
+topDome.position.set(0, DOME_Y, 0);
+clawGroup.add(topDome);
+
+// メインボディ（横長楕円体）
+const body = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), pinkMat);
+body.scale.set(BODY_SX, BODY_SY, BODY_SX * 0.58);
+body.position.set(0, BODY_Y, 0);
+clawGroup.add(body);
+
+// ── 2点間シリンダーヘルパー ─────────────────────────────────────────────────
+function makeCylBetween(r, from, to, mat) {
+  const dir = new THREE.Vector3().subVectors(to, from);
+  const len = dir.length();
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 10), mat);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  mesh.position.copy(from).lerp(to, 0.5);
+  return mesh;
+}
+
+// ── アーム 2本（±X、ピボットGroupで回転アニメーション対応）──────────────────
+const ARM_R      = 0.085;
+const attachDY   = 0.28;
+const attachYloc = attachDY / BODY_SY;
+const attachX    = BODY_SX * Math.sqrt(1 - attachYloc ** 2); // ボディ表面 x ≈ 0.759
+
+const armGroups = [];
+
+for (const sx of [-1, 1]) {
+  // ワールド座標での各点
+  const wAttach = new THREE.Vector3(sx * attachX,  BODY_Y - attachDY, 0);
+  const wElbow  = new THREE.Vector3(sx * 1.28,     BODY_Y - 0.55,     0);
+  const wTip    = new THREE.Vector3(sx * 0.54,     BY - 0.12,         0);
+
+  // ピボット付け根 = wAttach を原点とするローカル座標
+  const lO     = new THREE.Vector3(0, 0, 0);
+  const lElbow = wElbow.clone().sub(wAttach);
+  const lTip   = wTip.clone().sub(wAttach);
+
+  const armGroup = new THREE.Group();
+  armGroup.position.copy(wAttach);
+  clawGroup.add(armGroup);
+  armGroups.push({ group: armGroup, sx });
+
+  // セグメント1
+  armGroup.add(makeCylBetween(ARM_R, lO, lElbow, grayMat));
+
+  // 肘スフィア
+  const elbowSph = new THREE.Mesh(new THREE.SphereGeometry(ARM_R * 1.4, 10, 8), grayMat);
+  elbowSph.position.copy(lElbow);
+  armGroup.add(elbowSph);
+
+  // セグメント2
+  armGroup.add(makeCylBetween(ARM_R, lElbow, lTip, grayMat));
+
+  // チップ
+  const tipMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(ARM_R * 3.2, ARM_R * 2.2, ARM_R * 3.2), darkMat
+  );
+  tipMesh.position.copy(lTip);
+  armGroup.add(tipMesh);
+}
+
+// ── 物理・アニメーション状態 ──────────────────────────────────────────────────
+const GRAVITY     = -9.8;  // m/s²（自動シミュ用）
+const NORM_GRAVITY = -4.9; // m/s²（通常シミュ用）
+const GRAPH_G     =  9.8;  // m/s²（グラフ理論値用）
+const GRAPH_T_MAX = 4.0;   // s（グラフ t 軸上限）
+const OPEN_MAX   = 0.80;   // アーム最大開き角（rad）
+const OPEN_SPEED = 2.2;    // rad/s
+
+let simState  = 'idle';    // 'idle' | 'dropping' | 'landed'
+let ballVelY  = 0;
+let openAngle = 0;
+let autoMode  = false;
+let scene2Anim      = null;
+let fadeAnim        = null;
+let accelAnim       = null;
+let dottedLinesAnim = null;
+let moveAccelAnim   = null;
+let fadeOutDotsAnim = null;
+let alignLinesAnim  = null;
+let dimLineAnim     = null;
+let scene3Anim      = null;
+let atGraphAnim     = null;
+let atDotsAnim      = null;
+let arrowFadeAnim   = null;
+let pinkArrowsAnim  = null;
+let rowArrowAnim    = null;
+let atLineAnim      = null;
+let _atCanvas       = null;
+let _atTex          = null;
+
+// 場面2→3 で引き継ぐオブジェクト参照
+let _s2AccelArrows  = []; // { arrow, x, y }
+let _s2FadeMats     = []; // { mat, initOp } フェードアウト対象マテリアル
+// 場面3→4 で引き継ぐオブジェクト参照
+let _s2VelArrows    = []; // { arrow, x, y } 速度矢印4本
+let _s2StrobeBalls  = []; // 場面2ストロボ写真用マテリアル
+let strobePhotoAnim = null;
+let _atPlane        = null; // a-tグラフ平面（場面4でフェードアウト）
+let scene4Anim      = null;
+let vtGraphAnim     = null;
+let vtDotsAnim      = null;
+let velArrowFadeAnim = null;
+let vtLineAnim      = null;
+let _vtCanvas       = null;
+let _vtTex          = null;
+
+// グラフ描画で参照するカラー
+const GC = {
+  bg: 'rgba(248,250,255,0.95)', frame: 'rgba(50,70,150,0.30)',
+  grid: 'rgba(70,90,180,0.12)', axis: 'rgba(20,30,80,0.95)',
+  tick: 'rgba(50,70,140,0.85)', label: 'rgba(20,30,80,0.90)',
+  vtLine: 'rgba(0,136,255,0.95)', ytLine: 'rgba(20,160,60,0.95)',
+  atLine: '#cc0066', vtStaticLine: '#0088ff',
+};
+
+// ── v-tグラフ（3D インタラクティブパネル）────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse     = new THREE.Vector2();
+function getPointerNDC(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set(
+    (ev.clientX - r.left) / r.width  *  2 - 1,
+   -(ev.clientY - r.top)  / r.height *  2 + 1
+  );
+}
+
+const GRAPH_W = 8.0, GRAPH_H = 5.0;
+const GRAPH_INIT = new THREE.Vector3(25, 25, 0);
+
+let vtVisible = false;
+let vtData    = [];
+let fallTime  = 0;
+
+let gCanvas = null, gCtx = null, gTex = null;
+let gGroup  = null, gPlane = null;
+let gHandles = [], gSelected = false;
+
+const G_CORNERS = { BL:[-1,-1], BR:[1,-1], TL:[-1,1], TR:[1,1] };
+const G_OPP     = { BL:'TR', BR:'TL', TL:'BR', TR:'BL' };
+
+function makeGHandles(plane) {
+  const list = [];
+  for (const [corner, [sx, sy]] of Object.entries(G_CORNERS)) {
+    const h = new THREE.Mesh(
+      new THREE.CircleGeometry(0.22, 32),
+      new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false, side: THREE.DoubleSide, transparent: true, opacity: 0 })
+    );
+    h.position.set(sx * GRAPH_W / 2, sy * GRAPH_H / 2, 0.08);
+    h.renderOrder = 1001;
+    h.visible = false;
+    h.userData.corner = corner;
+    plane.add(h);
+    list.push(h);
+  }
+  return list;
+}
+
+function drawVtGraph() {
+  if (!gCtx) return;
+  const W = gCanvas.width, H = gCanvas.height;
+  const PL = 96, PR = 28, PT = 28, PB = 86;
+  const pw = W - PL - PR, ph = H - PT - PB;
+
+  gCtx.clearRect(0, 0, W, H);
+  gCtx.fillStyle = GC.bg;
+  gCtx.fillRect(0, 0, W, H);
+
+  // 枠
+  gCtx.strokeStyle = GC.frame;
+  gCtx.lineWidth = 4;
+  gCtx.strokeRect(PL, PT, pw, ph);
+
+  // スケール
+  const rawV = vtData.length > 0 ? Math.max(...vtData.map(d => d.v)) : 0;
+  function niceStep(span, tgt) {
+    const rough = span / tgt;
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(rough, 0.001))));
+    for (const f of [1, 2, 2.5, 5, 10]) { if (f * mag >= rough - 1e-9) return f * mag; }
+    return rough;
+  }
+  const T_FALL = GRAPH_T_MAX;
+  const tStep = niceStep(T_FALL, 5);
+  const tMax  = Math.ceil(T_FALL / tStep) * tStep;
+  const vMax  = 40;
+  const vStep = 10;
+
+  // グリッド
+  gCtx.strokeStyle = GC.grid;
+  gCtx.lineWidth = 2;
+  for (let v = 0; v <= vMax + 1e-9; v += vStep) {
+    const y = PT + ph - (v / vMax) * ph;
+    gCtx.beginPath(); gCtx.moveTo(PL, y); gCtx.lineTo(PL + pw, y); gCtx.stroke();
+  }
+  for (let t = 0; t <= tMax + 1e-9; t += tStep) {
+    const x = PL + (t / tMax) * pw;
+    gCtx.beginPath(); gCtx.moveTo(x, PT); gCtx.lineTo(x, PT + ph); gCtx.stroke();
+  }
+
+  // 軸
+  gCtx.strokeStyle = GC.axis;
+  gCtx.lineWidth = 5;
+  gCtx.beginPath(); gCtx.moveTo(PL - 10, PT + ph); gCtx.lineTo(PL + pw, PT + ph); gCtx.stroke();
+  gCtx.beginPath(); gCtx.moveTo(PL, PT + ph); gCtx.lineTo(PL, PT - 10); gCtx.stroke();
+
+  // 目盛り
+  gCtx.fillStyle = GC.tick;
+  gCtx.font = '20px system-ui';
+  gCtx.textAlign = 'right';
+  for (let v = 0; v <= vMax + 1e-9; v += vStep) {
+    const y = PT + ph - (v / vMax) * ph;
+    gCtx.fillText(+v.toFixed(1), PL - 10, y + 8);
+  }
+  gCtx.textAlign = 'center';
+  for (let t = 0; t <= tMax + 1e-9; t += tStep) {
+    const x = PL + (t / tMax) * pw;
+    gCtx.fillText(+t.toFixed(1), x, PT + ph + 38);
+  }
+
+  // 軸ラベル
+  gCtx.fillStyle = GC.label;
+  gCtx.font = 'bold 22px system-ui';
+  gCtx.textAlign = 'center';
+  gCtx.fillText('t (s)', PL + pw / 2, H - 10);
+  gCtx.save();
+  gCtx.translate(22, PT + ph / 2);
+  gCtx.rotate(-Math.PI / 2);
+  gCtx.fillText('v (m/s)', 0, 0);
+  gCtx.restore();
+
+  // データ線
+  if (vtData.length >= 2) {
+    gCtx.strokeStyle = GC.vtLine;
+    gCtx.lineWidth = 4;
+    gCtx.lineJoin = 'round';
+    gCtx.beginPath();
+    for (let i = 0; i < vtData.length; i++) {
+      const x = PL + (vtData[i].t / tMax) * pw;
+      const y = PT + ph - (vtData[i].v / vMax) * ph;
+      i === 0 ? gCtx.moveTo(x, y) : gCtx.lineTo(x, y);
+    }
+    gCtx.stroke();
+  }
+
+  // 選択中：四隅に黒い円をキャンバス上に描画
+  if (gSelected) {
+    const r = 14;
+    [[r,r],[W-r,r],[r,H-r],[W-r,H-r]].forEach(([x,y]) => {
+      gCtx.beginPath(); gCtx.arc(x, y, r, 0, Math.PI*2);
+      gCtx.fillStyle = GC.axis; gCtx.fill();
+    });
+  }
+  if (gTex) gTex.needsUpdate = true;
+}
+
+function ensureGraph() {
+  if (gGroup) return;
+  gCanvas = document.createElement('canvas');
+  gCanvas.width = 1024; gCanvas.height = 640;
+  gCtx = gCanvas.getContext('2d');
+  gTex = new THREE.CanvasTexture(gCanvas);
+  gTex.colorSpace = THREE.SRGBColorSpace;
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: gTex, transparent: true, side: THREE.DoubleSide, depthTest: false,
+  });
+  gPlane = new THREE.Mesh(new THREE.PlaneGeometry(GRAPH_W, GRAPH_H), mat);
+  gPlane.renderOrder = 999;
+  gPlane.position.copy(GRAPH_INIT);
+  gPlane.scale.setScalar(5);
+  gHandles = makeGHandles(gPlane);
+
+  gGroup = new THREE.Group();
+  gGroup.add(gPlane);
+  gGroup.visible = false;
+  scene.add(gGroup);
+  drawVtGraph();
+}
+
+// ── グラフ操作（ドラッグ・リサイズ）─────────────────────────────────────────
+let gDragging = false, gResizing = false;
+const _gHit    = new THREE.Vector3();
+const _gOff    = new THREE.Vector3();
+const _gFPlane = new THREE.Plane();
+const _gDelta  = new THREE.Vector3();
+const _gWDir   = new THREE.Vector3();
+const _gHDir   = new THREE.Vector3();
+const _gQ      = new THREE.Quaternion();
+const _gAnchor = new THREE.Vector3();
+const _gCL     = new THREE.Vector3();
+const _gCW     = new THREE.Vector3();
+let gAnchorCorner = 'BL';
+let gStartScale = 1, gStartProj = 1;
+const gDiag  = Math.hypot(GRAPH_W, GRAPH_H);
+const gUnitW = GRAPH_W / gDiag, gUnitH = GRAPH_H / gDiag;
+
+function gCornerWorld(corner) {
+  const [sx, sy] = G_CORNERS[corner];
+  _gCL.set(sx * GRAPH_W / 2, sy * GRAPH_H / 2, 0);
+  return gPlane.localToWorld(_gCW.copy(_gCL));
+}
+function camPlaneAt(pt) {
+  _gFPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), pt);
+}
+
+function tryStartResize(ev) {
+  if (!vtVisible || !gSelected) return false;
+  raycaster.setFromCamera(mouse, camera);
+  let hitCorner = null, hitHandle = null;
+  for (const h of gHandles) {
+    if (h.visible && raycaster.intersectObject(h, false).length) {
+      hitCorner = h.userData.corner; hitHandle = h; break;
+    }
+  }
+  if (!hitCorner) return false;
+  const hitsH = raycaster.intersectObject(hitHandle, false);
+  if (!hitsH.length) return false;
+  camPlaneAt(hitsH[0].point);
+  if (!raycaster.ray.intersectPlane(_gFPlane, _gHit)) return false;
+
+  gAnchorCorner = G_OPP[hitCorner];
+  _gAnchor.copy(gCornerWorld(gAnchorCorner));
+  gStartScale = gPlane.scale.x;
+
+  const [dx, dy] = G_CORNERS[hitCorner];
+  gPlane.getWorldQuaternion(_gQ);
+  _gWDir.set(dx, 0, 0).applyQuaternion(_gQ).normalize();
+  _gHDir.set(0, dy, 0).applyQuaternion(_gQ).normalize();
+  _gDelta.copy(_gHit).sub(_gAnchor);
+  const w0 = Math.max(0, _gDelta.dot(_gWDir));
+  const h0 = Math.max(0, _gDelta.dot(_gHDir));
+  gStartProj = Math.max(1e-6, w0 * gUnitW + h0 * gUnitH);
+
+  gResizing = true;
+  controls.enabled = false;
+  try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+  ev.preventDefault(); ev.stopPropagation();
+  return true;
+}
+
+function updateResize(ev) {
+  if (!gResizing) return;
+  getPointerNDC(ev);
+  raycaster.setFromCamera(mouse, camera);
+  if (!raycaster.ray.intersectPlane(_gFPlane, _gHit)) return;
+  _gDelta.copy(_gHit).sub(_gAnchor);
+  const w = Math.max(0, _gDelta.dot(_gWDir));
+  const h = Math.max(0, _gDelta.dot(_gHDir));
+  const proj = w * gUnitW + h * gUnitH;
+  const newScale = Math.max(0.2, Math.min(10, gStartScale * (proj / gStartProj)));
+  gPlane.scale.setScalar(newScale);
+  gPlane.updateMatrixWorld(true);
+  const newAnchor = gCornerWorld(gAnchorCorner);
+  gPlane.position.add(_gAnchor.clone().sub(newAnchor));
+  gPlane.updateMatrixWorld(true);
+  ev.preventDefault();
+}
+
+function endResize(ev) {
+  if (!gResizing) return;
+  gResizing = false; controls.enabled = true;
+  if (ev?.pointerId != null) try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+}
+
+function tryStartDrag(ev) {
+  if (!vtVisible) return false;
+  raycaster.setFromCamera(mouse, camera);
+  if (gSelected) {
+    for (const h of gHandles) {
+      if (h.visible && raycaster.intersectObject(h, false).length) return false;
+    }
+  }
+  const hits = raycaster.intersectObject(gPlane, false);
+  if (!hits.length) return false;
+  gSelected = true;
+  for (const h of gHandles) h.visible = true;
+  camPlaneAt(hits[0].point);
+  _gOff.copy(gPlane.position).sub(hits[0].point);
+  gDragging = true; controls.enabled = false;
+  try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+  ev.preventDefault(); ev.stopPropagation();
+  return true;
+}
+
+function updateDrag(ev) {
+  if (!gDragging) return;
+  getPointerNDC(ev);
+  raycaster.setFromCamera(mouse, camera);
+  if (!raycaster.ray.intersectPlane(_gFPlane, _gHit)) return;
+  gPlane.position.copy(_gHit).add(_gOff);
+  ev.preventDefault();
+}
+
+function endDrag(ev) {
+  if (!gDragging) return;
+  gDragging = false; controls.enabled = true;
+  if (ev?.pointerId != null) try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+}
+
+// ── y-tグラフ（3D インタラクティブパネル）────────────────────────────────────
+const YT_INIT = new THREE.Vector3(-25, 25, 0);
+
+let ytVisible = false;
+let ytData    = [];
+
+let ytCanvas = null, ytCtx = null, ytTex = null;
+let ytGroup  = null, ytPlane = null;
+let ytHandles = [], ytSelected = false;
+
+function makeYtHandles(plane) {
+  const list = [];
+  for (const [corner, [sx, sy]] of Object.entries(G_CORNERS)) {
+    const h = new THREE.Mesh(
+      new THREE.CircleGeometry(0.22, 32),
+      new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false, side: THREE.DoubleSide, transparent: true, opacity: 0 })
+    );
+    h.position.set(sx * GRAPH_W / 2, sy * GRAPH_H / 2, 0.08);
+    h.renderOrder = 1001;
+    h.visible = false;
+    h.userData.corner = corner;
+    plane.add(h);
+    list.push(h);
+  }
+  return list;
+}
+
+function drawYtGraph() {
+  if (!ytCtx) return;
+  const W = ytCanvas.width, H = ytCanvas.height;
+  const PL = 96, PR = 28, PT = 28, PB = 86;
+  const pw = W - PL - PR, ph = H - PT - PB;
+
+  ytCtx.clearRect(0, 0, W, H);
+  ytCtx.fillStyle = GC.bg;
+  ytCtx.fillRect(0, 0, W, H);
+
+  ytCtx.strokeStyle = GC.frame;
+  ytCtx.lineWidth = 4;
+  ytCtx.strokeRect(PL, PT, pw, ph);
+
+  const rawY = ytData.length > 0 ? Math.max(...ytData.map(d => d.y)) : 0;
+  function niceStepY(span, tgt) {
+    const rough = span / tgt;
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(rough, 0.001))));
+    for (const f of [1, 2, 2.5, 5, 10]) { if (f * mag >= rough - 1e-9) return f * mag; }
+    return rough;
+  }
+  const T_FALL = GRAPH_T_MAX;
+  const tStep = niceStepY(T_FALL, 5);
+  const tMax  = Math.ceil(T_FALL / tStep) * tStep;
+  const yMax  = 80;
+  const yStep = 20;
+
+  ytCtx.strokeStyle = GC.grid;
+  ytCtx.lineWidth = 2;
+  for (let y = 0; y <= yMax + 1e-9; y += yStep) {
+    const cy = PT + ph - (y / yMax) * ph;
+    ytCtx.beginPath(); ytCtx.moveTo(PL, cy); ytCtx.lineTo(PL + pw, cy); ytCtx.stroke();
+  }
+  for (let t = 0; t <= tMax + 1e-9; t += tStep) {
+    const x = PL + (t / tMax) * pw;
+    ytCtx.beginPath(); ytCtx.moveTo(x, PT); ytCtx.lineTo(x, PT + ph); ytCtx.stroke();
+  }
+
+  ytCtx.strokeStyle = GC.axis;
+  ytCtx.lineWidth = 5;
+  ytCtx.beginPath(); ytCtx.moveTo(PL - 10, PT + ph); ytCtx.lineTo(PL + pw, PT + ph); ytCtx.stroke();
+  ytCtx.beginPath(); ytCtx.moveTo(PL, PT + ph); ytCtx.lineTo(PL, PT - 10); ytCtx.stroke();
+
+  ytCtx.fillStyle = GC.tick;
+  ytCtx.font = '20px system-ui';
+  ytCtx.textAlign = 'right';
+  for (let y = 0; y <= yMax + 1e-9; y += yStep) {
+    const cy = PT + ph - (y / yMax) * ph;
+    ytCtx.fillText(+y.toFixed(1), PL - 10, cy + 8);
+  }
+  ytCtx.textAlign = 'center';
+  for (let t = 0; t <= tMax + 1e-9; t += tStep) {
+    const x = PL + (t / tMax) * pw;
+    ytCtx.fillText(+t.toFixed(1), x, PT + ph + 38);
+  }
+
+  ytCtx.fillStyle = GC.label;
+  ytCtx.font = 'bold 22px system-ui';
+  ytCtx.textAlign = 'center';
+  ytCtx.fillText('t (s)', PL + pw / 2, H - 10);
+  ytCtx.save();
+  ytCtx.translate(22, PT + ph / 2);
+  ytCtx.rotate(-Math.PI / 2);
+  ytCtx.fillText('y (m)', 0, 0);
+  ytCtx.restore();
+
+  if (ytData.length >= 2) {
+    ytCtx.strokeStyle = GC.ytLine;
+    ytCtx.lineWidth = 4;
+    ytCtx.lineJoin = 'round';
+    ytCtx.beginPath();
+    for (let i = 0; i < ytData.length; i++) {
+      const x  = PL + (ytData[i].t / tMax) * pw;
+      const cy = PT + ph - (ytData[i].y / yMax) * ph;
+      i === 0 ? ytCtx.moveTo(x, cy) : ytCtx.lineTo(x, cy);
+    }
+    ytCtx.stroke();
+  }
+
+  // 選択中：四隅に黒い円をキャンバス上に描画
+  if (ytSelected) {
+    const r = 14;
+    [[r,r],[W-r,r],[r,H-r],[W-r,H-r]].forEach(([x,y]) => {
+      ytCtx.beginPath(); ytCtx.arc(x, y, r, 0, Math.PI*2);
+      ytCtx.fillStyle = GC.axis; ytCtx.fill();
+    });
+  }
+  if (ytTex) ytTex.needsUpdate = true;
+}
+
+function ensureYtGraph() {
+  if (ytGroup) return;
+  ytCanvas = document.createElement('canvas');
+  ytCanvas.width = 1024; ytCanvas.height = 640;
+  ytCtx = ytCanvas.getContext('2d');
+  ytTex = new THREE.CanvasTexture(ytCanvas);
+  ytTex.colorSpace = THREE.SRGBColorSpace;
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: ytTex, transparent: true, side: THREE.DoubleSide, depthTest: false,
+  });
+  ytPlane = new THREE.Mesh(new THREE.PlaneGeometry(GRAPH_W, GRAPH_H), mat);
+  ytPlane.renderOrder = 999;
+  ytPlane.position.copy(YT_INIT);
+  ytPlane.scale.setScalar(5);
+  ytHandles = makeYtHandles(ytPlane);
+
+  ytGroup = new THREE.Group();
+  ytGroup.add(ytPlane);
+  ytGroup.visible = false;
+  scene.add(ytGroup);
+  drawYtGraph();
+}
+
+let ytDragging = false, ytResizing = false;
+let ytAnchorCorner = 'BL';
+let ytStartScale = 1, ytStartProj = 1;
+
+function ytCornerWorld(corner) {
+  const [sx, sy] = G_CORNERS[corner];
+  _gCL.set(sx * GRAPH_W / 2, sy * GRAPH_H / 2, 0);
+  return ytPlane.localToWorld(_gCW.copy(_gCL));
+}
+
+function tryStartYtResize(ev) {
+  if (!ytVisible || !ytSelected) return false;
+  raycaster.setFromCamera(mouse, camera);
+  let hitCorner = null, hitHandle = null;
+  for (const h of ytHandles) {
+    if (h.visible && raycaster.intersectObject(h, false).length) {
+      hitCorner = h.userData.corner; hitHandle = h; break;
+    }
+  }
+  if (!hitCorner) return false;
+  const hitsH = raycaster.intersectObject(hitHandle, false);
+  if (!hitsH.length) return false;
+  camPlaneAt(hitsH[0].point);
+  if (!raycaster.ray.intersectPlane(_gFPlane, _gHit)) return false;
+
+  ytAnchorCorner = G_OPP[hitCorner];
+  _gAnchor.copy(ytCornerWorld(ytAnchorCorner));
+  ytStartScale = ytPlane.scale.x;
+
+  const [dx, dy] = G_CORNERS[hitCorner];
+  ytPlane.getWorldQuaternion(_gQ);
+  _gWDir.set(dx, 0, 0).applyQuaternion(_gQ).normalize();
+  _gHDir.set(0, dy, 0).applyQuaternion(_gQ).normalize();
+  _gDelta.copy(_gHit).sub(_gAnchor);
+  const w0 = Math.max(0, _gDelta.dot(_gWDir));
+  const h0 = Math.max(0, _gDelta.dot(_gHDir));
+  ytStartProj = Math.max(1e-6, w0 * gUnitW + h0 * gUnitH);
+
+  ytResizing = true;
+  controls.enabled = false;
+  try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+  ev.preventDefault(); ev.stopPropagation();
+  return true;
+}
+
+function updateYtResize(ev) {
+  if (!ytResizing) return;
+  getPointerNDC(ev);
+  raycaster.setFromCamera(mouse, camera);
+  if (!raycaster.ray.intersectPlane(_gFPlane, _gHit)) return;
+  _gDelta.copy(_gHit).sub(_gAnchor);
+  const w = Math.max(0, _gDelta.dot(_gWDir));
+  const h = Math.max(0, _gDelta.dot(_gHDir));
+  const proj = w * gUnitW + h * gUnitH;
+  const newScale = Math.max(0.2, Math.min(10, ytStartScale * (proj / ytStartProj)));
+  ytPlane.scale.setScalar(newScale);
+  ytPlane.updateMatrixWorld(true);
+  const newAnchor = ytCornerWorld(ytAnchorCorner);
+  ytPlane.position.add(_gAnchor.clone().sub(newAnchor));
+  ytPlane.updateMatrixWorld(true);
+  ev.preventDefault();
+}
+
+function endYtResize(ev) {
+  if (!ytResizing) return;
+  ytResizing = false; controls.enabled = true;
+  if (ev?.pointerId != null) try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+}
+
+function tryStartYtDrag(ev) {
+  if (!ytVisible) return false;
+  raycaster.setFromCamera(mouse, camera);
+  if (ytSelected) {
+    for (const h of ytHandles) {
+      if (h.visible && raycaster.intersectObject(h, false).length) return false;
+    }
+  }
+  const hits = raycaster.intersectObject(ytPlane, false);
+  if (!hits.length) return false;
+  ytSelected = true;
+  for (const h of ytHandles) h.visible = true;
+  camPlaneAt(hits[0].point);
+  _gOff.copy(ytPlane.position).sub(hits[0].point);
+  ytDragging = true; controls.enabled = false;
+  try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+  ev.preventDefault(); ev.stopPropagation();
+  return true;
+}
+
+function updateYtDrag(ev) {
+  if (!ytDragging) return;
+  getPointerNDC(ev);
+  raycaster.setFromCamera(mouse, camera);
+  if (!raycaster.ray.intersectPlane(_gFPlane, _gHit)) return;
+  ytPlane.position.copy(_gHit).add(_gOff);
+  ev.preventDefault();
+}
+
+function endYtDrag(ev) {
+  if (!ytDragging) return;
+  ytDragging = false; controls.enabled = true;
+  if (ev?.pointerId != null) try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+}
+
+renderer.domElement.addEventListener('pointerdown', (ev) => {
+  getPointerNDC(ev);
+  if (tryStartResize(ev))   return;
+  if (tryStartDrag(ev))     return;
+  if (tryStartYtResize(ev)) return;
+  if (tryStartYtDrag(ev))   return;
+  if (gSelected)  { gSelected  = false; for (const h of gHandles)  h.visible = false; }
+  if (ytSelected) { ytSelected = false; for (const h of ytHandles) h.visible = false; }
+});
+window.addEventListener('pointermove', (ev) => {
+  if (gResizing)  { updateResize(ev);   return; }
+  if (gDragging)  { updateDrag(ev);     return; }
+  if (ytResizing) { updateYtResize(ev); return; }
+  if (ytDragging) { updateYtDrag(ev);   return; }
+}, { passive: false });
+window.addEventListener('pointerup',     (ev) => { endResize(ev); endDrag(ev); endYtResize(ev); endYtDrag(ev); });
+window.addEventListener('pointercancel', (ev) => { endResize(ev); endDrag(ev); endYtResize(ev); endYtDrag(ev); });
+
+// ── 視点スナップ ──────────────────────────────────────────────────────────────
+function nowSec() { return performance.now() / 1000; }
+let viewTween = null;
+
+function startViewSnap(dirVec, duration = 0.5) {
+  const center = controls.target.clone();
+  const dist   = camera.position.distanceTo(controls.target);
+  const dir    = dirVec.clone().normalize();
+  viewTween = {
+    startPos:    camera.position.clone(),
+    endPos:      center.clone().addScaledVector(dir, dist),
+    startTarget: controls.target.clone(),
+    endTarget:   center.clone(),
+    startTime:   nowSec(),
+    dur:         duration,
+  };
+}
+
+function updateViewSnap() {
+  if (!viewTween) return;
+  const u = Math.min(1, (nowSec() - viewTween.startTime) / viewTween.dur);
+  const k = u * u * (3 - 2 * u); // easeInOut
+  camera.position.lerpVectors(viewTween.startPos, viewTween.endPos, k);
+  controls.target.lerpVectors(viewTween.startTarget, viewTween.endTarget, k);
+  controls.update();
+  if (u >= 1) viewTween = null;
+}
+
+// ── ストロボ ─────────────────────────────────────────────────────────────────
+let strobeInterval = 1.00;  // 秒（場面ごとに上書き可）
+let strobeMode  = false;
+let strobeTimer = 0;
+const strobeMeshes = [];
+
+const strobeMat = new THREE.MeshPhongMaterial({
+  color: 0xff5500, specular: 0xff9966, shininess: 90,
+  transparent: true, opacity: 0.40,
+});
+
+function makeTimeLabel(t, pos) {
+  const c = document.createElement('canvas');
+  c.width = 320; c.height = 88;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold 56px system-ui';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = GC.axis;
+  ctx.fillText('t = ' + t.toFixed(2) + ' s', 316, 44);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.renderOrder = 100;
+  sprite.scale.set(15, 3.75, 1);
+  sprite.position.set(pos.x - 12, pos.y, pos.z);
+  return sprite;
+}
+
+function makeDimLabel(text) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold 52px system-ui';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,0.95)';
+  ctx.fillText(text, 8, 48);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.renderOrder = 101;
+  sprite.scale.set(3.5, 0.66, 1);
+  return sprite;
+}
+
+function drawAtGraph(canvas, { dotsAlpha = 0, lineAlpha = 0 } = {}) {
+  const W = canvas.width, H = canvas.height;
+  const PL = 96, PR = 28, PT = 28, PB = 86;
+  const pw = W - PL - PR, ph = H - PT - PB;
+  const tMax = 5, aMax = 13;
+  const ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = GC.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // 枠
+  ctx.strokeStyle = GC.frame;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(PL, PT, pw, ph);
+
+  // グリッド
+  ctx.strokeStyle = GC.grid;
+  ctx.lineWidth = 2;
+  for (let a = 0; a <= aMax; a += 5) {
+    const y = PT + ph - (a / aMax) * ph;
+    ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(PL + pw, y); ctx.stroke();
+  }
+  for (let t = 0; t <= tMax; t++) {
+    const x = PL + (t / tMax) * pw;
+    ctx.beginPath(); ctx.moveTo(x, PT); ctx.lineTo(x, PT + ph); ctx.stroke();
+  }
+
+  // 軸
+  ctx.strokeStyle = GC.axis;
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(PL - 10, PT + ph); ctx.lineTo(PL + pw, PT + ph); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(PL, PT + ph); ctx.lineTo(PL, PT - 10); ctx.stroke();
+
+  // 目盛りラベル
+  ctx.fillStyle = GC.tick;
+  ctx.font = '20px system-ui';
+  ctx.textAlign = 'right';
+  for (let a = 0; a <= aMax; a += 5) {
+    const y = PT + ph - (a / aMax) * ph;
+    ctx.fillText(a, PL - 10, y + 8);
+  }
+  ctx.textAlign = 'center';
+  for (let t = 0; t <= tMax; t++) {
+    const x = PL + (t / tMax) * pw;
+    ctx.fillText(t, x, PT + ph + 38);
+  }
+
+  // 軸ラベル
+  ctx.fillStyle = GC.label;
+  ctx.font = 'bold 22px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('t  (s)', PL + pw / 2, H - 10);
+  ctx.save();
+  ctx.translate(22, PT + ph / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('a  (m/s²)', 0, 0);
+  ctx.restore();
+
+  const y98 = PT + ph - (9.8 / aMax) * ph;
+
+  // ピンクの点（dotsAlpha > 0 のとき描画）
+  if (dotsAlpha > 0) {
+    ctx.globalAlpha = dotsAlpha;
+    ctx.fillStyle = GC.atLine;
+    for (const t of [0.25, 1.0, 2.0, 3.0]) {
+      const x = PL + (t / tMax) * pw;
+      ctx.beginPath(); ctx.arc(x, y98, 10, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // a=9.8 の実線（lineAlpha > 0 のとき描画）
+  if (lineAlpha > 0) {
+    ctx.globalAlpha = lineAlpha;
+    ctx.strokeStyle = GC.atLine;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(PL, y98); ctx.lineTo(PL + pw, y98); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawVtGraphStatic(canvas, { dotsAlpha = 0, lineAlpha = 0 } = {}) {
+  const W = canvas.width, H = canvas.height;
+  const PL = 96, PR = 28, PT = 28, PB = 86;
+  const pw = W - PL - PR, ph = H - PT - PB;
+  const tMax = 4, vMax = 40;
+  const ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = GC.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = GC.frame; ctx.lineWidth = 4;
+  ctx.strokeRect(PL, PT, pw, ph);
+
+  ctx.strokeStyle = GC.grid; ctx.lineWidth = 2;
+  for (let v = 0; v <= vMax; v += 10) {
+    const y = PT + ph - (v / vMax) * ph;
+    ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(PL + pw, y); ctx.stroke();
+  }
+  for (let t = 0; t <= tMax; t++) {
+    const x = PL + (t / tMax) * pw;
+    ctx.beginPath(); ctx.moveTo(x, PT); ctx.lineTo(x, PT + ph); ctx.stroke();
+  }
+
+  ctx.strokeStyle = GC.axis; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(PL - 10, PT + ph); ctx.lineTo(PL + pw, PT + ph); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(PL, PT + ph); ctx.lineTo(PL, PT - 10); ctx.stroke();
+
+  ctx.fillStyle = GC.tick;
+  ctx.font = '20px system-ui';
+  ctx.textAlign = 'right';
+  for (let v = 0; v <= vMax; v += 10) {
+    const y = PT + ph - (v / vMax) * ph;
+    ctx.fillText(v, PL - 10, y + 8);
+  }
+  ctx.textAlign = 'center';
+  for (let t = 0; t <= tMax; t++) {
+    const x = PL + (t / tMax) * pw;
+    ctx.fillText(t, x, PT + ph + 38);
+  }
+
+  ctx.fillStyle = GC.label;
+  ctx.font = 'bold 22px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('t  (s)', PL + pw / 2, H - 10);
+  ctx.save();
+  ctx.translate(22, PT + ph / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('v  (m/s)', 0, 0);
+  ctx.restore();
+
+  if (dotsAlpha > 0) {
+    ctx.globalAlpha = dotsAlpha;
+    ctx.fillStyle = GC.vtStaticLine;
+    for (const t of [0.5, 1.5, 2.5, 3.5]) {
+      const x = PL + (t / tMax) * pw;
+      const v = 9.8 * t;
+      const y = PT + ph - (v / vMax) * ph;
+      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (lineAlpha > 0) {
+    ctx.globalAlpha = lineAlpha;
+    ctx.strokeStyle = GC.vtStaticLine; ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(PL, PT + ph); // (t=0, v=0)
+    // t=tMax での v = 9.8*tMax、グラフ範囲に収める
+    const vAtTmax = Math.min(9.8 * tMax, vMax);
+    const xEnd = PL + pw; // t=tMax は右端
+    const yEnd = PT + ph - (vAtTmax / vMax) * ph;
+    ctx.lineTo(xEnd, yEnd);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function createStrobePhotoTexture() {
+  const W = 256, H = 896;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = GC.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const BX      = 148;            // ボール中心 x
+  const topY    = 48;             // t=0 の y
+  const bottomY = 848;            // t=4 の y
+  const fallMax = 0.5 * 9.8 * 16; // 78.4 m
+
+  function ballY(ti) {
+    return topY + (0.5 * 9.8 * ti * ti / fallMax) * (bottomY - topY);
+  }
+
+  const _bc = '#' + ballMat.color.getHexString();
+
+  // t=0 の開始位置（薄く）
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = _bc;
+  ctx.beginPath(); ctx.arc(BX, ballY(0), 14, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1.0;
+
+  for (let ti = 1; ti <= 4; ti++) {
+    const by = ballY(ti);
+    const v  = 9.8 * ti;
+    const arrowLen = (v / 39.2) * 55;
+
+    // ゴーストボール
+    ctx.globalAlpha = 0.38;
+    ctx.fillStyle = _bc;
+    ctx.beginPath(); ctx.arc(BX, by, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.65;
+    ctx.strokeStyle = _bc;
+    ctx.lineWidth = 2; ctx.stroke();
+    ctx.globalAlpha = 1.0;
+
+    // 時刻ラベル（左寄せ）
+    ctx.fillStyle = GC.label;
+    ctx.font = '24px system-ui';
+    ctx.textAlign = 'right';
+    ctx.fillText(`t = ${ti}.00 s`, BX - 20, by + 8);
+
+    // 速度矢印（下向き、右側）
+    const ax = BX + 22, ay1 = by + 14, ay2 = by + 14 + arrowLen;
+    ctx.strokeStyle = GC.vtStaticLine; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(ax, ay1); ctx.lineTo(ax, ay2); ctx.stroke();
+    ctx.fillStyle = GC.vtStaticLine;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay2 + 9);
+    ctx.lineTo(ax - 6, ay2); ctx.lineTo(ax + 6, ay2);
+    ctx.closePath(); ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function takeStrobeSnapshot() {
+  const ghost = new THREE.Mesh(ballGeo, strobeMat);
+  ghost.position.copy(ball.position);
+  scene.add(ghost);
+  strobeMeshes.push(ghost);
+
+  if (autoMode && fallTime > 0.01) {
+    const label = makeTimeLabel(Math.round(fallTime * 2) / 2, ball.position);
+    scene.add(label);
+    strobeMeshes.push(label);
+  }
+
+  if (velVecMode && Math.abs(ballVelY) > 0.1) {
+    const speed   = Math.abs(ballVelY);
+    const len     = speed * 0.15;
+    const headLen = Math.min(len * 0.25, 0.8);
+    const headW   = Math.min(len * 0.15, 0.5);
+    const snapArrow = makeMeshArrow(pinkMat.color.getHex());
+    snapArrow.setDirection(new THREE.Vector3(0, -1, 0));
+    snapArrow.setLength(len, headLen, headW);
+    snapArrow.position.copy(ball.position);
+    scene.add(snapArrow);
+    strobeMeshes.push(snapArrow);
+  }
+}
+
+function clearStrobeSnapshots() {
+  if (fadeAnim?.meshesToFade) {
+    for (const m of fadeAnim.meshesToFade) scene.remove(m);
+    strobeMat.opacity = 0.40;
+  }
+  for (const m of strobeMeshes) scene.remove(m);
+  strobeMeshes.length = 0;
+  strobeTimer = 0;
+  scene2Anim      = null;
+  fadeAnim        = null;
+  accelAnim       = null;
+  dottedLinesAnim = null;
+  moveAccelAnim   = null;
+  fadeOutDotsAnim = null;
+  alignLinesAnim  = null;
+  dimLineAnim     = null;
+  scene3Anim      = null;
+  atGraphAnim     = null;
+  atDotsAnim      = null;
+  arrowFadeAnim   = null;
+  pinkArrowsAnim  = null;
+  rowArrowAnim    = null;
+  atLineAnim      = null;
+  _atCanvas       = null;
+  _atTex          = null;
+  _s2AccelArrows  = [];
+  _s2FadeMats     = [];
+  _s2VelArrows    = [];
+  _atPlane        = null;
+  scene4Anim      = null;
+  vtGraphAnim     = null;
+  vtDotsAnim      = null;
+  velArrowFadeAnim = null;
+  vtLineAnim      = null;
+  strobePhotoAnim = null;
+  _s2StrobeBalls  = [];
+  _vtCanvas       = null;
+  _vtTex          = null;
+}
+
+// ── 速度ベクトル ──────────────────────────────────────────────────────────────
+let velVecMode = false;
+
+// シリンダー軸を使ったメッシュ矢印（線の太さを自由に設定できる）
+function makeMeshArrow(color, shaftR = 0.07) {
+  const g   = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color, depthTest: false });
+  const shaftGeo = new THREE.CylinderGeometry(shaftR, shaftR, 1, 8);
+  shaftGeo.translate(0, 0.5, 0); // 根元を原点に
+  const shaft = new THREE.Mesh(shaftGeo, mat);
+  shaft.renderOrder = 101;
+  const coneGeo = new THREE.ConeGeometry(1, 1, 8);
+  coneGeo.translate(0, 0.5, 0); // 根元を原点に
+  const cone = new THREE.Mesh(coneGeo, mat);
+  cone.renderOrder = 101;
+  g.add(shaft); g.add(cone);
+  g.setLength = function(len, hLen, hW) {
+    const sLen = Math.max(0.01, len - hLen);
+    shaft.scale.y = sLen;
+    cone.scale.set(hW, hLen, hW);
+    cone.position.y = sLen;
+  };
+  g.setDirection = function(dir) {
+    const up = new THREE.Vector3(0, 1, 0);
+    const d  = dir.clone().normalize();
+    if (Math.abs(d.dot(up)) > 0.9999) {
+      g.quaternion.setFromAxisAngle(new THREE.Vector3(1,0,0), d.y < 0 ? Math.PI : 0);
+    } else {
+      g.quaternion.setFromUnitVectors(up, d);
+    }
+  };
+  g.setColor = function(c) { mat.color.set(c); };
+  return g;
+}
+
+const _velDir  = new THREE.Vector3(0, -1, 0);
+const velArrow = makeMeshArrow(pinkMat.color.getHex());
+velArrow.setDirection(_velDir);
+velArrow.setLength(1, 0.25, 0.15);
+velArrow.visible = false;
+scene.add(velArrow);
+
+// タイマービープ用変数（resetBall より前に宣言が必要）
+let _beepCtx = null;
+let _lastBeepSec = -1;
+
+// 初期配置
+function resetBall(skipStrobeClear = false) {
+  if (!skipStrobeClear) ball.position.set(0, autoMode ? AUTO_BALL_START_Y : BALL_START_Y, 0);
+  simState  = 'idle';
+  ballVelY  = 0;
+  openAngle = 0;
+  fallTime  = 0;
+  _lastBeepSec = -1;
+  vtData    = [];
+  ytData    = [];
+  strobeInterval = 1.00;
+  ball.material.transparent = false; ball.material.opacity = 1; ball.material.needsUpdate = true;
+  pinkMat.transparent = false; pinkMat.opacity = 1; pinkMat.needsUpdate = true;
+  grayMat.transparent = false; grayMat.opacity = 1; grayMat.needsUpdate = true;
+  darkMat.transparent = false; darkMat.opacity = 1; darkMat.needsUpdate = true;
+  ball.visible = !skipStrobeClear;
+  clawGroup.visible = true;
+  if (!skipStrobeClear) clearStrobeSnapshots();
+  velArrow.visible = false;
+  if (!skipStrobeClear) for (const { group } of armGroups) group.rotation.z = 0;
+  document.getElementById('btnDrop').disabled = false;
+  if (vtVisible) drawVtGraph();
+  if (ytVisible) drawYtGraph();
+}
+resetBall();
+
+document.getElementById('btnDrop').addEventListener('click', () => {
+  if (simState !== 'idle') return;
+  // AudioContext をここで事前初期化してウォームアップ（初回ビープの遅延防止）
+  if (!_beepCtx) _beepCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_beepCtx.state === 'suspended') _beepCtx.resume();
+  simState = 'dropping';
+  ballVelY = 0;
+  document.getElementById('btnDrop').disabled = true;
+  if (strobeMode) {
+    clearStrobeSnapshots();
+    takeStrobeSnapshot(); // t=0 の初期位置を記録
+    strobeTimer = 0;
+  }
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  resetBall();
+});
+
+document.getElementById('btnStrobe').addEventListener('click', () => {
+  strobeMode = !strobeMode;
+  document.getElementById('btnStrobe').classList.toggle('active', strobeMode);
+});
+
+document.getElementById('btnVelVec').addEventListener('click', () => {
+  velVecMode = !velVecMode;
+  document.getElementById('btnVelVec').classList.toggle('active', velVecMode);
+  if (!velVecMode) velArrow.visible = false;
+});
+
+// ── アニメーションループ ─────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  document.documentElement.classList.remove('split-auto-loading');
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (simState === 'dropping') {
+    // アームを開く
+    if (openAngle < OPEN_MAX) {
+      openAngle = Math.min(openAngle + OPEN_SPEED * dt, OPEN_MAX);
+      for (const { group, sx } of armGroups) {
+        group.rotation.z = sx * openAngle;
+      }
+    }
+
+    ballVelY += (autoMode ? GRAVITY : NORM_GRAVITY) * dt;
+    ball.position.y += ballVelY * dt;
+    fallTime += dt;
+    if (fallTime <= GRAPH_T_MAX + 0.02) {
+      vtData.push({ t: fallTime, v: GRAPH_G * fallTime });
+      ytData.push({ t: fallTime, y: 0.5 * GRAPH_G * fallTime * fallTime });
+    }
+
+    // ストロボ：0.25s ごとに残像を記録
+    if (strobeMode) {
+      strobeTimer += dt;
+      if (strobeTimer >= strobeInterval) {
+        takeStrobeSnapshot();
+        strobeTimer -= strobeInterval;
+      }
+    }
+
+    // 地面衝突 / 自動モードは3.0001秒後に球を非表示にして終了
+    if (autoMode) {
+      if (fallTime >= 4.0001) {
+        ball.visible = false;
+        ballVelY = 0;
+        simState = 'landed';
+      }
+    } else {
+      if (ball.position.y <= BALL_RADIUS) {
+        ball.position.y = BALL_RADIUS;
+        ballVelY = 0;
+        simState = 'landed';
+      }
+    }
+  }
+
+  // 速度ベクトル更新
+  if (velVecMode && simState === 'dropping') {
+    const speed = Math.abs(ballVelY);
+    if (speed > 0.1) {
+      const len     = speed * 0.15;
+      const headLen = Math.min(len * 0.25, 0.8);
+      const headW   = Math.min(len * 0.15, 0.5);
+      velArrow.setLength(len, headLen, headW);
+      velArrow.position.copy(ball.position);
+      velArrow.visible = true;
+    }
+  } else {
+    velArrow.visible = false;
+  }
+
+  if (fadeAnim) {
+    fadeAnim.elapsed += dt;
+    const fu = Math.min(fadeAnim.elapsed / fadeAnim.dur, 1);
+    const fop = 1 - fu;
+    ball.material.opacity = fop;
+    pinkMat.opacity = fop;
+    grayMat.opacity = fop;
+    darkMat.opacity = fop;
+    autoTimerEl.style.opacity = fop;
+    strobeMat.opacity = fadeAnim.strobeInitOpacity * fop;
+    for (const m of fadeAnim.meshesToFade) {
+      if (m.line && m.cone) {
+        m.line.material.opacity = fop;
+        m.cone.material.opacity = fop;
+      } else if (m.isSprite) {
+        m.material.opacity = fop;
+      }
+    }
+    if (fu >= 1) {
+      ball.visible      = false;
+      clawGroup.visible = false;
+      autoTimerEl.style.display = 'none';
+      strobeMat.opacity = 0.40;
+      for (const m of fadeAnim.meshesToFade) scene.remove(m);
+      fadeAnim = null;
+    }
+  }
+  if (scene2Anim) {
+    scene2Anim.elapsed += dt;
+    const u = Math.min(scene2Anim.elapsed / scene2Anim.dur, 1);
+    const k = u * u * (3 - 2 * u);
+    for (const { obj, startPos, endPos } of scene2Anim.objects) {
+      obj.position.lerpVectors(startPos, endPos, k);
+    }
+    if (u >= 1) scene2Anim = null;
+  }
+  if (dottedLinesAnim) {
+    dottedLinesAnim.elapsed += dt;
+    if (dottedLinesAnim.elapsed > dottedLinesAnim.delay) {
+      if (dottedLinesAnim.onFire) {
+        dottedLinesAnim.onFire();
+        dottedLinesAnim = null;
+      } else {
+        const t = Math.min((dottedLinesAnim.elapsed - dottedLinesAnim.delay) / dottedLinesAnim.dur, 1);
+        for (const { line, geo, pos, xFrom, xTo, yFrom, yTo } of dottedLinesAnim.lines) {
+          pos[3] = xFrom + (xTo - xFrom) * t;
+          if (yFrom !== undefined) pos[4] = yFrom + (yTo - yFrom) * t;
+          geo.attributes.position.needsUpdate = true;
+          line.computeLineDistances();
+        }
+        if (t >= 1) {
+          if (dottedLinesAnim.onComplete) dottedLinesAnim.onComplete();
+          dottedLinesAnim = null;
+        }
+      }
+    }
+  }
+  if (pinkArrowsAnim) {
+    pinkArrowsAnim.elapsed += dt;
+    if (pinkArrowsAnim.elapsed > pinkArrowsAnim.delay) {
+      const t = Math.min((pinkArrowsAnim.elapsed - pinkArrowsAnim.delay) / pinkArrowsAnim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      for (const { arrow, fullLen, headLen, headW } of pinkArrowsAnim.arrows) {
+        const curLen = Math.max(fullLen * k, 0.001);
+        const curHead = Math.min(headLen, curLen * 0.3);
+        arrow.setLength(curLen, curHead, headW);
+      }
+      if (t >= 1) pinkArrowsAnim = null;
+    }
+  }
+  if (rowArrowAnim) {
+    rowArrowAnim.elapsed += dt;
+    if (rowArrowAnim.elapsed > rowArrowAnim.delay) {
+      const t = Math.min((rowArrowAnim.elapsed - rowArrowAnim.delay) / rowArrowAnim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      for (const { arrow, fromX, fromY, toX, toY } of rowArrowAnim.arrows) {
+        arrow.position.x = fromX + (toX - fromX) * k;
+        arrow.position.y = fromY + (toY - fromY) * k;
+      }
+      if (rowArrowAnim.vtPlane) {
+        rowArrowAnim.vtPlane.position.x = rowArrowAnim.vtFromX + (rowArrowAnim.vtToX - rowArrowAnim.vtFromX) * k;
+      }
+      if (rowArrowAnim.fadeMats) {
+        for (const mat of rowArrowAnim.fadeMats) mat.opacity = 1 - k;
+      }
+      if (t >= 1) {
+        if (rowArrowAnim.onComplete) rowArrowAnim.onComplete();
+        rowArrowAnim = null;
+      }
+    }
+  }
+  if (accelAnim) {
+    accelAnim.elapsed += dt;
+    if (accelAnim.elapsed > accelAnim.delay) {
+      const t = Math.min((accelAnim.elapsed - accelAnim.delay) / accelAnim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      for (const { arrow, len, headLen, headW } of accelAnim.arrows) {
+        arrow.visible = true;
+        arrow.setLength(Math.max(0.001, k * len), k * headLen, k * headW);
+      }
+      if (t >= 1) accelAnim = null;
+    }
+  }
+  if (moveAccelAnim) {
+    moveAccelAnim.elapsed += dt;
+    if (moveAccelAnim.elapsed > moveAccelAnim.delay) {
+      const t = Math.min((moveAccelAnim.elapsed - moveAccelAnim.delay) / moveAccelAnim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      for (const { arrow, fromX, fromY, toX, toY } of moveAccelAnim.arrows) {
+        arrow.position.x = fromX + (toX - fromX) * k;
+        arrow.position.y = fromY + (toY - fromY) * k;
+      }
+      if (t >= 1) moveAccelAnim = null;
+    }
+  }
+  if (fadeOutDotsAnim) {
+    fadeOutDotsAnim.elapsed += dt;
+    if (fadeOutDotsAnim.elapsed > fadeOutDotsAnim.delay) {
+      const t = Math.min((fadeOutDotsAnim.elapsed - fadeOutDotsAnim.delay) / fadeOutDotsAnim.dur, 1);
+      for (const mat of fadeOutDotsAnim.mats) {
+        mat.opacity = fadeOutDotsAnim.initOpacity * (1 - t);
+      }
+      if (t >= 1) fadeOutDotsAnim = null;
+    }
+  }
+  if (alignLinesAnim) {
+    alignLinesAnim.elapsed += dt;
+    if (alignLinesAnim.elapsed > alignLinesAnim.delay) {
+      const t = Math.min((alignLinesAnim.elapsed - alignLinesAnim.delay) / alignLinesAnim.dur, 1);
+      for (const { geo, pos, xFrom, xTo } of alignLinesAnim.lines) {
+        pos[3] = xFrom + (xTo - xFrom) * t;
+        geo.attributes.position.needsUpdate = true;
+        geo._line.computeLineDistances();
+      }
+      if (t >= 1) alignLinesAnim = null;
+    }
+  }
+  if (scene3Anim) {
+    scene3Anim.elapsed += dt;
+    const t = Math.min(scene3Anim.elapsed / scene3Anim.dur, 1);
+    const k = t * t * (3 - 2 * t);
+    for (const { mat, initOp } of scene3Anim.fadeMats) {
+      mat.opacity = initOp * (1 - t);
+    }
+    // 矢印を移動しながらZ軸周りに180度回転（下向き→上向き）
+    const angle = Math.PI * k;
+    const dir = new THREE.Vector3(Math.sin(angle), -Math.cos(angle), 0);
+    for (const { arrow, fromX, fromY, toX, toY } of scene3Anim.moveArrows) {
+      arrow.position.x = fromX + (toX - fromX) * k;
+      arrow.position.y = fromY + (toY - fromY) * k;
+      arrow.setDirection(dir);
+    }
+    if (t >= 1) scene3Anim = null;
+  }
+  if (atGraphAnim) {
+    atGraphAnim.elapsed += dt;
+    if (!atGraphAnim.camTriggered && atGraphAnim.elapsed >= atGraphAnim.delay) {
+      atGraphAnim.camTriggered = true;
+      // 軸全体が見えるよう少し左にパン
+      viewTween = {
+        startPos:    camera.position.clone(),
+        endPos:      new THREE.Vector3(-9.5, 36.3, 5),
+        startTarget: controls.target.clone(),
+        endTarget:   new THREE.Vector3(-9.5, 36.3, 0),
+        startTime:   nowSec(),
+        dur:         0.6,
+      };
+    }
+    if (atGraphAnim.elapsed > atGraphAnim.delay) {
+      const t = Math.min((atGraphAnim.elapsed - atGraphAnim.delay) / atGraphAnim.dur, 1);
+      atGraphAnim.mesh.material.opacity = t * t * (3 - 2 * t);
+      if (t >= 1) {
+        atGraphAnim = null;
+        atDotsAnim = { elapsed: 0, delay: 0.5, dur: 0.4 };
+      }
+    }
+  }
+  if (atDotsAnim) {
+    atDotsAnim.elapsed += dt;
+    if (atDotsAnim.elapsed > atDotsAnim.delay) {
+      const t = Math.min((atDotsAnim.elapsed - atDotsAnim.delay) / atDotsAnim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      if (_atCanvas && _atTex) {
+        drawAtGraph(_atCanvas, { dotsAlpha: k, lineAlpha: 0 });
+        _atTex.needsUpdate = true;
+      }
+      if (t >= 1) {
+        atDotsAnim = null;
+        arrowFadeAnim = { elapsed: 0, delay: 0.5, dur: 0.6 };
+      }
+    }
+  }
+  if (arrowFadeAnim) {
+    arrowFadeAnim.elapsed += dt;
+    if (arrowFadeAnim.elapsed > arrowFadeAnim.delay) {
+      const t = Math.min((arrowFadeAnim.elapsed - arrowFadeAnim.delay) / arrowFadeAnim.dur, 1);
+      for (const { arrow } of _s2AccelArrows) {
+        arrow.line.material.opacity = 1 - t;
+        arrow.cone.material.opacity = 1 - t;
+      }
+      if (t >= 1) {
+        for (const { arrow } of _s2AccelArrows) arrow.visible = false;
+        arrowFadeAnim = null;
+        atLineAnim = { elapsed: 0, delay: 0.5, dur: 0.5 };
+      }
+    }
+  }
+  if (atLineAnim) {
+    atLineAnim.elapsed += dt;
+    if (atLineAnim.elapsed > atLineAnim.delay) {
+      const t = Math.min((atLineAnim.elapsed - atLineAnim.delay) / atLineAnim.dur, 1);
+      const k2 = t * t * (3 - 2 * t);
+      if (_atCanvas && _atTex) {
+        drawAtGraph(_atCanvas, { dotsAlpha: 1, lineAlpha: k2 });
+        _atTex.needsUpdate = true;
+      }
+      if (t >= 1) atLineAnim = null;
+    }
+  }
+  // ── 場面4アニメーション ──────────────────────────────────────────
+  if (scene4Anim) {
+    scene4Anim.elapsed += dt;
+    // a-tグラフはズーム開始と同時にフェードアウト（delayを待たない）
+    if (scene4Anim.atPlane) {
+      const fadeT = Math.min(scene4Anim.elapsed / scene4Anim.fadeDur, 1);
+      scene4Anim.atPlane.material.opacity = 1 - fadeT;
+    }
+    if (scene4Anim.elapsed > scene4Anim.delay) {
+      const t = Math.min((scene4Anim.elapsed - scene4Anim.delay) / scene4Anim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      // 速度矢印を移動しながら180度回転（下向き→上向き）
+      const angle = Math.PI * k;
+      const dir = new THREE.Vector3(Math.sin(angle), -Math.cos(angle), 0);
+      for (const { arrow, fromX, fromY, toX, toY } of scene4Anim.moveArrows) {
+        arrow.position.x = fromX + (toX - fromX) * k;
+        arrow.position.y = fromY + (toY - fromY) * k;
+        arrow.setDirection(dir);
+      }
+      if (t >= 1) scene4Anim = null;
+    }
+  }
+  if (vtGraphAnim) {
+    vtGraphAnim.elapsed += dt;
+    if (!vtGraphAnim.camTriggered && vtGraphAnim.elapsed >= vtGraphAnim.delay) {
+      vtGraphAnim.camTriggered = true;
+      viewTween = {
+        startPos:    camera.position.clone(),
+        endPos:      new THREE.Vector3(vtGraphAnim.camCX, vtGraphAnim.camCY, 10),
+        startTarget: controls.target.clone(),
+        endTarget:   new THREE.Vector3(vtGraphAnim.camCX, vtGraphAnim.camCY, 0),
+        startTime:   nowSec(),
+        dur:         0.6,
+      };
+    }
+    if (vtGraphAnim.elapsed > vtGraphAnim.delay) {
+      const t = Math.min((vtGraphAnim.elapsed - vtGraphAnim.delay) / vtGraphAnim.dur, 1);
+      vtGraphAnim.mesh.material.opacity = t * t * (3 - 2 * t);
+      if (t >= 1) {
+        const skipFade = vtGraphAnim.skipArrowFade;
+        vtGraphAnim = null;
+        vtDotsAnim = { elapsed: 0, delay: 0.5, dur: 0.4, skipArrowFade: skipFade };
+      }
+    }
+  }
+  if (vtDotsAnim) {
+    vtDotsAnim.elapsed += dt;
+    if (vtDotsAnim.elapsed > vtDotsAnim.delay) {
+      const t = Math.min((vtDotsAnim.elapsed - vtDotsAnim.delay) / vtDotsAnim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      if (_vtCanvas && _vtTex) {
+        drawVtGraphStatic(_vtCanvas, { dotsAlpha: k, lineAlpha: 0 });
+        _vtTex.needsUpdate = true;
+      }
+      if (t >= 1) {
+        const skipFade = vtDotsAnim.skipArrowFade;
+        vtDotsAnim = null;
+        if (skipFade) {
+          vtLineAnim = { elapsed: 0, delay: 0.5, dur: 0.5, showStrobeAfter: true };
+        } else {
+          velArrowFadeAnim = { elapsed: 0, delay: 0.5, dur: 0.6 };
+        }
+      }
+    }
+  }
+  if (velArrowFadeAnim) {
+    velArrowFadeAnim.elapsed += dt;
+    if (velArrowFadeAnim.elapsed > velArrowFadeAnim.delay) {
+      const t = Math.min((velArrowFadeAnim.elapsed - velArrowFadeAnim.delay) / velArrowFadeAnim.dur, 1);
+      for (const { arrow } of _s2VelArrows) {
+        arrow.line.material.opacity = 1 - t;
+        arrow.cone.material.opacity = 1 - t;
+      }
+      if (t >= 1) {
+        for (const { arrow } of _s2VelArrows) arrow.visible = false;
+        velArrowFadeAnim = null;
+        if (_vtCanvas) vtLineAnim = { elapsed: 0, delay: 0.5, dur: 0.5 };
+      }
+    }
+  }
+  if (vtLineAnim) {
+    vtLineAnim.elapsed += dt;
+    if (vtLineAnim.elapsed > vtLineAnim.delay) {
+      const t = Math.min((vtLineAnim.elapsed - vtLineAnim.delay) / vtLineAnim.dur, 1);
+      const k2 = t * t * (3 - 2 * t);
+      if (_vtCanvas && _vtTex) {
+        drawVtGraphStatic(_vtCanvas, { dotsAlpha: 1, lineAlpha: k2 });
+        _vtTex.needsUpdate = true;
+      }
+      if (t >= 1) {
+        const showStrobe = vtLineAnim.showStrobeAfter;
+        vtLineAnim = null;
+        if (showStrobe) strobePhotoAnim = { elapsed: 0, delay: 0.5, dur: 0.6 };
+      }
+    }
+  }
+  if (strobePhotoAnim) {
+    strobePhotoAnim.elapsed += dt;
+    if (strobePhotoAnim.elapsed > strobePhotoAnim.delay) {
+      const t = Math.min((strobePhotoAnim.elapsed - strobePhotoAnim.delay) / strobePhotoAnim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      for (const mat of _s2StrobeBalls) mat.opacity = k;
+      if (t >= 1) strobePhotoAnim = null;
+    }
+  }
+  if (dimLineAnim) {
+    dimLineAnim.elapsed += dt;
+    if (dimLineAnim.elapsed > dimLineAnim.delay) {
+      const t = Math.min((dimLineAnim.elapsed - dimLineAnim.delay) / dimLineAnim.dur, 1);
+      const k = t * t * (3 - 2 * t);
+      for (const { pos, geo, yTo } of dimLineAnim.growLines) {
+        pos[4] = dimLineAnim.yMid + (yTo - dimLineAnim.yMid) * k;
+        geo.attributes.position.needsUpdate = true;
+      }
+      const lineOp = Math.min(t * 3, 1) * 0.85;
+      for (const { mat } of dimLineAnim.growLines) mat.opacity = lineOp;
+      const fadeT = Math.min(Math.max((t - 0.55) / 0.45, 0), 1);
+      for (const mat of dimLineAnim.ticks) mat.opacity = fadeT * 0.85;
+      dimLineAnim.label.material.opacity = fadeT;
+      if (t >= 1) {
+        if (dimLineAnim.onComplete) dimLineAnim.onComplete();
+        dimLineAnim = null;
+      }
+    }
+  }
+  if (autoMode) autoTimerEl.textContent = 't = ' + Math.min(fallTime, 4.00).toFixed(2) + ' s';
+  if (!autoMode) {
+    normalTimerEl.style.display = 'block';
+    const _sec = Math.floor(fallTime);
+    ntTextEl.textContent = 't = ' + _sec + ' s';
+    if (simState === 'dropping' && _sec >= 1 && _sec <= 4 && _sec !== _lastBeepSec) {
+      _lastBeepSec = _sec;
+      playBeep();
+    }
+  } else {
+    normalTimerEl.style.display = 'none';
+  }
+  if (vtVisible) drawVtGraph();
+  if (ytVisible) drawYtGraph();
+  updateViewSnap();
+  controls.update();
+  if (window._inkDirty   && window._inkBoardTex)   { window._inkBoardTex.needsUpdate   = true; window._inkDirty   = false; }
+  if (window._shapeDirty && window._shapeBoardTex) { window._shapeBoardTex.needsUpdate = true; window._shapeDirty = false; }
+  renderer.render(scene, camera);
+}
+const normalTimerEl = document.getElementById('normalTimer');
+const ntTextEl      = document.getElementById('ntText');
+
+// タイマービープ音
+let _volMuted = false;
+let _volLevel = 0.5; // 0〜1
+
+(function setupVolumeControl() {
+  const slider   = document.getElementById('volSlider');
+  const muteBtn  = document.getElementById('volMuteBtn');
+  const waves    = document.getElementById('volWaves');
+  const muteX    = document.getElementById('volMuteX');
+
+  function updateSliderFill() {
+    // スライダーの現在値をそのまま使う（アニメーション中も青い部分と白い丸が連動）
+    slider.style.setProperty('--vp', slider.value + '%');
+  }
+
+  slider.addEventListener('input', () => {
+    _volLevel = slider.value / 100;
+    updateSliderFill();
+  });
+
+  let _volAnim = null;
+  function animateSlider(toValue, duration) {
+    if (_volAnim) cancelAnimationFrame(_volAnim);
+    const startValue = parseFloat(slider.value);
+    const startTime  = performance.now();
+    function step(now) {
+      const t = Math.min((now - startTime) / duration, 1);
+      const ease = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; // easeInOut
+      slider.value = startValue + (toValue - startValue) * ease;
+      updateSliderFill();
+      if (t < 1) _volAnim = requestAnimationFrame(step);
+      else _volAnim = null;
+    }
+    _volAnim = requestAnimationFrame(step);
+  }
+
+  muteBtn.addEventListener('click', () => {
+    _volMuted = !_volMuted;
+    waves.style.display = _volMuted ? 'none' : '';
+    muteX.style.display = _volMuted ? ''     : 'none';
+    animateSlider(_volMuted ? 0 : _volLevel * 100, 350);
+  });
+
+  updateSliderFill();
+})();
+
+function playBeep() {
+  if (_volMuted || _volLevel === 0) return;
+  if (!_beepCtx) _beepCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_beepCtx.state === 'suspended') _beepCtx.resume();
+  const osc  = _beepCtx.createOscillator();
+  const gain = _beepCtx.createGain();
+  osc.connect(gain);
+  gain.connect(_beepCtx.destination);
+  osc.frequency.value = 880;
+  gain.gain.setValueAtTime(_volLevel * 0.5, _beepCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, _beepCtx.currentTime + 0.18);
+  osc.start(_beepCtx.currentTime);
+  osc.stop(_beepCtx.currentTime + 0.18);
+}
+
+// タイマー ドラッグ移動
+let _ntDragging = false, _ntDx = 0, _ntDy = 0;
+normalTimerEl.addEventListener('pointerdown', (e) => {
+  if (e.target.id === 'ntResize') return;
+  _ntDragging = true;
+  const r = normalTimerEl.getBoundingClientRect();
+  normalTimerEl.style.left  = r.left + 'px';
+  normalTimerEl.style.right = 'auto';
+  _ntDx = e.clientX - r.left;
+  _ntDy = e.clientY - r.top;
+  normalTimerEl.setPointerCapture(e.pointerId);
+  e.stopPropagation();
+});
+normalTimerEl.addEventListener('pointermove', (e) => {
+  if (!_ntDragging) return;
+  normalTimerEl.style.left = (e.clientX - _ntDx) + 'px';
+  normalTimerEl.style.top  = (e.clientY - _ntDy) + 'px';
+});
+normalTimerEl.addEventListener('pointerup', () => { _ntDragging = false; });
+
+// タイマー フォントサイズ変更（◢ グリップ）
+const _ntResizeEl = document.getElementById('ntResize');
+let _ntResizing = false, _ntResizeStartX = 0, _ntResizeStartY = 0, _ntResizeStartSize = 36;
+_ntResizeEl.addEventListener('pointerdown', (e) => {
+  _ntResizing = true;
+  _ntResizeStartX    = e.clientX;
+  _ntResizeStartY    = e.clientY;
+  _ntResizeStartSize = parseFloat(getComputedStyle(normalTimerEl).fontSize);
+  _ntResizeEl.setPointerCapture(e.pointerId);
+  e.stopPropagation();
+});
+window.addEventListener('pointermove', (e) => {
+  if (!_ntResizing) return;
+  const d = (e.clientX - _ntResizeStartX) + (e.clientY - _ntResizeStartY);
+  const s = Math.max(16, Math.min(96, _ntResizeStartSize + d * 0.5));
+  normalTimerEl.style.fontSize = s + 'px';
+});
+window.addEventListener('pointerup', () => { _ntResizing = false; });
+
+// ── v-tグラフ トグル ──────────────────────────────────────────────────────────
+document.getElementById('btnVtGraph').addEventListener('click', () => {
+  if (!gGroup) ensureGraph();
+  vtVisible = !vtVisible;
+  gGroup.visible = vtVisible;
+  document.getElementById('btnVtGraph').classList.toggle('active', vtVisible);
+  if (vtVisible) drawVtGraph();
+});
+
+// ── y-tグラフ トグル ──────────────────────────────────────────────────────────
+document.getElementById('btnYtGraph').addEventListener('click', () => {
+  if (!ytGroup) ensureYtGraph();
+  ytVisible = !ytVisible;
+  ytGroup.visible = ytVisible;
+  document.getElementById('btnYtGraph').classList.toggle('active', ytVisible);
+  if (ytVisible) drawYtGraph();
+});
+
+// ── 視点ボタン ────────────────────────────────────────────────────────────────
+document.getElementById('btnViewXY').addEventListener('click', () => {
+  startViewSnap(new THREE.Vector3(0, 0, 1)); // +Z方向から見る → XY平面正面
+});
+
+// ── 参考動画モーダル ──────────────────────────────────────────────────────────
+{
+  const modal      = document.getElementById('videoModal');
+  const vmHome     = document.getElementById('vmHome');
+  const vmPlayer   = document.getElementById('vmPlayer');
+  const vmVideo    = document.getElementById('vmVideo');
+  const vmTitle    = document.getElementById('vmPlayerTitle');
+
+  function openModal() {
+    modal.style.display = 'flex';
+    vmHome.style.display = 'flex';
+    vmPlayer.style.display = 'none';
+    vmVideo.pause(); vmVideo.removeAttribute('src');
+  }
+  function closeModal() {
+    modal.style.display = 'none';
+    vmVideo.pause(); vmVideo.removeAttribute('src');
+  }
+  function showPlayer(label, src) {
+    vmHome.style.display = 'none';
+    vmTitle.textContent = label;
+    vmVideo.src = src;
+    vmPlayer.style.display = 'flex';
+  }
+  function backHome() {
+    vmPlayer.style.display = 'none';
+    vmHome.style.display = 'flex';
+    vmVideo.pause(); vmVideo.removeAttribute('src');
+  }
+
+  document.getElementById('btnVideoRef').addEventListener('click', openModal);
+  document.getElementById('vmClose').addEventListener('click', closeModal);
+  document.getElementById('vmBack').addEventListener('click', backHome);
+  document.getElementById('vmBtnAir').addEventListener('click', () =>
+    showPlayer('空気中の自由落下', '自由落下 空気中.mp4'));
+  document.getElementById('vmBtnVac').addEventListener('click', () =>
+    showPlayer('真空中の自由落下', '自由落下 真空中.mp4'));
+
+  // モーダル外クリックで閉じる
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+}
+
+const autoTimerEl   = document.getElementById('autoTimer');
+
+// ── 自動シミュレーション ─────────────────────────────────────────────────────
+const scenes = [
+  {
+    title: '自由落下（速度ベクトル＋ストロボ）',
+    setup() {
+      strobeInterval = 1.0;   // 1秒間隔
+      strobeMode  = true;
+      velVecMode  = true;
+      // 落下開始（t=0 の残像を記録してから開始）
+      simState = 'dropping';
+      ballVelY = 0;
+      clearStrobeSnapshots();
+      takeStrobeSnapshot();
+      strobeTimer = 0.5; // 最初の自動撮影を t=0.5s にずらす
+      document.getElementById('btnDrop').disabled = true;
+    },
+  },
+  {
+    title: '速度ベクトルの整列',
+    setup() {
+      // 場面1のストロボメッシュを保存してフェードアウト対象にする
+      const meshesToFade = [];
+      for (const m of strobeMeshes) {
+        if (m.line && m.cone) {
+          scene.remove(m); // 矢印は即座に消す
+        } else {
+          meshesToFade.push(m); // ゴーストボール・ラベルはフェード
+        }
+      }
+      strobeMeshes.length = 0;
+      scene2Anim = null;
+      ball.material.transparent = true; ball.material.needsUpdate = true;
+      pinkMat.transparent = true; pinkMat.needsUpdate = true;
+      grayMat.transparent = true; grayMat.needsUpdate = true;
+      darkMat.transparent = true; darkMat.needsUpdate = true;
+      fadeAnim = { elapsed: 0, dur: 0.8, meshesToFade, strobeInitOpacity: strobeMat.opacity };
+      const targets = [
+        new THREE.Vector3(-3, 38, 0),
+        new THREE.Vector3(-1, 38, 0),
+        new THREE.Vector3( 1, 38, 0),
+        new THREE.Vector3( 3, 38, 0),
+      ];
+      const animObjects = [];
+      const _sTimes = [0.5, 1.5, 2.5, 3.5];
+      for (let i = 0; i < 4; i++) {
+        const t = _sTimes[i];
+        const startY = AUTO_BALL_START_Y + 0.5 * GRAVITY * t * t;
+        const startPos = new THREE.Vector3(0, startY, 0);
+        const speed = Math.abs(GRAVITY) * t;
+        const len = speed * 0.15;
+        const headLen = Math.min(len * 0.25, 0.8);
+        const headW   = Math.min(len * 0.15, 0.5);
+        const arrow = new THREE.ArrowHelper(
+          new THREE.Vector3(0, -1, 0), startPos, len, pinkMat.color.getHex(), headLen, headW
+        );
+        arrow.line.material.transparent = true;
+        arrow.line.material.depthWrite  = false;
+        arrow.cone.material.transparent = true;
+        arrow.cone.material.depthWrite  = false;
+        arrow.line.renderOrder = 55;
+        arrow.cone.renderOrder = 55;
+        scene.add(arrow);
+        strobeMeshes.push(arrow);
+        animObjects.push({ obj: arrow, startPos: startPos.clone(), endPos: targets[i] });
+      }
+      scene2Anim = { objects: animObjects, elapsed: 0, dur: 1.2 };
+      // 場面4用に速度矢印を保存
+      _s2VelArrows = animObjects.map((o, i) => ({ arrow: o.obj, x: targets[i].x, y: targets[i].y }));
+
+      // v-t グラフ座標（場面4と同じスケール）
+      const VT_SCALE = 1.46;
+      const VT_CX = 0, VT_CY = 35, VT_TMAX = 4;
+      const plotW      = (900 / 1024) * GRAPH_W * VT_SCALE;
+      const plotLeft   = VT_CX - GRAPH_W * VT_SCALE / 2 + (96 / 1024) * GRAPH_W * VT_SCALE;
+      const plotBottom = VT_CY + GRAPH_H * VT_SCALE / 2 - (554 / 640) * GRAPH_H * VT_SCALE;
+      const vtTargetXs = [0.5, 1.5, 2.5, 3.5].map(t => plotLeft + (t / VT_TMAX) * plotW);
+      const vtTargetY  = plotBottom;
+
+      // v-t グラフパネルを生成（opacity=0 で不可視、後でフェードイン）
+      const vtCanvas2 = document.createElement('canvas');
+      vtCanvas2.width = 1024; vtCanvas2.height = 640;
+      drawVtGraphStatic(vtCanvas2);
+      const vtTex2 = new THREE.CanvasTexture(vtCanvas2);
+      vtTex2.colorSpace = THREE.SRGBColorSpace;
+      _vtCanvas = vtCanvas2; _vtTex = vtTex2;
+      const vtMat2 = new THREE.MeshBasicMaterial({
+        map: vtTex2, transparent: true, opacity: 0,
+        side: THREE.DoubleSide, depthTest: true,
+      });
+      const vtPlane2 = new THREE.Mesh(new THREE.PlaneGeometry(GRAPH_W, GRAPH_H), vtMat2);
+      vtPlane2.scale.setScalar(VT_SCALE);
+      vtPlane2.position.set(VT_CX, VT_CY, 0);
+      vtPlane2.renderOrder = 50;
+      scene.add(vtPlane2);
+      strobeMeshes.push(vtPlane2);
+
+      // 1.7秒後にカメラ移動＋矢印移動＋グラフフェードインを起動
+      const zoomDur = 0.8, pauseDur = 0.5, arrowDur = 0.8;
+      dottedLinesAnim = {
+        elapsed: 0,
+        delay: 1.7,
+        onFire: () => {
+          scene4Anim = {
+            elapsed: 0,
+            delay:   pauseDur,
+            fadeDur: 999,
+            dur:     arrowDur,
+            atPlane: null,
+            moveArrows: _s2VelArrows.map((d, i) => ({
+              arrow: d.arrow,
+              fromX: d.x, fromY: d.y,
+              toX: vtTargetXs[i], toY: vtTargetY,
+            })),
+          };
+          vtGraphAnim = {
+            elapsed: 0,
+            delay:   pauseDur + arrowDur + 0.5,
+            dur:     0.6,
+            mesh:    vtPlane2,
+            camTriggered: true,
+            skipArrowFade: true,
+          };
+        },
+      };
+
+      _s2StrobeBalls = [];
+      document.getElementById('btnDrop').disabled = true;
+      // 最初から v-t グラフと同じ視点へ移動（ズームなし）
+      viewTween = {
+        startPos:    camera.position.clone(),
+        endPos:      new THREE.Vector3(VT_CX, VT_CY, 10),
+        startTarget: controls.target.clone(),
+        endTarget:   new THREE.Vector3(VT_CX, VT_CY, 0),
+        startTime:   nowSec(),
+        dur:         1.2,
+      };
+    },
+  },
+  {
+    title: 'v-tグラフ（点線）',
+    setup() {
+      const VT_SCALE = 1.46;
+      const VT_CX = 0, VT_CY = 35, VT_TMAX = 4, VT_VMAX = 40;
+      const plotW      = (900 / 1024) * GRAPH_W * VT_SCALE;
+      const plotH      = (526 / 640) * GRAPH_H * VT_SCALE;
+      const plotLeft   = VT_CX - GRAPH_W * VT_SCALE / 2 + (96 / 1024) * GRAPH_W * VT_SCALE;
+      const plotBottom = VT_CY + GRAPH_H * VT_SCALE / 2 - (554 / 640) * GRAPH_H * VT_SCALE;
+
+      // 場面2から引き継ぐ速度矢印（場面2終端の位置・長さに合わせる）
+      const targetXs = [0.5, 1.5, 2.5, 3.5].map(t => plotLeft + (t / VT_TMAX) * plotW);
+      const targetY  = plotBottom;
+      for (let vi = 0; vi < 4; vi++) {
+        const vt    = [0.5, 1.5, 2.5, 3.5][vi];
+        const speed = Math.abs(GRAVITY) * vt;
+        const len   = speed * 0.15;
+        const hLen  = Math.min(len * 0.25, 0.8);
+        const hW    = Math.min(len * 0.15, 0.5);
+        const arrow = new THREE.ArrowHelper(
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(targetXs[vi], targetY, 0),
+          len, pinkMat.color.getHex(), hLen, hW
+        );
+        arrow.line.material.transparent = true;
+        arrow.line.material.depthWrite  = false;
+        arrow.cone.material.transparent = true;
+        arrow.cone.material.depthWrite  = false;
+        arrow.line.renderOrder = 55;
+        arrow.cone.renderOrder = 55;
+        scene.add(arrow);
+        strobeMeshes.push(arrow);
+        _s2VelArrows.push({ arrow });
+      }
+      velArrowFadeAnim = { elapsed: 0, delay: 0, dur: 0.8 };
+
+      // v-t グラフを即座に全表示
+      const vtCanvasS3 = document.createElement('canvas');
+      vtCanvasS3.width = 1024; vtCanvasS3.height = 640;
+      drawVtGraphStatic(vtCanvasS3, { dotsAlpha: 1, lineAlpha: 1 });
+      const vtTexS3 = new THREE.CanvasTexture(vtCanvasS3);
+      vtTexS3.colorSpace = THREE.SRGBColorSpace;
+      const vtMatS3 = new THREE.MeshBasicMaterial({
+        map: vtTexS3, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthTest: true,
+      });
+      const vtPlaneS3 = new THREE.Mesh(new THREE.PlaneGeometry(GRAPH_W, GRAPH_H), vtMatS3);
+      vtPlaneS3.scale.setScalar(VT_SCALE);
+      vtPlaneS3.position.set(VT_CX, VT_CY, 0);
+      vtPlaneS3.renderOrder = 50;
+      scene.add(vtPlaneS3);
+      strobeMeshes.push(vtPlaneS3);
+
+      // 各データ点の3D座標
+      const pts = [0.5, 1.5, 2.5, 3.5].map(t => ({
+        x: plotLeft + (t / VT_TMAX) * plotW,
+        y: plotBottom + (9.8 * t / VT_VMAX) * plotH,
+      }));
+
+      // 水平点線セグメント（(1,9.8)→(2,9.8), (2,19.6)→(3,19.6), (3,29.4)→(4,29.4)）
+      const segLines = [];
+      for (let i = 0; i < 3; i++) {
+        const x1 = pts[i].x, y1 = pts[i].y;
+        const x2 = pts[i + 1].x; // 水平：y は変わらない
+        const pos = new Float32Array([x1, y1, 0.02,  x1, y1, 0.02]);
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.LineDashedMaterial({
+          color: 0x000000, dashSize: 0.3, gapSize: 0.15,
+          transparent: true, opacity: 0.85, depthTest: false,
+        });
+        const line = new THREE.Line(geo, mat);
+        line.renderOrder = 100;
+        line.computeLineDistances();
+        scene.add(line);
+        strobeMeshes.push(line);
+        segLines.push({ line, geo, pos, xFrom: x1, xTo: x2 });
+      }
+
+      // ピンク矢印を事前生成（初期サイズ 0.001、点線完了後に伸ばす）
+      const pinkDefs = [
+        { ti: 1.5, vFrom: 4.9,  vTo: 14.7 },
+        { ti: 2.5, vFrom: 14.7, vTo: 24.5 },
+        { ti: 3.5, vFrom: 24.5, vTo: 34.3 },
+      ];
+      const pinkArrowObjs = pinkDefs.map(({ ti, vFrom, vTo }) => {
+        const ax      = plotLeft + (ti / VT_TMAX) * plotW;
+        const ay      = plotBottom + (vFrom / VT_VMAX) * plotH;
+        const fullLen = (vTo - vFrom) / VT_VMAX * plotH;
+        const headLen = Math.min(fullLen * 0.25, 0.5);
+        const headW   = Math.min(fullLen * 0.15, 0.3);
+        const arrow   = new THREE.ArrowHelper(
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(ax, ay, 0.03),
+          0.001, 0xff8800, 0.001, headW
+        );
+        arrow.line.material.transparent = true;
+        arrow.line.material.depthTest   = false;
+        arrow.cone.material.transparent = true;
+        arrow.cone.material.depthTest   = false;
+        arrow.line.renderOrder = 110;
+        arrow.cone.renderOrder = 110;
+        scene.add(arrow);
+        strobeMeshes.push(arrow);
+        return { arrow, fullLen, headLen, headW };
+      });
+
+      // 0.5秒後から0.8秒かけて点線を成長させ、完了後0.5秒でピンク矢印を出す
+      dottedLinesAnim = {
+        elapsed: 0, delay: 0.5, dur: 0.8, lines: segLines,
+        onComplete: () => {
+          pinkArrowsAnim = { elapsed: 0, delay: 0.5, dur: 0.6, arrows: pinkArrowObjs };
+        },
+      };
+
+      document.getElementById('btnDrop').disabled = true;
+    },
+  },
+  {
+    title: '等加速度運動（v-tグラフ）',
+    setup() {
+      const VT_SCALE = 1.46;
+      const VT_CX = 0, VT_CY = 35, VT_TMAX = 4, VT_VMAX = 40;
+      const plotW      = (900 / 1024) * GRAPH_W * VT_SCALE;
+      const plotH      = (526 / 640) * GRAPH_H * VT_SCALE;
+      const plotLeft   = VT_CX - GRAPH_W * VT_SCALE / 2 + (96 / 1024) * GRAPH_W * VT_SCALE;
+      const plotBottom = VT_CY + GRAPH_H * VT_SCALE / 2 - (554 / 640) * GRAPH_H * VT_SCALE;
+
+      // ── 場面3の最終状態を再現 ─────────────────────────────────────────
+
+      // v-tグラフ（全表示）
+      const vtCanvasS4 = document.createElement('canvas');
+      vtCanvasS4.width = 1024; vtCanvasS4.height = 640;
+      drawVtGraphStatic(vtCanvasS4, { dotsAlpha: 1, lineAlpha: 1 });
+      const vtTexS4 = new THREE.CanvasTexture(vtCanvasS4);
+      vtTexS4.colorSpace = THREE.SRGBColorSpace;
+      const vtMatS4 = new THREE.MeshBasicMaterial({
+        map: vtTexS4, transparent: true, opacity: 1,
+        side: THREE.DoubleSide, depthTest: true,
+      });
+      const vtPlaneS4 = new THREE.Mesh(new THREE.PlaneGeometry(GRAPH_W, GRAPH_H), vtMatS4);
+      vtPlaneS4.scale.setScalar(VT_SCALE);
+      vtPlaneS4.position.set(VT_CX, VT_CY, 0);
+      vtPlaneS4.renderOrder = 50;
+      scene.add(vtPlaneS4);
+      strobeMeshes.push(vtPlaneS4);
+
+      // データ点の3D座標
+      const pts = [0.5, 1.5, 2.5, 3.5].map(t => ({
+        x: plotLeft + (t / VT_TMAX) * plotW,
+        y: plotBottom + (9.8 * t / VT_VMAX) * plotH,
+      }));
+
+      // 水平点線（静的、全長表示）
+      const dottedLineMats = [];
+      for (let i = 0; i < 3; i++) {
+        const x1 = pts[i].x, y1 = pts[i].y;
+        const x2 = pts[i + 1].x;
+        const pos = new Float32Array([x1, y1, 0.02,  x2, y1, 0.02]);
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.LineDashedMaterial({
+          color: 0x000000, dashSize: 0.3, gapSize: 0.15,
+          transparent: true, opacity: 0.85, depthTest: false,
+        });
+        const line = new THREE.Line(geo, mat);
+        line.renderOrder = 100;
+        line.computeLineDistances();
+        scene.add(line);
+        strobeMeshes.push(line);
+        dottedLineMats.push(mat);
+      }
+
+      // ピンク矢印（フルサイズ、データ点位置）
+      const pinkDefs = [
+        { ti: 1.5, vFrom: 4.9,  vTo: 14.7 },
+        { ti: 2.5, vFrom: 14.7, vTo: 24.5 },
+        { ti: 3.5, vFrom: 24.5, vTo: 34.3 },
+      ];
+      const rowY  = plotBottom + plotH - 1.8; // グラフ上・右上
+      const rowXs = [3.5, 4.5, 5.5];         // 右寄り横一列（3本）
+      const rowArrowObjs = pinkDefs.map(({ ti, vFrom, vTo }, i) => {
+        const ax      = plotLeft + (ti / VT_TMAX) * plotW;
+        const ay      = plotBottom + (vFrom / VT_VMAX) * plotH;
+        const fullLen = (vTo - vFrom) / VT_VMAX * plotH;
+        const headLen = Math.min(fullLen * 0.25, 0.5);
+        const headW   = Math.min(fullLen * 0.15, 0.3);
+        const arrow   = new THREE.ArrowHelper(
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3(ax, ay, 0.03),
+          fullLen, 0xff8800, headLen, headW
+        );
+        arrow.line.material.transparent = true;
+        arrow.line.material.depthTest   = false;
+        arrow.cone.material.transparent = true;
+        arrow.cone.material.depthTest   = false;
+        arrow.line.renderOrder = 110;
+        arrow.cone.renderOrder = 110;
+        scene.add(arrow);
+        strobeMeshes.push(arrow);
+        return { arrow, fromX: ax, fromY: ay, toX: rowXs[i], toY: rowY };
+      });
+
+      // ── rowArrowAnim: ピンク矢印を右上へ移動 & v-tグラフを左へ ──────
+      const fullLen = (9.8 / VT_VMAX) * plotH; // 各ピンク矢印の長さ（全て同じ）
+      rowArrowAnim = {
+        elapsed: 0, delay: 0.5, dur: 0.6,
+        arrows: rowArrowObjs,
+        vtPlane: vtPlaneS4,
+        vtFromX: VT_CX,
+        vtToX:   VT_CX - 4,
+        fadeMats: dottedLineMats,
+        onComplete: () => {
+          // 始点同士・終点同士をつなぐ水平点線
+          const x1 = rowXs[0], x2 = rowXs[rowXs.length - 1];
+          const connectLines = [];
+          for (const lineY of [rowY, rowY + fullLen]) {
+            const pos = new Float32Array([x1, lineY, 0.04,  x1, lineY, 0.04]);
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            const mat = new THREE.LineDashedMaterial({
+              color: 0x000000, dashSize: 0.3, gapSize: 0.15,
+              transparent: true, opacity: 0.85, depthTest: false,
+            });
+            const line = new THREE.Line(geo, mat);
+            line.renderOrder = 100;
+            line.computeLineDistances();
+            scene.add(line);
+            strobeMeshes.push(line);
+            connectLines.push({ line, geo, pos, xFrom: x1, xTo: x2 });
+          }
+          dottedLinesAnim = {
+            elapsed: 0, delay: 0.5, dur: 0.6, lines: connectLines,
+            onComplete: () => {
+              const dimX = rowXs[rowXs.length - 1] + 0.5;
+              const yTop = rowY + fullLen;
+              const yBot = rowY;
+              const yMid = rowY + fullLen / 2;
+
+              // 縦の寸法線（yMid から上下に伸びる）
+              const growLines = [];
+              for (const yTo of [yTop, yBot]) {
+                const pos = new Float32Array([dimX, yMid, 0.04,  dimX, yMid, 0.04]);
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+                const mat = new THREE.LineBasicMaterial({
+                  color: 0x000000, transparent: true, opacity: 0, depthTest: false,
+                });
+                const line = new THREE.Line(geo, mat);
+                line.renderOrder = 110;
+                scene.add(line);
+                strobeMeshes.push(line);
+                growLines.push({ pos, geo, yTo, mat });
+              }
+
+              // 端のティックマーク（横線）
+              const tickMats = [];
+              const tickW = 0.25;
+              for (const ty of [yTop, yBot]) {
+                const tPos = new Float32Array([dimX - tickW / 2, ty, 0.04,  dimX + tickW / 2, ty, 0.04]);
+                const tGeo = new THREE.BufferGeometry();
+                tGeo.setAttribute('position', new THREE.BufferAttribute(tPos, 3));
+                const tMat = new THREE.LineBasicMaterial({
+                  color: 0x000000, transparent: true, opacity: 0, depthTest: false,
+                });
+                const tLine = new THREE.Line(tGeo, tMat);
+                tLine.renderOrder = 110;
+                scene.add(tLine);
+                strobeMeshes.push(tLine);
+                tickMats.push(tMat);
+              }
+
+              // ラベル（寸法線より右にずらして矢印と重ならないよう配置）
+              const label = makeDimLabel('g = 9.8 m/s²');
+              label.scale.set(3.5, 0.66, 1);
+              label.position.set(dimX + 2.5, yMid, 0.04);
+              scene.add(label);
+              strobeMeshes.push(label);
+
+              const labelX = dimX + 2.5; // g=9.8ラベルと同じx
+              dimLineAnim = {
+                elapsed: 0, delay: 0.3, dur: 0.8,
+                growLines, yMid,
+                ticks: tickMats,
+                label,
+                onComplete: () => {
+                  _s2StrobeBalls = [];
+                  const cx = (rowXs[0] + rowXs[rowXs.length - 1]) / 2 + 1.5; // 矢印中央+1.5
+
+                  // ‖（縦向きの＝）: 正方形キャンバスで大きく描画
+                  {
+                    const c = document.createElement('canvas');
+                    c.width = 256; c.height = 256;
+                    const ctx = c.getContext('2d');
+                    ctx.font = 'bold 200px system-ui';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = 'black';
+                    ctx.fillText('‖', 128, 128);
+                    const tex = new THREE.CanvasTexture(c);
+                    tex.colorSpace = THREE.SRGBColorSpace;
+                    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false });
+                    const sprite = new THREE.Sprite(mat);
+                    sprite.renderOrder = 101;
+                    sprite.scale.set(1.5, 2.5, 1);
+                    sprite.position.set(cx, rowY - 2.2, 0.04);
+                    scene.add(sprite);
+                    strobeMeshes.push(sprite);
+                    _s2StrobeBalls.push(mat);
+                  }
+
+                  // 重力加速度（大きなテキスト）
+                  {
+                    const c = document.createElement('canvas');
+                    c.width = 768; c.height = 128;
+                    const ctx = c.getContext('2d');
+                    ctx.font = 'bold 90px system-ui';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = 'black';
+                    ctx.fillText('重力加速度', 384, 64);
+                    const tex = new THREE.CanvasTexture(c);
+                    tex.colorSpace = THREE.SRGBColorSpace;
+                    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false });
+                    const sprite = new THREE.Sprite(mat);
+                    sprite.renderOrder = 101;
+                    sprite.scale.set(5.5, 0.92, 1);
+                    sprite.position.set(cx, rowY - 4.0, 0.04);
+                    scene.add(sprite);
+                    strobeMeshes.push(sprite);
+                    _s2StrobeBalls.push(mat);
+                  }
+
+                  strobePhotoAnim = { elapsed: 0, delay: 0.5, dur: 0.6 };
+                },
+              };
+            },
+          };
+        },
+      };
+
+      document.getElementById('btnDrop').disabled = true;
+
+      // カメラをv-tグラフ視点へ（直接遷移した場合に備えて）
+      viewTween = {
+        startPos:    camera.position.clone(),
+        endPos:      new THREE.Vector3(VT_CX, VT_CY, 10),
+        startTarget: controls.target.clone(),
+        endTarget:   new THREE.Vector3(VT_CX, VT_CY, 0),
+        startTime:   nowSec(),
+        dur:         0.5,
+      };
+    },
+  },
+];
+
+let autoSceneIndex = 0;
+
+function updateAutoNav() {
+  const label = document.getElementById('autoSceneLabel');
+  const prev  = document.getElementById('autoPrev');
+  const next  = document.getElementById('autoNext');
+  const play  = document.getElementById('autoPlay');
+  label.textContent = scenes.length === 0
+    ? '場面なし'
+    : `${autoSceneIndex + 1} / ${scenes.length}`;
+  prev.disabled = autoSceneIndex <= 0;
+  next.disabled = autoSceneIndex >= scenes.length - 1;
+  play.style.display = autoSceneIndex === 0 ? '' : 'none';
+}
+
+function goToScene(index) {
+  if (scenes.length === 0) return;
+  autoSceneIndex = Math.max(0, Math.min(scenes.length - 1, index));
+  const isTransition = autoSceneIndex > 0;
+  resetBall(isTransition);
+  if (isTransition) clearStrobeSnapshots();
+  if (!isTransition) {
+    autoTimerEl.style.display  = 'block';
+    autoTimerEl.style.opacity  = '1';
+    // 場面1に戻るとき自動モード初期視点へスムーズに戻す
+    viewTween = {
+      startPos:    camera.position.clone(),
+      endPos:      AUTO_CAM_POS.clone(),
+      startTarget: controls.target.clone(),
+      endTarget:   AUTO_CAM_TARGET.clone(),
+      startTime:   nowSec(),
+      dur:         0.8,
+    };
+  }
+  updateAutoNav();
+  if (isTransition) scenes[autoSceneIndex].setup();
+}
+
+let _savedVtVisible  = false;
+let _savedYtVisible  = false;
+let _savedCamPos     = null;
+let _savedCamTarget  = null;
+
+// 自動シミュレーションモード用固定カメラ（4秒落下 y=0〜79 を収める）
+const AUTO_CAM_POS    = new THREE.Vector3(-2, 44, 82);
+const AUTO_CAM_TARGET = new THREE.Vector3(-2, 44, 0);
+
+function enterAutoMode() {
+  autoMode = true;
+  autoSceneIndex = 0;
+  xyGrid.visible = false;
+  toolboxPanel.style.display = 'none';
+  document.getElementById('volumeControl').style.display = 'none';
+  document.getElementById('autoNav').style.display  = 'flex';
+  document.getElementById('autoExit').style.display = 'block';
+  document.getElementById('btnAutoSim').classList.add('active');
+  autoTimerEl.style.display = 'block';
+  autoTimerEl.textContent = 't = 0.00 s';
+  // グラフを退避して非表示
+  _savedVtVisible = vtVisible;
+  _savedYtVisible = ytVisible;
+  if (vtVisible) { vtVisible = false; if (gGroup)   gGroup.visible   = false; document.getElementById('btnVtGraph').classList.remove('active'); }
+  if (ytVisible) { ytVisible = false; if (ytGroup)  ytGroup.visible  = false; document.getElementById('btnYtGraph').classList.remove('active'); }
+  // カメラを退避して自動モード専用視点へ
+  _savedCamPos    = camera.position.clone();
+  _savedCamTarget = controls.target.clone();
+  camera.position.copy(AUTO_CAM_POS);
+  controls.target.copy(AUTO_CAM_TARGET);
+  controls.update();
+  clawGroup.position.y = AUTO_BALL_START_Y - BALL_START_Y;
+  if (scenes.length > 0) goToScene(0);
+  else updateAutoNav();
+}
+
+function exitAutoMode() {
+  autoMode = false;
+  clawGroup.position.y = 0;
+  xyGrid.visible = true;
+  toolboxPanel.style.display = '';
+  document.getElementById('volumeControl').style.display = '';
+  document.getElementById('autoNav').style.display  = 'none';
+  document.getElementById('autoExit').style.display = 'none';
+  document.getElementById('btnAutoSim').classList.remove('active');
+  autoTimerEl.style.display = 'none';
+  // グラフを復元
+  vtVisible = _savedVtVisible;
+  ytVisible = _savedYtVisible;
+  if (gGroup)  { gGroup.visible  = vtVisible; document.getElementById('btnVtGraph').classList.toggle('active', vtVisible); }
+  if (ytGroup) { ytGroup.visible = ytVisible; document.getElementById('btnYtGraph').classList.toggle('active', ytVisible); }
+  // カメラを復元
+  if (_savedCamPos) {
+    camera.position.copy(_savedCamPos);
+    controls.target.copy(_savedCamTarget);
+    controls.update();
+    viewTween = null;
+  }
+  resetBall();
+}
+
+document.getElementById('btnAutoSim').addEventListener('click', () => {
+  autoMode ? exitAutoMode() : enterAutoMode();
+});
+
+// 重力マップ モーダル
+(function(){
+  const modal  = document.getElementById('gravityModal');
+  const frame  = document.getElementById('gravityFrame');
+  const closeBtn = document.getElementById('gravityModalClose');
+  document.getElementById('btnGravityMap').addEventListener('click', () => {
+    if(!frame.getAttribute('src')) frame.src = 'gravity-map.html';
+    modal.classList.add('show');
+  });
+  closeBtn.addEventListener('click', () => modal.classList.remove('show'));
+  modal.addEventListener('click', e => { if(e.target === modal) modal.classList.remove('show'); });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') modal.classList.remove('show'); });
+})();
+document.getElementById('autoExit').addEventListener('click', exitAutoMode);
+document.getElementById('autoPrev').addEventListener('click', () => goToScene(autoSceneIndex - 1));
+document.getElementById('autoNext').addEventListener('click', () => goToScene(autoSceneIndex + 1));
+document.getElementById('autoPlay').addEventListener('click', () => {
+  if (scenes.length === 0 || simState !== 'idle') return;
+  scenes[autoSceneIndex].setup();
+});
+
+// ── 道具箱トグル ─────────────────────────────────────────────────────────────
+const toolboxPanel  = document.getElementById('toolboxPanel');
+const toolboxToggle = document.getElementById('toolboxToggle');
+toolboxToggle.addEventListener('click', () => {
+  const collapsed = toolboxPanel.classList.toggle('is-collapsed');
+  toolboxToggle.textContent = collapsed ? '＞' : '＜';
+  toolboxToggle.setAttribute('aria-expanded', String(!collapsed));
+});
+
+// ── 二窓モード ────────────────────────────────────────────────────────────────
+(function(){
+  // iframe内では二窓ボタンを非表示
+  if (window.parent !== window) {
+    document.getElementById('btnSplitView').style.display = 'none';
+  }
+
+  const _splitParams = new URLSearchParams(location.search);
+  // ?splitNormal=1 なら左分割ペイン用にカメラを近づけ、FOVを固定
+  if (_splitParams.get('splitNormal') === '1') {
+    camera.position.z = 38;
+    controls.update();
+    _fixedFov = true;
+  }
+  // ?splitAuto=1 なら自動シミュレーションで起動
+  if (_splitParams.get('splitAuto') === '1') {
+    enterAutoMode();
+    document.getElementById('autoExit').style.display = 'none';
+    document.querySelector('.topbar').style.display = 'none';
+  }
+  // 仕切り線のドラッグリサイズ
+  const divider   = document.querySelector('.split-divider');
+  const leftFrame  = document.getElementById('splitLeft');
+  const rightFrame = document.getElementById('splitRight');
+  let dragging = false;
+
+  divider.addEventListener('pointerdown', e => {
+    dragging = true;
+    divider.setPointerCapture(e.pointerId);
+    leftFrame.style.pointerEvents  = 'none';
+    rightFrame.style.pointerEvents = 'none';
+  });
+  divider.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const overlay = document.getElementById('splitOverlay');
+    const rect = overlay.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const clampedRatio = Math.min(0.9, Math.max(0.1, ratio));
+    leftFrame.style.flex  = String(clampedRatio);
+    rightFrame.style.flex = String(1 - clampedRatio);
+  });
+  divider.addEventListener('pointerup', () => {
+    dragging = false;
+    leftFrame.style.pointerEvents  = '';
+    rightFrame.style.pointerEvents = '';
+  });
+
+  document.getElementById('btnSplitView').addEventListener('click', () => {
+    const base = location.href.split('?')[0];
+    document.getElementById('splitLeft').src = base + '?splitNormal=1';
+    document.getElementById('splitRight').src = base + '?splitAuto=1';
+    document.getElementById('splitOverlay').classList.add('show');
+  });
+
+  document.getElementById('splitClose').addEventListener('click', () => {
+    document.getElementById('splitOverlay').classList.remove('show');
+    document.getElementById('splitLeft').src = '';
+    document.getElementById('splitRight').src = '';
+  });
+})();
+
+tick();
+
+// ===== 図形描画モジュール =====
+(function(){
+  const DB_Z = -8, DB_W = 20, DB_H = 12;
+  const PEN_COLOR = 'rgba(255,40,40,1.0)', PEN_W = 2, ERASER_W = 20;
+  const _dr = new THREE.Raycaster(), _dm = new THREE.Vector2();
+
+  let inkMode = 'none', _inkDrawing = false;
+  let _inkBoardMesh = null, _inkBoardCanvas = null, _inkBoardCtx = null;
+  window._inkBoardTex = null; // tick()から参照
+  let _activeCtx = null, _activeMesh = null, _activeTex = null;
+  let _lastX = 0, _lastY = 0;
+  window._inkDirty = false;
+
+  let shapeMode = 'none', _shapeDrawing = false;
+  let _sx = 0, _sy = 0, _cx = 0, _cy = 0;
+  let _shapeBoardMesh = null, _shapeBoardCanvas = null, _shapeBoardCtx = null;
+  window._shapeBoardTex = null; // tick()から参照
+  window._shapeDirty = false;
+  const shapes = [];
+  let selIdx = -1, selDragging = false, selHandle = null, selOrigin = null, selSnap = null;
+
+  function getNDC(ev) {
+    const r = renderer.domElement.getBoundingClientRect();
+    _dm.set(((ev.clientX-r.left)/r.width)*2-1, -((ev.clientY-r.top)/r.height)*2+1);
+  }
+  function uv2xy(uv, cvs) { return { x: uv.x*cvs.width, y: (1-uv.y)*cvs.height }; }
+
+  function ensureInk() {
+    if (_inkBoardMesh) return;
+    _inkBoardCanvas = document.createElement('canvas');
+    _inkBoardCanvas.width = 1024; _inkBoardCanvas.height = 614;
+    _inkBoardCtx = _inkBoardCanvas.getContext('2d');
+    _inkBoardCtx.lineCap = _inkBoardCtx.lineJoin = 'round';
+    window._inkBoardTex = new THREE.CanvasTexture(_inkBoardCanvas);
+    window._inkBoardTex.colorSpace = THREE.SRGBColorSpace;
+    window._inkBoardTex.generateMipmaps = false;
+    window._inkBoardTex.minFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshBasicMaterial({ map: window._inkBoardTex, transparent:true, opacity:1, side:THREE.FrontSide, depthWrite:false, depthTest:false });
+    _inkBoardMesh = new THREE.Mesh(new THREE.PlaneGeometry(DB_W, DB_H), mat);
+    _inkBoardMesh.position.set(0, 0, DB_Z);
+    _inkBoardMesh.renderOrder = 1;
+    camera.add(_inkBoardMesh);
+  }
+  function ensureShape() {
+    if (_shapeBoardMesh) return;
+    _shapeBoardCanvas = document.createElement('canvas');
+    _shapeBoardCanvas.width = 1024; _shapeBoardCanvas.height = 614;
+    _shapeBoardCtx = _shapeBoardCanvas.getContext('2d');
+    _shapeBoardCtx.lineCap = _shapeBoardCtx.lineJoin = 'round';
+    window._shapeBoardTex = new THREE.CanvasTexture(_shapeBoardCanvas);
+    window._shapeBoardTex.colorSpace = THREE.SRGBColorSpace;
+    window._shapeBoardTex.generateMipmaps = false;
+    window._shapeBoardTex.minFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshBasicMaterial({ map: window._shapeBoardTex, transparent:true, opacity:1, side:THREE.FrontSide, depthWrite:false, depthTest:false });
+    _shapeBoardMesh = new THREE.Mesh(new THREE.PlaneGeometry(DB_W, DB_H), mat);
+    _shapeBoardMesh.position.set(0, 0, DB_Z - 0.01);
+    _shapeBoardMesh.renderOrder = 2;
+    camera.add(_shapeBoardMesh);
+  }
+
+  function setInkMode(next) {
+    inkMode = inkMode === next ? 'none' : next;
+    if (inkMode !== 'none') { ensureInk(); shapeMode='none'; document.getElementById('toolArrow').classList.remove('active'); selIdx=-1; redrawShapes(); if(_shapeDrawing) endShapeDraw(); }
+    document.getElementById('toolPen').classList.toggle('active', inkMode==='pen');
+    document.getElementById('toolEraser').classList.toggle('active', inkMode==='eraser');
+    if (_inkDrawing) endInk();
+  }
+  function clearInk() {
+    if (_inkBoardCtx && _inkBoardCanvas) { _inkBoardCtx.clearRect(0,0,_inkBoardCanvas.width,_inkBoardCanvas.height); if(window._inkBoardTex) window._inkBoardTex.needsUpdate=true; }
+  }
+
+  function tryStartInk(ev) {
+    if (inkMode==='none') return false;
+    ensureInk();
+    if (!_inkBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h = _dr.intersectObject(_inkBoardMesh, false);
+    if (!h.length || !h[0].uv) return false;
+    const xy = uv2xy(h[0].uv, _inkBoardCanvas);
+    _activeCtx=_inkBoardCtx; _activeMesh=_inkBoardMesh; _activeTex=window._inkBoardTex;
+    _lastX=xy.x; _lastY=xy.y; _inkDrawing=true;
+    if (inkMode==='pen') { _activeCtx.globalCompositeOperation='source-over'; _activeCtx.strokeStyle=PEN_COLOR; _activeCtx.lineWidth=PEN_W; }
+    else { _activeCtx.globalCompositeOperation='destination-out'; _activeCtx.strokeStyle='rgba(0,0,0,1)'; _activeCtx.lineWidth=ERASER_W; }
+    _activeCtx.beginPath(); _activeCtx.moveTo(_lastX,_lastY); _activeCtx.lineTo(_lastX+0.01,_lastY+0.01); _activeCtx.stroke();
+    controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){}
+    window._inkDirty=true; ev.preventDefault(); ev.stopPropagation(); return true;
+  }
+  function updateInk(ev) {
+    if (!_inkDrawing || !_activeMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h = _dr.intersectObject(_activeMesh, false);
+    if (!h.length || !h[0].uv) return;
+    const xy = uv2xy(h[0].uv, _inkBoardCanvas);
+    _activeCtx.beginPath(); _activeCtx.moveTo(_lastX,_lastY); _activeCtx.lineTo(xy.x,xy.y); _activeCtx.stroke();
+    _lastX=xy.x; _lastY=xy.y; window._inkDirty=true; ev.preventDefault();
+  }
+  function endInk(ev) {
+    if (!_inkDrawing) return;
+    _inkDrawing=false; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+  }
+
+  // 矢印描画
+  function drawArrow(ctx, x1, y1, x2, y2) {
+    const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy);
+    if (len<2) return;
+    const ang=Math.atan2(dy,dx), hw=Math.max(8,Math.min(24,len*0.10)), ha=Math.PI/8;
+    function pass(w,c){ ctx.globalCompositeOperation='source-over'; ctx.strokeStyle=c; ctx.lineWidth=w; ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-hw*Math.cos(ang-ha),y2-hw*Math.sin(ang-ha)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-hw*Math.cos(ang+ha),y2-hw*Math.sin(ang+ha)); ctx.stroke(); }
+    pass(PEN_W+2,'rgba(0,0,0,0.88)'); pass(PEN_W,PEN_COLOR);
+  }
+  function drawHandle(ctx, x, y, isMid=false) {
+    ctx.save(); ctx.fillStyle=isMid?'#88ccff':'#ffffff'; ctx.strokeStyle='#4499ff'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+  function drawShape(ctx, s, sel) {
+    ctx.globalCompositeOperation='source-over';
+    if (s.type==='arrow') { drawArrow(ctx,s.x1,s.y1,s.x2,s.y2);
+      if (sel) { drawHandle(ctx,s.x1,s.y1); drawHandle(ctx,s.x2,s.y2); drawHandle(ctx,(s.x1+s.x2)/2,(s.y1+s.y2)/2,true); } }
+  }
+  function updateSelUI() { const b=document.getElementById('shapeDeleteSelected'); if(b) b.style.display=selIdx>=0?'':'none'; }
+  function redrawShapes() {
+    if (!_shapeBoardCtx) return;
+    _shapeBoardCtx.clearRect(0,0,_shapeBoardCanvas.width,_shapeBoardCanvas.height);
+    shapes.forEach((s,i)=>drawShape(_shapeBoardCtx,s,i===selIdx));
+    window._shapeDirty=true; updateSelUI();
+  }
+
+  function setShapeMode(next) {
+    shapeMode = shapeMode===next?'none':next;
+    if (shapeMode!=='none') { ensureShape(); selIdx=-1; redrawShapes(); inkMode='none'; document.getElementById('toolPen').classList.remove('active'); document.getElementById('toolEraser').classList.remove('active'); if(_inkDrawing)endInk(); }
+    document.getElementById('toolArrow').classList.toggle('active', shapeMode==='arrow'); updateSelUI();
+  }
+  function tryStartShape(ev) {
+    if (shapeMode==='none') return false;
+    ensureShape(); if(!_shapeBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return false;
+    const xy=uv2xy(h[0].uv,_shapeBoardCanvas);
+    _sx=xy.x; _sy=xy.y; _cx=xy.x; _cy=xy.y; _shapeDrawing=true;
+    controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){}
+    ev.preventDefault(); ev.stopPropagation(); return true;
+  }
+  function updateShape(ev) {
+    if (!_shapeDrawing||!_shapeBoardMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return;
+    const xy=uv2xy(h[0].uv,_shapeBoardCanvas);
+    _cx=xy.x; _cy=xy.y;
+    _shapeBoardCtx.clearRect(0,0,_shapeBoardCanvas.width,_shapeBoardCanvas.height);
+    shapes.forEach((s,i)=>drawShape(_shapeBoardCtx,s,i===selIdx));
+    drawArrow(_shapeBoardCtx,_sx,_sy,_cx,_cy);
+    window._shapeDirty=true; ev.preventDefault();
+  }
+  function endShapeDraw(ev) {
+    if (!_shapeDrawing) return;
+    _shapeDrawing=false; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+    if (Math.hypot(_cx-_sx,_cy-_sy)>=4) shapes.push({type:'arrow',x1:_sx,y1:_sy,x2:_cx,y2:_cy});
+    redrawShapes(); shapeMode='none'; document.getElementById('toolArrow').classList.remove('active');
+  }
+
+  // 図形選択・ドラッグ
+  function distSeg(px,py,x1,y1,x2,y2){ const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy; if(!l2) return Math.hypot(px-x1,py-y1); const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/l2)); return Math.hypot(px-(x1+t*dx),py-(y1+t*dy)); }
+  function hitShape(s,cx,cy){ return s.type==='arrow'&&distSeg(cx,cy,s.x1,s.y1,s.x2,s.y2)<12; }
+  function hitHandles(s,cx,cy){ if(s.type==='arrow'){ if(Math.hypot(cx-s.x1,cy-s.y1)<8)return'start'; if(Math.hypot(cx-s.x2,cy-s.y2)<8)return'end'; if(Math.hypot(cx-(s.x1+s.x2)/2,cy-(s.y1+s.y2)/2)<8)return'mid'; } return null; }
+
+  function tryStartSel(ev) {
+    if (shapeMode!=='none'||inkMode!=='none') return false;
+    if (!_shapeBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return false;
+    const {x:cx,y:cy}=uv2xy(h[0].uv,_shapeBoardCanvas);
+    if (selIdx>=0) { const hh=hitHandles(shapes[selIdx],cx,cy); if(hh){ selHandle=hh; selOrigin={x:cx,y:cy}; selSnap={...shapes[selIdx]}; selDragging=true; controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){} ev.preventDefault(); ev.stopPropagation(); return true; } }
+    for (let i=shapes.length-1;i>=0;i--) { if(hitShape(shapes[i],cx,cy)){ selIdx=i; selDragging=false; redrawShapes(); ev.preventDefault(); ev.stopPropagation(); return true; } }
+    if (selIdx>=0) { selIdx=-1; redrawShapes(); }
+    return false;
+  }
+  function updateSel(ev) {
+    if (!selDragging||selIdx<0) return;
+    if (!_shapeBoardMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return;
+    const {x,y}=uv2xy(h[0].uv,_shapeBoardCanvas);
+    const s=shapes[selIdx];
+    if (s.type==='arrow') {
+      if (selHandle==='start'){s.x1=x;s.y1=y;}
+      else if(selHandle==='end'){s.x2=x;s.y2=y;}
+      else if(selHandle==='mid'&&selOrigin&&selSnap){const dx=x-selOrigin.x,dy=y-selOrigin.y;s.x1=selSnap.x1+dx;s.y1=selSnap.y1+dy;s.x2=selSnap.x2+dx;s.y2=selSnap.y2+dy;}
+    }
+    redrawShapes(); ev.preventDefault();
+  }
+  function endSel(ev) {
+    if (!selDragging) return;
+    selDragging=false; selHandle=null; selOrigin=null; selSnap=null; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+  }
+
+  // イベント登録
+  document.getElementById('toolPen').addEventListener('click', ()=>setInkMode('pen'));
+  document.getElementById('toolEraser').addEventListener('click', ()=>setInkMode('eraser'));
+  document.getElementById('inkClear').addEventListener('click', clearInk);
+  document.getElementById('toolArrow').addEventListener('click', ()=>setShapeMode('arrow'));
+  document.getElementById('shapeDeleteSelected').addEventListener('click', ()=>{ if(selIdx>=0){shapes.splice(selIdx,1);selIdx=-1;redrawShapes();} });
+  document.getElementById('shapeClear').addEventListener('click', ()=>{ shapes.length=0;selIdx=-1;if(_shapeBoardCtx)redrawShapes(); });
+
+  renderer.domElement.addEventListener('pointerdown', e=>{ if(e.button===0) tryStartShape(e)||tryStartSel(e)||tryStartInk(e); });
+  window.addEventListener('pointermove', e=>{ if(_shapeDrawing){updateShape(e);return;} if(selDragging){updateSel(e);return;} if(_inkDrawing){updateInk(e);return;} });
+  window.addEventListener('pointerup',     e=>{ if(e.button===0){endShapeDraw(e);endSel(e);endInk(e);} });
+  window.addEventListener('pointercancel', e=>{ endShapeDraw(e);endSel(e);endInk(e); });
+  window.addEventListener('keydown', e=>{
+    const tag=document.activeElement?.tagName;
+    if(selIdx>=0&&(e.key==='Delete'||e.key==='Backspace')&&tag!=='INPUT'&&tag!=='TEXTAREA'){
+      shapes.splice(selIdx,1);selIdx=-1;redrawShapes();e.preventDefault();
+    }
+  });
+})();
+</script>
+</body>
+</html>

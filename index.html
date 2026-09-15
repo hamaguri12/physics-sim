@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>高校物理シミュ集（授業用）</title>
+  <meta name="description" content="高校物理の授業で使うことを想定した、教師向けインタラクティブシミュレーション集です。力学・波動・電磁気など各分野のシミュレーションを収録。現在も継続して開発・追加中です。" />
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#ffffff;color:#1a2040}
+    header{padding:18px 20px;border-bottom:1px solid rgba(70,90,160,0.30)}
+    h1{margin:0;font-size:18px}
+    p{margin:8px 0 0;color:#5566aa;font-size:13px;line-height:1.5}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;padding:16px}
+    a.card{display:block;text-decoration:none;color:inherit;background:rgba(240,243,252,0.95);
+      border:1px solid rgba(70,90,160,0.30);border-radius:14px;padding:16px;
+      transition:border-color .15s, box-shadow .15s, background .15s;
+      /* 押すだけのボタンなので、文字を選べないようにし、リンクのドラッグも切る。
+         文字を選んでしまうと次のクリックが「選択のドラッグ」になり、
+         押したまま数px動かすと「リンクのドラッグ」になって、どちらもクリックが消える */
+      user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+    /* マウスを乗せてもカードの位置を動かさない。
+       以前は translateY(-2px) で浮かせていたが、カードが 2px 上へ逃げるので
+       下の縁にカーソルがあると「当たる→外れる」を繰り返し、クリックが空振りしていた
+       （2026-09-14 実測：5 枚中 4 枚で発生）。動かさずに 枠と影 で反応を見せる */
+    a.card:hover{border-color:rgba(70,90,160,0.55);background:rgba(232,238,252,0.98);
+      box-shadow:0 4px 12px rgba(70,90,160,0.18)}
+    .title{font-weight:800;font-size:15px;margin-bottom:8px}
+    .desc{font-size:12px;color:#5566aa;line-height:1.45}
+
+    /* QRコードエリア */
+    #qr-area{
+      position:fixed;bottom:16px;right:16px;
+      display:flex;gap:12px;align-items:flex-end;
+      z-index:100;
+      /* 枠じたいはクリックを受けない。受けると、QR と QR のすきまでも
+         下にある単元ボタンが押せなくなる。押せるのは QR のカードだけでよい */
+      pointer-events:none;
+    }
+    .qr-card{pointer-events:auto}
+
+    /* 画面が小さいと、右下に貼りついた QR が単元ボタンに重なってクリックを横取りする
+       （2026-09-14 実測：中身 504×458 で 5 個中 4 個が押せなくなった）。
+       貼りつけるのをやめて、ふつうに本文の下へ置けば重なりようがない。
+       境目は実測から決めた（横 994 でアウト・1070 で無事／高さ 498 でアウト・538 で無事）*/
+    @media (max-width:1040px), (max-height:560px){
+      #qr-area{
+        position:static;
+        justify-content:flex-end;
+        padding:0 16px 16px;
+      }
+      .qr-card img{width:120px;height:120px}
+    }
+    .qr-card{
+      display:flex;flex-direction:column;align-items:center;gap:6px;
+      background:rgba(240,243,252,0.97);
+      border:1px solid rgba(70,90,160,0.30);
+      border-radius:12px;
+      padding:10px 10px 8px;
+      box-shadow:0 2px 10px rgba(70,90,160,0.12);
+    }
+    .qr-card img{width:160px;height:160px;display:block}
+    .qr-label{font-size:11px;font-weight:700;color:#1a2040;text-align:center;line-height:1.3}
+    .qr-card{cursor:pointer}
+    .qr-card:hover{transform:translateY(-2px);transition:.15s}
+
+    /* QR拡大モーダル */
+    #qr-modal{
+      display:none;position:fixed;inset:0;z-index:9999;
+      background:rgba(0,0,0,0.82);
+      align-items:center;justify-content:center;flex-direction:column;gap:16px;
+    }
+    #qr-modal.show{display:flex}
+    #qr-modal img{
+      max-width:min(75vw,75vh);max-height:min(75vw,75vh);
+      width:min(75vw,75vh);height:auto;border-radius:12px;
+      background:#fff;padding:16px;
+    }
+    #qr-modal-label{
+      color:#fff;font-size:18px;font-weight:700;letter-spacing:.04em;
+    }
+    #qr-modal-close{
+      position:absolute;top:16px;right:20px;
+      background:rgba(240,243,252,0.15);border:1px solid rgba(255,255,255,0.3);
+      color:#fff;font-size:22px;line-height:1;padding:6px 12px;
+      border-radius:8px;cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>高校物理シミュ集（授業用）</h1>
+    <p>まず分野を選びます（力学／熱／波動／電磁気／原子）。</p>
+  </header>
+
+  <div class="grid">
+    <a class="card" href="mechanics.html">
+      <div class="title">力学</div>
+      <div class="desc">平面運動・剛体・運動量保存・円運動</div>
+    </a>
+
+    <a class="card" href="thermal.html">
+      <div class="title">熱</div>
+      <div class="desc">気体の法則・気体分子の運動・理想気体の内部エネルギー</div>
+    </a>
+
+    <a class="card" href="waves.html">
+      <div class="title">波動</div>
+      <div class="desc">波の伝わり方・音の伝わり方・光</div>
+    </a>
+
+    <a class="card" href="em.html">
+      <div class="title">電磁気</div>
+      <div class="desc">電場・電流・電流と磁場・電磁誘導と電磁波</div>
+    </a>
+
+    <a class="card" href="atomic.html">
+      <div class="title">原子</div>
+      <div class="desc">電子と光・原子と原子核</div>
+    </a>
+  </div>
+
+  <!-- アンケートQRコード（右下固定） -->
+  <div id="qr-area">
+    <div class="qr-card" onclick="openQR('qr-students.png','生徒用アンケート')">
+      <img src="qr-students.png" alt="生徒用アンケートQRコード">
+      <div class="qr-label">生徒用アンケート</div>
+    </div>
+    <div class="qr-card" onclick="openQR('qr-teachers.png','教師用アンケート')">
+      <img src="qr-teachers.png" alt="教師用アンケートQRコード">
+      <div class="qr-label">教師用アンケート</div>
+    </div>
+  </div>
+
+  <!-- QR拡大モーダル -->
+  <div id="qr-modal" onclick="closeQR()">
+    <button id="qr-modal-close" onclick="closeQR()">✕</button>
+    <img id="qr-modal-img" src="" alt="">
+    <div id="qr-modal-label"></div>
+  </div>
+
+  <script>
+    function openQR(src, label) {
+      document.getElementById('qr-modal-img').src = src;
+      document.getElementById('qr-modal-label').textContent = label;
+      document.getElementById('qr-modal').classList.add('show');
+    }
+    function closeQR() {
+      document.getElementById('qr-modal').classList.remove('show');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeQR(); });
+  </script>
+</body>
+</html>

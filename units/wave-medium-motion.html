@@ -1,0 +1,3385 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>波と媒質の運動（授業用）｜3Dボード</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:rgba(240,243,252,0.95);
+      --border:rgba(70,90,160,0.30);
+      --text:#1a2040;
+      --muted:#5566aa;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    #app{position:fixed;inset:0;overflow:hidden}
+
+    /* 3Dキャンバス */
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+    /* 上バー */
+    .topbar{
+      position:absolute;left:0;top:0;right:0;z-index:5;
+      display:flex;gap:8px;align-items:center;
+      padding:10px 12px;
+      background:linear-gradient(to bottom, rgba(255,255,255,.80), rgba(255,255,255,0));
+      pointer-events:none; /* クリックは中の要素だけ */
+    }
+    .topbar a, .topbar button, .topbar .pill{pointer-events:auto}
+    .btn, .pill{
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);
+      border-radius:12px;
+      padding:8px 10px;
+      font-size:12px;
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .btn:hover{opacity:.9}
+    .pill{cursor:default;color:var(--muted)}
+
+    .btn.active{ outline:2px solid rgba(120,170,255,.6); }
+
+    /* 左サイドバー */
+    .sidebar{
+      position:absolute;left:10px;top:56px;bottom:10px;z-index:6;
+      width:280px;max-width:85vw;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      overflow:auto;
+      backdrop-filter: blur(6px);
+    }
+    .h{font-weight:800;font-size:13px;margin:0 0 8px}
+    .sub{color:var(--muted);font-size:12px;line-height:1.5;margin:0 0 10px}
+    .group{margin:10px 0 12px}
+    .groupTitle{font-weight:700;font-size:12px;color:var(--text);margin:0 0 8px}
+    .tool{
+      width:100%;
+      text-align:left;
+      border:1px solid var(--border);
+      background:rgba(240,243,252,0.80);
+      color:var(--text);
+      border-radius:14px;
+      padding:10px 10px;
+      cursor:pointer;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      margin-bottom:8px;
+    }
+    .tool:hover{opacity:.92}
+    .tool small{color:var(--muted);font-size:11px}
+    .tool.active{outline:2px solid rgba(120,170,255,.6)}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .lbl{color:var(--muted);font-size:12px;align-self:center}
+    .num{width:72px;max-width:90px}
+    .row .btn{flex:1;justify-content:center}
+    .sub-btn-group{padding-left:12px;border-left:2px solid rgba(120,170,255,0.35);margin-left:6px}
+
+    /* 右下ヘルプ */
+    .help{
+      position:absolute;right:10px;bottom:10px;z-index:6;
+      background:rgba(240,243,252,0.92);
+      border:1px solid rgba(70,90,160,0.20);
+      border-radius:14px;
+      padding:10px 12px;
+      font-size:12px;
+      color:var(--muted);
+      max-width:420px;
+    }
+    .help b{color:var(--text)}
+
+    /* ===== グラフモード選択 ===== */
+    .graph-mode-panel{
+      max-height:0;
+      overflow:hidden;
+      transition:max-height 0.35s ease;
+      border-left:2px solid rgba(100,140,255,0.3);
+    }
+    .graph-mode-panel label{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      cursor:pointer;
+      font-size:12px;
+      color:var(--text);
+      user-select:none;
+      margin-bottom:5px;
+    }
+    .graph-mode-panel label:last-child{ margin-bottom:0; }
+    .graph-mode-panel input[type="radio"]{
+      appearance:none;
+      -webkit-appearance:none;
+      width:14px;
+      height:14px;
+      border:1.5px solid rgba(120,170,255,0.55);
+      border-radius:3px;
+      background:rgba(240,243,252,0.80);
+      cursor:pointer;
+      flex-shrink:0;
+      position:relative;
+    }
+    .graph-mode-panel input[type="radio"]:checked{
+      background:rgba(60,110,230,0.25);
+      border-color:rgba(120,170,255,0.9);
+    }
+    .graph-mode-panel input[type="radio"]:checked::after{
+      content:'✓';
+      position:absolute;
+      top:-3px;
+      left:0px;
+      font-size:13px;
+      color:#78aaff;
+      line-height:1;
+    }
+
+    /* ===== 道具箱の開閉（初期は閉じる） ===== */
+    #toolboxPanel{
+      position: fixed;
+      left: 16px;
+      top: 72px;                     /* もし上のボタンと被るなら数値を調整 */
+      z-index: 1000;
+      transition: transform 180ms ease;
+      transform: translateX(0);
+    }
+
+    /* 右端だけ残して閉じる（矢印ボタンが見える幅） */
+    #toolboxPanel.is-collapsed{
+      transform: translateX(calc(-100% + 36px));
+    }
+
+    #toolboxToggle.toolboxToggle{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      border: 1px solid rgba(70,90,160,0.25);
+      background: rgba(240,243,252,0.90);
+      color: #1a2040;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    /* 閉じてる時は右端に寄せて押しやすく */
+    #toolboxPanel.is-collapsed #toolboxToggle{
+      right: 4px;
+    }
+
+    /* 閉じているときは中身を見せない（矢印だけ表示） */
+    #toolboxPanel{
+      overflow: hidden auto;              /* 中身が画面より長いときは縦にスクロール（横は出さない） */
+      overscroll-behavior: contain;
+    }
+
+    #toolboxPanel.is-collapsed > :not(#toolboxToggle){
+      display: none !important; /* トグル以外を全部消す */
+    }
+
+    /* 道具箱スクロールコンテナ */
+    #toolboxScroll {
+      max-height: calc(100vh - 90px);
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    #toolboxScroll::-webkit-scrollbar { width: 4px; }
+    #toolboxScroll::-webkit-scrollbar-thumb {
+      background: rgba(100, 140, 255, 0.35);
+      border-radius: 2px;
+    }
+    #toolboxScroll::-webkit-scrollbar-track { background: transparent; }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="c"></canvas>
+
+    <div id="graphContextMenu" style="display:none;position:fixed;z-index:600;background:rgba(240,243,252,0.97);border:1px solid rgba(70,90,160,0.30);border-radius:10px;box-shadow:0 4px 14px rgba(20,30,60,0.18);padding:4px;">
+      <div id="graphCtxStyleSection" style="display:none">
+        <button id="graphCtxStyleSolid" type="button" style="display:flex;align-items:center;gap:7px;border:none;background:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;color:#1a2040;white-space:nowrap">── 実線</button>
+        <button id="graphCtxStyleDotted" type="button" style="display:flex;align-items:center;gap:7px;border:none;background:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;color:#1a2040;white-space:nowrap">╌╌ 点線</button>
+        <hr style="margin:4px 8px;border:none;border-top:1px solid rgba(70,90,160,0.15)">
+      </div>
+      <button id="graphDeleteBtn" type="button" style="display:flex;align-items:center;gap:7px;border:none;background:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;color:#1a2040;white-space:nowrap">
+        🗑️ 削除
+      </button>
+    </div>
+
+    <div id="graph2StyleMenu" style="display:none;position:fixed;z-index:600;background:rgba(240,243,252,0.97);border:1px solid rgba(70,90,160,0.30);border-radius:10px;box-shadow:0 4px 14px rgba(20,30,60,0.18);padding:4px;">
+      <button id="graph2StyleSolid" type="button" style="display:flex;align-items:center;gap:7px;border:none;background:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;color:#1a2040;white-space:nowrap">
+        ── 実線
+      </button>
+      <button id="graph2StyleDotted" type="button" style="display:flex;align-items:center;gap:7px;border:none;background:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;color:#1a2040;white-space:nowrap">
+        ╌╌ 点線
+      </button>
+    </div>
+
+    <!-- 上バー -->
+    <div class="topbar">
+      <a class="btn" href="../waves-propagation.html">← 波の伝わり方へ</a>
+      <a class="btn" href="../index.html">ホーム</a>
+      <button class="btn active" id="tabWaveDisplay">波の表し方</button>
+      <button class="btn" id="tabTransverse">横波と縦波</button>
+    </div>
+
+    <!-- 左サイドバー：道具箱 -->
+    <aside class="sidebar" id="toolboxPanel">
+      <button id="toolboxToggle" class="toolboxToggle" type="button" aria-expanded="false">＞</button>
+
+      <div id="toolboxScroll">
+      <div id="sidebarWaveDisplay">
+      <p class="h">道具箱</p>
+
+      <div class="group">
+        <p class="groupTitle">円運動</p>
+        <div class="row">
+          <span class="lbl">r</span>
+          <input id="circD" class="num" type="number" value="2" step="0.5" min="0" max="3" />
+          <span class="lbl">T</span>
+          <input id="circT" class="num" type="number" value="4" step="0.5" min="0.1" />
+        </div>
+        <div class="row">
+          <button class="btn" id="circToggle">▶ 開始</button>
+          <button class="btn" id="circReset">↺ リセット</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="circRun10">10秒動かす</button>
+        </div>
+        <p class="groupTitle">オブジェクト</p>
+        <div class="row">
+          <button class="btn" id="toolSphere">球（円運動）</button>
+        </div>
+        <div id="sphereSubBtns" style="max-height:0;overflow:hidden;transition:max-height 0.35s ease">
+          <div class="row">
+            <button class="btn" id="toggleOrbitVisuals">中心点/軌跡/中心線</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+
+        <div class="row">
+          <button class="btn" id="toolSpring">球とばね</button>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="toolRopeHand">ロープと手</button>
+        </div>
+
+        <p class="groupTitle">グラフ</p>
+        <div class="row">
+          <button class="btn" id="toolGraph">y-tグラフ</button>
+        </div>
+
+
+        <div id="graphBtnGroup" class="sub-btn-group" style="max-height:0;overflow:hidden;transition:max-height 0.35s ease">
+          <div class="row">
+            <button class="btn" id="graphReset">グラフをリセット</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="toolGraph2">y-xグラフ</button>
+        </div>
+
+        <div id="graphBtnGroup2" class="sub-btn-group" style="max-height:0;overflow:hidden;transition:max-height 0.35s ease">
+          <div class="row"><button class="btn" id="graphReset2">グラフをリセット</button></div>
+          <div class="row"><button class="btn" id="graphSave2">グラフの追加</button></div>
+          <div class="row"><button class="btn" id="graphDeleteSelected2">選択グラフを消す</button></div>
+          <div class="row"><button class="btn" id="graphSavedClear2">グラフの全消し</button></div>
+        </div>
+
+        <p class="groupTitle">描画</p>
+        <div class="row">
+          <button class="btn" id="toolPen">ペン</button>
+          <button class="btn" id="toolEraser">消しゴム</button>
+        </div>
+
+        <div class="row">
+          <button class="btn" id="inkClear">ペンを全消し</button>
+        </div>
+
+      </div>
+
+      <div class="group">
+        <p class="groupTitle">視点</p>
+        <div class="row">
+          <button class="btn" id="viewXY">XY視点（正面）</button>
+          <button class="btn" id="viewYZ">YZ視点（横）</button>
+        </div>
+      </div>
+
+      </div><!-- /#sidebarWaveDisplay -->
+
+      <div id="sidebarTransverse" style="display:none">
+        <p class="h">道具箱</p>
+
+        <div class="group">
+          <p class="groupTitle">縦波</p>
+          <div class="row" style="padding:4px 2px;gap:16px;">
+            <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:14px;">
+              <span id="ckSlinkyModeCont" style="font-size:16px;line-height:1;">☑</span>連続
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:14px;">
+              <span id="ckSlinkyModeSingle" style="font-size:16px;line-height:1;">□</span>単体
+            </label>
+          </div>
+          <div class="row">
+            <button class="btn" id="btnSlinkyStart">▶ 開始</button>
+            <button class="btn" id="btnSlinkyReset">リセット</button>
+          </div>
+          <p class="groupTitle">オブジェクト</p>
+          <div class="row">
+            <button class="btn" id="btnSlinky">スキンリー</button>
+          </div>
+          <div id="slinkyBallRow" style="max-height:0;overflow:hidden;transition:max-height 0.35s ease">
+            <div class="row" style="padding:4px 2px;">
+              <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:14px;">
+                <span id="ckSlinkyBall" style="font-size:16px;line-height:1;">□</span>球
+              </label>
+            </div>
+            <div class="row" style="padding:4px 2px;">
+              <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:14px;">
+                <span id="ckSlinkyGrid" style="font-size:16px;line-height:1;">□</span>グリッド線
+              </label>
+            </div>
+            <div class="row" style="padding:4px 2px;">
+              <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:14px;">
+                <span id="ckSlinkyDisp" style="font-size:16px;line-height:1;">□</span>変位
+              </label>
+            </div>
+            <div id="slinkySlideRow" style="display:none">
+              <div class="row" style="padding:4px 2px;">
+                <button class="btn" id="btnSlinkySlide">スライド</button>
+              </div>
+            </div>
+            <div id="slinkyRotRow" style="display:none">
+              <div class="row" style="padding:4px 2px;">
+                <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:14px;">
+                  <span id="ckSlinkyRot" style="font-size:16px;line-height:1;">□</span>回転
+                </label>
+              </div>
+            </div>
+            <div id="slinkyGraphRow" style="display:none">
+              <div class="row" style="padding:4px 2px;">
+                <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:14px;">
+                  <span id="ckSlinkyGraph" style="font-size:16px;line-height:1;">□</span>グラフ
+                </label>
+              </div>
+            </div>
+            <div id="slinkyWaveLineRow" style="display:none">
+              <div class="row" style="padding:4px 2px;">
+                <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:14px;">
+                  <span id="ckSlinkyWaveLine" style="font-size:16px;line-height:1;">□</span>曲線
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <p class="groupTitle">視点</p>
+          <div class="row">
+            <button class="btn" id="btnViewTopDown">真上（XZ平面）</button>
+          </div>
+        </div>
+
+      </div>
+
+      </div><!-- /#toolboxScroll -->
+    </aside>
+
+    <div class="help">
+      <b>操作</b>：ドラッグ＝視点回転／ホイール＝ズーム／右ドラッグ＝平行移動<br>
+      <b>配置</b>：地面（格子）をクリック<br>
+      <b>移動</b>：選択モード→物体クリック→矢印で移動（Yは固定）
+    </div>
+  </div>
+
+  <div id="errOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;padding:24px;overflow:auto;">
+    <div style="background:#1a0808;border:2px solid #cc3333;border-radius:10px;padding:18px;max-width:820px;margin:auto;color:#ffcccc;font-family:monospace;font-size:12px;">
+      <div style="color:#ff5555;font-size:14px;font-weight:bold;margin-bottom:10px;">⚠ JavaScript Error</div>
+      <pre id="errMsg" style="white-space:pre-wrap;word-break:break-all;margin:0;"></pre>
+    </div>
+  </div>
+  <script>
+  window.addEventListener('error', (e) => {
+    const el = document.getElementById('errOverlay');
+    const msg = document.getElementById('errMsg');
+    if (el && msg) {
+      el.style.display = 'block';
+      msg.textContent += (e.message || 'Unknown error') + '\n' +
+        (e.filename ? '  at ' + e.filename + ':' + e.lineno + ':' + e.colno + '\n' : '') +
+        (e.error?.stack ? e.error.stack : '') + '\n\n';
+    }
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const el = document.getElementById('errOverlay');
+    const msg = document.getElementById('errMsg');
+    if (el && msg) {
+      el.style.display = 'block';
+      msg.textContent += 'Unhandled Promise rejection:\n' +
+        (e.reason?.message || String(e.reason) || 'Unknown') + '\n' +
+        (e.reason?.stack || '') + '\n\n';
+    }
+  });
+  </script>
+  <script type="module">
+    const GRID_STEP = 1; // 1マス分（必要なら 0.5 や 2 に変更）
+    const BASE_Y = 0.25; // 球の基本高さ（半径と同じ）
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
+    import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+    import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+    import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+    import { Line2 } from 'three/addons/lines/Line2.js';
+    import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+
+
+
+    // ===== 基本セットアップ =====
+    const canvas = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+    camera.position.set(9, 8, 12);
+    scene.add(camera); // カメラ子要素（ペンオーバーレイ等）をレンダリングするために必要
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0.5, 0);
+    controls.zoomToCursor = true;
+
+    // ライト
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.70);
+    dir.position.set(6, 10, 6);
+    scene.add(dir);
+
+    function snapToGrid(obj) {
+       obj.position.x = Math.round(obj.position.x / GRID_STEP) * GRID_STEP;
+       obj.position.z = Math.round(obj.position.z / GRID_STEP) * GRID_STEP;
+
+       // ★ y は触らない（高さは固定値/円運動に任せる）
+    }
+
+
+    // ===== 円運動（選択した球をXY平面で回す） =====
+    function nowSec(){ return performance.now() / 1000; }
+
+    function ensureCirc(obj){
+      if (!obj.userData.circ){
+        obj.userData.circ = {
+          active: false,
+          center: ORBIT_CENTER.clone(), // ★常に固定中心
+          r: 2,
+          T: 4,
+          startTime: 0,
+          startTheta: 0,                // ★角度の基準
+        };
+      }
+      return obj.userData.circ;
+    }
+
+    function startCircular(obj, r, T){
+      const d = ensureCirc(obj);
+
+      // ★中心は固定（開始のたびに上書きしない）
+      d.center.copy(ORBIT_CENTER);
+
+      d.r = Math.max(0, r);
+      d.T = Math.max(0.1, T);
+
+      const t = nowSec();
+      const omega = (Math.PI * 2) / d.T;
+
+      // ★今いる位置から角度を計算して、そこから再開する（ズレ防止）
+      const dx = obj.position.x - d.center.x;
+      const dy = obj.position.y - d.center.y;
+      const thetaNow = Math.atan2(dy, dx); // (2,5,0)なら 0
+
+      d.startTheta = thetaNow;
+      d.startTime = t;
+      d.active = true;
+      sharedCirc.r = d.r; sharedCirc.T = d.T;
+      sharedCirc.startTheta = d.startTheta; sharedCirc.startTime = d.startTime;
+      sharedCirc.frozenElapsed = 0;
+      sharedCirc.active = true;
+    }
+
+    function stopCircular(obj){
+      const d = obj.userData.circ;
+      if (!d) return;
+      d.active = false;
+      sharedCirc.frozenElapsed += nowSec() - sharedCirc.startTime;
+      sharedCirc.active = false;
+    }
+
+    function startSharedCirc(r, T){
+      sharedCirc.r = Math.max(0, r);
+      sharedCirc.T = Math.max(0.1, T);
+      sharedCirc.startTime = nowSec();
+      sharedCirc.active = true;
+      // frozenElapsed・startTheta はそのまま維持して続きから再開
+    }
+    function stopSharedCirc(){
+      // 停止時までの経過時間を累積保存
+      sharedCirc.frozenElapsed += nowSec() - sharedCirc.startTime;
+      sharedCirc.active = false;
+    }
+
+    function toggleCircular(obj, r, T){
+      const d = ensureCirc(obj);
+      if (d.active) stopCircular(obj);
+      else startCircular(obj, r, T);
+    }
+
+    // 球がなくてもばね・ロープを動かすための共有状態
+    const sharedCirc = { active: false, r: 2, T: 4, startTime: 0, startTheta: 0, frozenElapsed: 0 };
+
+    function updateCircular(obj, t){
+      const d = obj.userData.circ;
+      if (!d || !d.active) return;
+
+      const omega = (Math.PI * 2) / d.T;
+      const theta = d.startTheta + omega * (t - d.startTime);
+
+      // ★XY平面（z固定）
+      obj.position.set(
+        d.center.x + d.r * Math.cos(theta),
+        d.center.y + d.r * Math.sin(theta),
+        d.center.z
+      );
+    }
+
+    // ===== 視点スナップ（XZ平面の位置を固定する版） =====
+    // 画面上の「XZ平面（y=0）」の高さ：-1=最下, 0=中央, +1=最上
+    // 赤線くらいなら -0.55 ～ -0.70 あたりが目安（数字を変えると上下します）
+    const VIEW_PLANE_NDC_Y = -0.1;
+
+    // 視点ボタンで揃える時のカメラ高さ（必要なら調整）
+    const VIEW_CAM_Y = 5;
+
+    // スムーズ移動
+    let viewTween = null; // {startPos, endPos, startTarget, endTarget, startTime, dur}
+
+    // 計算用カメラ（本物を一瞬も動かさないため）
+    const viewCalcCam = new THREE.PerspectiveCamera();
+
+    function getFocusXZ() {
+      return new THREE.Vector3(0, 0, 0);
+    }
+
+    // 後で代入する（grid作成箇所で代入）
+    let grid, horizonXY, horizonYZ;
+    let viewMode = 'free'; // 'free' | 'xy' | 'yz'
+
+    // XY/YZのときは床グリッドを消して、基準線だけ出す
+    function applyViewMode(mode){
+      // ★2D化はやめる：常に3D
+      if (grid) grid.visible = true;        // グリッドは常に表示
+      if (horizonXY) horizonXY.visible = false; // 基準線は使わない（必要なら後で戻せます）
+      if (horizonYZ) horizonYZ.visible = false;
+
+      controls.enableRotate = true;         // ★回転ロックしない
+      // controls.enablePan / enableZoom はそのままでOK
+    }
+
+    // dir方向から、原点基準で「XZ平面(y=0)」がNDCの所定Yに来るようにセット
+    function startViewSnapPreset(dirVec, mode, duration = 0.35){
+      const dist = camera.position.distanceTo(controls.target);
+
+      // 水平成分だけ使う（y=0にして確実に水平視線にする）
+      const dir = dirVec.clone();
+      dir.y = 0;
+      if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
+      dir.normalize();
+
+      // ★ここが肝：カメラ/ターゲットの共通Yを計算
+      // 視線が水平のとき、原点(y=0)のNDC_yは  -(Y / (dist*tan(fov/2))) になる
+      // => Y = -NDC_y * dist * tan(fov/2)
+      const fovRad = THREE.MathUtils.degToRad(camera.fov);
+      const sharedY = -VIEW_PLANE_NDC_Y * dist * Math.tan(fovRad * 0.5);
+
+      // 原点基準（球の位置に依存しない）
+      const endTarget = new THREE.Vector3(0, sharedY, 0);
+      const endPos = endTarget.clone().add(dir.multiplyScalar(dist));
+
+      applyViewMode(mode);
+
+      viewTween = {
+        startPos: camera.position.clone(),
+        endPos,
+        startTarget: controls.target.clone(),
+        endTarget,
+        startTime: nowSec(),
+        dur: duration,
+      };
+    }
+
+    function updateViewSnap(t){
+      if (!viewTween) return;
+      const u = Math.min(1, (t - viewTween.startTime) / viewTween.dur);
+      const k = u * u * (3 - 2 * u); // easeInOut
+
+      camera.position.lerpVectors(viewTween.startPos, viewTween.endPos, k);
+      controls.target.lerpVectors(viewTween.startTarget, viewTween.endTarget, k);
+      controls.update();
+
+      if (u >= 1) viewTween = null;
+    }
+
+    function snapToXY() {
+      const center = orbitCenter.clone().add(new THREE.Vector3(7, 0, 0));
+      startViewSnapAroundCenter(new THREE.Vector3(0, 0, 1), 0.35, center);
+    }
+
+
+    function snapToYZ() {
+      startViewSnapAroundCenter(new THREE.Vector3(1, 0, 0)); // x方向から見る（YZ平面が見える）
+    }
+
+
+    // 地面グリッド（見える床）
+    grid = new THREE.GridHelper(16, 16, 0x9bb0d0, 0xc8d6e8);
+    grid.position.y = 0;
+    scene.add(grid);
+
+    // ===== 2Dビュー用：基準線（y=0の線だけ） =====
+    const baseLineMat = new THREE.LineBasicMaterial({
+      color: 0x3a6cff,
+      transparent: true,
+      opacity: 0.55,
+    });
+
+    // XY視点用：X方向の線（y=0, z=0）
+    horizonXY = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-200, 0, 0),
+        new THREE.Vector3( 200, 0, 0),
+      ]),
+      baseLineMat
+    );
+    horizonXY.visible = false;
+    scene.add(horizonXY);
+
+    // YZ視点用：Z方向の線（x=0, y=0）
+    horizonYZ = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, -200),
+        new THREE.Vector3(0, 0,  200),
+      ]),
+      baseLineMat
+    );
+    horizonYZ.visible = false;
+    scene.add(horizonYZ);
+
+    // クリック位置を取るための「見えない床」
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // 置いたものをまとめるグループ
+    const placedGroup = new THREE.Group();
+    scene.add(placedGroup);
+    let placedSphere = null; // 置いた球を記録（1個制限用）
+    let sphereGroup  = null; // 球のドラッグ用グループ
+    let sphereHitbox = null; // 球の透明ヒットボックス
+    let springGroup = null;          // 球とばね グループ
+    let springBall  = null;          // 球とばね用の球
+    let springMesh  = null;          // ばね
+    let springCeil  = null;          // 天井
+    let springHitbox = null;         // 透明ヒットボックス
+    let ropeGroup    = null;         // ロープと手 グループ
+    let ropeLine = null;             // ロープ（Line）
+    let ropeNodes = null;            // ロープ継ぎ目の球（隙間埋め）
+    let ropeCenterMarker = null;     // ロープ中央の目印（単色）
+    let ropeParticleMeshes = [];     // 粒子マーカー P0〜P8
+    let ropeHandGroup  = null;       // 手
+    let ropeHitbox     = null;       // ロープ透明ヒットボックス
+    let ropeHandHitbox = null;       // 手の透明ヒットボックス
+    // 透明ヒットボックス共通マテリアル
+    const _hitboxMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+    // XY平面ドラッグ用
+    const _dragPlane  = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    let   _dragGroup  = null;
+    const _dragOffset = new THREE.Vector3();
+    const _dragHitPt  = new THREE.Vector3();
+    let centerDot      = null;  // 円運動中心点（赤）
+    let trajectoryLine = null;  // 軌跡（黄色い円）
+    let centerLineMesh = null;  // 中心線（中心→球、黄色）
+    let lastOrbitR     = null;  // 軌跡再構築用の前回半径
+
+    function buildOrbitCirclePoints(r) {
+      const pts = [];
+      for (let i = 0; i <= 128; i++) {
+        const theta = (i / 128) * Math.PI * 2;
+        pts.push(new THREE.Vector3(
+          ORBIT_CENTER.x + r * Math.cos(theta),
+          ORBIT_CENTER.y + r * Math.sin(theta),
+          ORBIT_CENTER.z
+        ));
+      }
+      return pts;
+    }
+    // ===== 先生用：配置＆選択 =====
+    let mode = 'placeSphere'; // 'placeSphere' or 'select'
+    let selected = null;
+
+    // ===== 円運動の中心（固定）と球の初期状態 =====
+    const ORBIT_CENTER = new THREE.Vector3(-8, 5, 0);   // ←確定
+    const SPHERE_START = new THREE.Vector3(-6, 5, 0);   // ←確定（半径2の開始点）
+    const DEFAULT_R = 2;
+
+    // 円運動の中心（今後ずっとこれを使う）
+    let orbitCenter = ORBIT_CENTER.clone();
+
+    // ===== グラフ（YZ平面 / x=0） =====
+    // 横軸=t（時間）, 縦軸=x（単振動の変位：球のy座標を中心から引いたもの）
+    // ※ x = placedSphere.position.y - ORBIT_CENTER.y
+
+    // 出現位置の微調整はこの3つだけ触ればOK
+    const GRAPH_CENTER = new THREE.Vector3(-8, 6.0, -7.0); // x=0 の YZ平面上
+    const GRAPH_WIDTH  = 9.0;  // 横（見た目サイズ）
+    const GRAPH_HEIGHT = 4.0;  // 縦（見た目サイズ）
+
+    // 表示する時間幅（右端が現在）
+    const GRAPH_TIME_WINDOW = 8.0;    // 秒（画面に見せる時間幅）
+    const GRAPH_SAMPLE_DT   = 1/30;   // 1点あたり最小間隔（秒）→30fpsで負荷軽減
+
+    let graphGroup = null;
+    let graphCanvas = null;
+    let graphCtx = null;
+    let graphTexture = null;
+
+    // --- グラフのドラッグ（YZ平面 x=0 のみ） ---
+    // 「つかんだ点」と「graphGroup.position」の差分を保持して、常にその差分を保ったまま動かす。
+    // これで“カーソルで直接つかんでいる”感じになります。
+
+    let graphPlaneMesh = null; // クリック判定する平面Mesh（ensureGraph()で代入）
+    let graphHandles   = [];   // 四隅ハンドル（リサイズ用）
+    let liveGraphEntry = null; // ライブグラフのエントリ
+    let selectedGraphEntry = null; // 現在選択中のグラフ
+    // ===== ペン/消しゴム（カメラ空間オーバーレイ） =====
+    const DEFAULT_BOARD_Z  = -10;
+    const INK_BOARD_WIDTH  = 18;
+    const INK_BOARD_HEIGHT = 11;
+
+    let inkMode       = 'none'; // 'none' | 'pen' | 'eraser'
+    let inkDrawing    = false;
+    let inkBoardMesh    = null;
+    let inkBoardCanvas  = null;
+    let inkBoardCtx     = null;
+    let inkBoardTexture = null;
+    let activeInkCtx    = null;
+    let activeIBTexture = null;
+    let lastInkX = 0, lastInkY = 0;
+    let inkDirty   = false;
+    let graphDirty = false;
+
+    const PEN_COLOR    = 'rgba(255, 40, 40, 1.0)';
+    const PEN_WIDTH    = 2;
+    const ERASER_WIDTH = 20;
+
+    function ensureInkBoard() {
+      if (inkBoardMesh) return;
+      inkBoardCanvas = document.createElement('canvas');
+      inkBoardCanvas.width  = 1024;
+      inkBoardCanvas.height = 614;
+      inkBoardCtx = inkBoardCanvas.getContext('2d');
+      inkBoardCtx.lineCap  = 'round';
+      inkBoardCtx.lineJoin = 'round';
+      inkBoardTexture = new THREE.CanvasTexture(inkBoardCanvas);
+      inkBoardTexture.colorSpace = THREE.SRGBColorSpace;
+      inkBoardTexture.generateMipmaps = false;
+      inkBoardTexture.minFilter = THREE.LinearFilter;
+      const mat = new THREE.MeshBasicMaterial({
+        map: inkBoardTexture, transparent: true, opacity: 1,
+        side: THREE.FrontSide, depthWrite: false, depthTest: false,
+      });
+      inkBoardMesh = new THREE.Mesh(new THREE.PlaneGeometry(INK_BOARD_WIDTH, INK_BOARD_HEIGHT), mat);
+      inkBoardMesh.position.set(0, 0, DEFAULT_BOARD_Z);
+      inkBoardMesh.renderOrder = 1;
+      camera.add(inkBoardMesh);
+    }
+
+    function setInkMode(next) {
+      inkMode = (inkMode === next) ? 'none' : next;
+      if (inkMode !== 'none') ensureInkBoard();
+      document.getElementById('toolPen')?.classList.toggle('active', inkMode === 'pen');
+      document.getElementById('toolEraser')?.classList.toggle('active', inkMode === 'eraser');
+      if (inkDrawing) endGraphInk();
+    }
+
+    function clearInkAll() {
+      if (inkBoardCtx && inkBoardCanvas) {
+        inkBoardCtx.clearRect(0, 0, inkBoardCanvas.width, inkBoardCanvas.height);
+        if (inkBoardTexture) inkBoardTexture.needsUpdate = true;
+      }
+    }
+
+    // 画面座標 → インクキャンバス座標（レイキャスト不使用・解析計算）
+    function screenToInkXY(ev) {
+      const rect = canvas.getBoundingClientRect();
+      const ndcX = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+      const proj = camera.projectionMatrix.elements;
+      // カメラ空間での交点 z = DEFAULT_BOARD_Z 平面
+      const depth = -DEFAULT_BOARD_Z; // 10
+      const cx = ndcX * depth / proj[0]; // proj[0] = f/aspect, proj[5] = f
+      const cy = ndcY * depth / proj[5];
+      const uvX = (cx + INK_BOARD_WIDTH / 2) / INK_BOARD_WIDTH;
+      const uvY = (cy + INK_BOARD_HEIGHT / 2) / INK_BOARD_HEIGHT;
+      return {
+        x: uvX * inkBoardCanvas.width,
+        y: (1 - uvY) * inkBoardCanvas.height,
+      };
+    }
+    
+    const GRAPH_DRAG_PLANE = new THREE.Plane(new THREE.Vector3(1,0,0), 0); // x=0 平面
+
+    let graphDragging = false;
+    let graphDragPointerId = null;
+
+    // つかんだ点(world) と graphGroup.position(world) の差分
+    const graphDragOffsetToGroup = new THREE.Vector3();
+    const _gHit = new THREE.Vector3();
+
+    function tryStartGraphDrag(ev){
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+
+      // 現在グラフ → 保存グラフの順でヒット判定
+      let hitEntry = null;
+      if (graphGroup && graphGroup.visible && graphPlaneMesh) {
+        if (raycaster.intersectObject(graphPlaneMesh, false).length) {
+          hitEntry = liveGraphEntry;
+        }
+      }
+      if (!hitEntry && graphGroup2 && graphGroup2.visible && graphPlaneMesh2 && ev.button !== 2) {
+        if (raycaster.intersectObject(graphPlaneMesh2, false).length) hitEntry = liveGraphEntry2;
+      }
+      if (!hitEntry) {
+        for (const entry of savedGraphEntries) {
+          if (raycaster.intersectObject(entry.planeMesh, false).length) { hitEntry = entry; break; }
+        }
+      }
+      if (!hitEntry) {
+        for (const entry of savedGraphEntries2) {
+          if (raycaster.intersectObject(entry.planeMesh, false).length) { hitEntry = entry; break; }
+        }
+      }
+      if (!hitEntry) return false;
+
+      // クリックしたグラフを選択（四隅ハンドルを表示）
+      selectGraph(hitEntry);
+
+      const _isG2 = (hitEntry === liveGraphEntry2 || savedGraphEntries2.includes(hitEntry));
+      const _dPlane = _isG2 ? GRAPH_DRAG_PLANE2 : GRAPH_DRAG_PLANE;
+      if (!raycaster.ray.intersectPlane(_dPlane, _gHit)) return false;
+      if (_isG2) _gHit.z = 0; else _gHit.x = 0;
+
+      graphDragOffsetToGroup.copy(hitEntry.group.position).sub(_gHit);
+      graphDragEntry    = hitEntry;
+      graphDragIsGraph2 = _isG2;
+      graphDragging     = true;
+      graphDragPointerId = ev.pointerId ?? null;
+
+      controls.enabled = false;
+      try { canvas.setPointerCapture(ev.pointerId); } catch(e) {}
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      return true;
+    }
+
+    function updateGraphDrag(ev){
+      if (!graphDragging || !graphDragEntry) return;
+
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+      const _dPlane2 = graphDragIsGraph2 ? GRAPH_DRAG_PLANE2 : GRAPH_DRAG_PLANE;
+      if (!raycaster.ray.intersectPlane(_dPlane2, _gHit)) return;
+      if (graphDragIsGraph2) _gHit.z = 0; else _gHit.x = 0;
+
+      const newPos = _gHit.clone().add(graphDragOffsetToGroup);
+      if (graphDragIsGraph2) {
+        graphDragEntry.group.position.set(newPos.x, newPos.y, 0);
+      } else {
+        graphDragEntry.group.position.set(0, newPos.y, newPos.z);
+      }
+
+      ev.preventDefault();
+    }
+
+    function endGraphDrag(ev){
+      if (!graphDragging) return;
+
+      graphDragging  = false;
+      graphDragEntry = null;
+      controls.enabled = true;
+
+      if (ev?.pointerId != null){
+        try { canvas.releasePointerCapture(ev.pointerId); } catch(e) {}
+      }
+      graphDragPointerId = null;
+    }
+
+    function tryStartGraphInk(ev) {
+      if (inkMode === 'none') return false;
+      ensureInkBoard();
+      activeInkCtx = inkBoardCtx;
+      const xy = screenToInkXY(ev);
+      lastInkX = xy.x; lastInkY = xy.y;
+      inkDrawing = true;
+      if (inkMode === 'pen') {
+        activeInkCtx.globalCompositeOperation = 'source-over';
+        activeInkCtx.strokeStyle = PEN_COLOR;
+        activeInkCtx.lineWidth   = PEN_WIDTH;
+      } else {
+        activeInkCtx.globalCompositeOperation = 'destination-out';
+        activeInkCtx.strokeStyle = 'rgba(0,0,0,1)';
+        activeInkCtx.lineWidth   = ERASER_WIDTH;
+      }
+      activeInkCtx.beginPath();
+      activeInkCtx.moveTo(lastInkX, lastInkY);
+      activeInkCtx.lineTo(lastInkX + 0.01, lastInkY + 0.01);
+      activeInkCtx.stroke();
+      controls.enabled = false;
+      try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+      inkDirty = true;
+      return true;
+    }
+
+    function updateGraphInk(ev) {
+      if (!inkDrawing) return;
+      const xy = screenToInkXY(ev);
+      activeInkCtx.beginPath();
+      activeInkCtx.moveTo(lastInkX, lastInkY);
+      activeInkCtx.lineTo(xy.x, xy.y);
+      activeInkCtx.stroke();
+      lastInkX = xy.x; lastInkY = xy.y;
+      inkDirty = true;
+    }
+
+    function endGraphInk(ev) {
+      if (!inkDrawing) return;
+      inkDrawing = false;
+      controls.enabled = true;
+      try { renderer.domElement.releasePointerCapture(ev?.pointerId); } catch(e) {}
+    }
+
+    // ===== グラフのリサイズ（右上ハンドル / 縦横比固定 / YZ平面のみ） =====
+    let graphResizing = false;
+    let graphResizePointerId = null;
+
+    const GRAPH_SCALE_MIN = 0.25;
+    const GRAPH_SCALE_MAX = 4.0;
+
+    // bottom-left（左下）を固定して、右上を引っ張るPPT的な挙動にします
+    const _grHit = new THREE.Vector3();
+    const _grBL_local = new THREE.Vector3(-GRAPH_WIDTH / 2, -GRAPH_HEIGHT / 2, 0);
+    const _grBL_world = new THREE.Vector3();
+    const _grNewBL_world = new THREE.Vector3();
+    const _grShift = new THREE.Vector3();
+
+    const _grQ = new THREE.Quaternion();
+    const _grWidthDir = new THREE.Vector3();
+    const _grHeightDir = new THREE.Vector3();
+
+    const _grDelta = new THREE.Vector3();
+
+    const grAnchor = new THREE.Vector3();
+    let grStartScale = 1;
+    let grStartProj = 1;
+
+    // 縦横比固定のための「対角方向」係数（幅・高さの比は固定）
+    const grDiagLen = Math.hypot(GRAPH_WIDTH, GRAPH_HEIGHT);
+    const grUnitW = GRAPH_WIDTH / grDiagLen;
+    const grUnitH = GRAPH_HEIGHT / grDiagLen;
+
+    function getBottomLeftWorldFor(planeMesh){
+      if (!planeMesh) return _grBL_world.set(0,0,0);
+      return planeMesh.localToWorld(_grBL_world.copy(_grBL_local));
+    }
+
+    // 四隅コーナー定数
+    const CORNER_DIRS = { BL:[-1,-1], BR:[1,-1], TL:[-1,1], TR:[1,1] };
+    const OPPOSITE_CORNER = { BL:'TR', BR:'TL', TL:'BR', TR:'BL' };
+    const _cLocal = new THREE.Vector3();
+    const _cWorld = new THREE.Vector3();
+
+    function getCornerWorld(planeMesh, corner){
+      const [sx, sy] = CORNER_DIRS[corner];
+      _cLocal.set(sx * GRAPH_WIDTH/2, sy * GRAPH_HEIGHT/2, 0);
+      return planeMesh.localToWorld(_cWorld.copy(_cLocal));
+    }
+
+    function makeCornerHandles(plane){
+      const handles = [];
+      for (const corner of ['BL','BR','TL','TR']){
+        const [sx, sy] = CORNER_DIRS[corner];
+        const h = new THREE.Mesh(
+          new THREE.SphereGeometry(0.09, 12, 8),
+          new THREE.MeshBasicMaterial({ color:0x000000 })
+        );
+        h.position.set(sx * GRAPH_WIDTH/2, sy * GRAPH_HEIGHT/2, 0.02);
+        h.visible = false;
+        h.userData.corner = corner;
+        plane.add(h);
+        handles.push(h);
+      }
+      return handles;
+    }
+
+    function selectGraph(entry){
+      if (selectedGraphEntry && selectedGraphEntry !== entry){
+        for (const h of selectedGraphEntry.handles) h.visible = false;
+      }
+      selectedGraphEntry = entry;
+      if (entry) for (const h of entry.handles) h.visible = true;
+    }
+
+    function deselectGraph(){
+      if (selectedGraphEntry){
+        for (const h of selectedGraphEntry.handles) h.visible = false;
+      }
+      selectedGraphEntry = null;
+    }
+
+    let graphResizeAnchorCorner = 'BL';
+
+    function tryStartGraphResize(ev){
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+
+      // 選択中グラフの四隅ハンドルを判定
+      let hitEntry = null;
+      let hitCorner = null;
+      if (selectedGraphEntry) {
+        for (const h of selectedGraphEntry.handles) {
+          if (h.visible && raycaster.intersectObject(h, false).length) {
+            hitEntry = selectedGraphEntry;
+            hitCorner = h.userData.corner;
+            break;
+          }
+        }
+      }
+      if (!hitEntry) return false;
+
+      const _isG2r = (hitEntry === liveGraphEntry2 || savedGraphEntries2.includes(hitEntry));
+      const _rPlane = _isG2r ? GRAPH_DRAG_PLANE2 : GRAPH_DRAG_PLANE;
+      if (!raycaster.ray.intersectPlane(_rPlane, _grHit)) return false;
+      if (_isG2r) _grHit.z = 0; else _grHit.x = 0;
+      graphResizeIsGraph2 = _isG2r;
+
+      // ドラッグしたコーナーの対角を固定アンカーにする
+      graphResizeAnchorCorner = OPPOSITE_CORNER[hitCorner];
+      grAnchor.copy(getCornerWorld(hitEntry.planeMesh, graphResizeAnchorCorner));
+      grStartScale = hitEntry.planeMesh.scale.x;
+
+      // ドラッグ方向に合わせてWidth/Height方向を設定
+      const [dx, dy] = CORNER_DIRS[hitCorner];
+      hitEntry.planeMesh.getWorldQuaternion(_grQ);
+      _grWidthDir.set(dx, 0, 0).applyQuaternion(_grQ).normalize();
+      _grHeightDir.set(0, dy, 0).applyQuaternion(_grQ).normalize();
+
+      _grDelta.copy(_grHit).sub(grAnchor);
+      const w0 = Math.max(0, _grDelta.dot(_grWidthDir));
+      const h0 = Math.max(0, _grDelta.dot(_grHeightDir));
+      grStartProj = w0 * grUnitW + h0 * grUnitH;
+      if (grStartProj < 1e-6) grStartProj = 1e-6;
+
+      graphResizeEntry = hitEntry;
+      graphResizing    = true;
+      graphResizePointerId = ev.pointerId ?? null;
+      controls.enabled = false;
+
+      try { renderer.domElement.setPointerCapture(ev.pointerId); } catch(e) {}
+
+      ev.preventDefault();
+      ev.stopPropagation();
+      return true;
+    }
+
+    function updateGraphResize(ev){
+      if (!graphResizing || !graphResizeEntry) return;
+
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+      const _rPlane2 = graphResizeIsGraph2 ? GRAPH_DRAG_PLANE2 : GRAPH_DRAG_PLANE;
+      if (!raycaster.ray.intersectPlane(_rPlane2, _grHit)) return;
+      if (graphResizeIsGraph2) _grHit.z = 0; else _grHit.x = 0;
+
+      _grDelta.copy(_grHit).sub(grAnchor);
+
+      const w = Math.max(0, _grDelta.dot(_grWidthDir));
+      const h = Math.max(0, _grDelta.dot(_grHeightDir));
+      const proj = w * grUnitW + h * grUnitH;
+
+      let newScale = grStartScale * (proj / grStartProj);
+      newScale = Math.max(GRAPH_SCALE_MIN, Math.min(GRAPH_SCALE_MAX, newScale));
+
+      graphResizeEntry.planeMesh.scale.set(newScale, newScale, newScale);
+      graphResizeEntry.planeMesh.updateMatrixWorld(true);
+
+      const newAnchor = getCornerWorld(graphResizeEntry.planeMesh, graphResizeAnchorCorner);
+      _grShift.copy(grAnchor).sub(newAnchor);
+
+      graphResizeEntry.group.position.add(_grShift);
+      graphResizeEntry.group.position.x = 0;
+      graphResizeEntry.group.updateMatrixWorld(true);
+
+      ev.preventDefault();
+    }
+
+    function endGraphResize(ev){
+      if (!graphResizing) return;
+
+      graphResizing    = false;
+      graphResizeEntry = null;
+      controls.enabled = true;
+
+      if (ev?.pointerId != null){
+        try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch(e) {}
+      }
+      graphResizePointerId = null;
+    }
+
+
+
+
+    // データ
+    let graphData = []; // {t, x}
+    let graphTime = 0;  // 再生時間（停止中は進めない）
+    let graphLastTickSec = nowSec();
+    let graphLastSampleT = -1e9;
+
+    // 保存済みグラフ（3Dスナップショット）
+    let savedGraphEntries = []; // [{group, planeMesh, handleMesh}]
+    let graphDragEntry   = null; // ドラッグ中のエントリ
+    let graphResizeEntry = null; // リサイズ中のエントリ
+    let graphDragIsGraph2   = false; // ドラッグ中エントリが graph2 か
+    let graphResizeIsGraph2 = false; // リサイズ中エントリが graph2 か
+
+    function graphPlotRect(){
+      const W = graphCanvas.width;
+      const H = graphCanvas.height;
+      const mL = 35, mR = 283, mT = 237, mB = 169;
+      return { W, H, x0: mL, y0: H - mB, x1: W - mR, y1: mT };
+    }
+
+    function drawGraphBase(){
+      if (!graphCtx || !graphCanvas) return;
+      const ctx = graphCtx;
+      const {W,H,x0,y0,x1,y1} = graphPlotRect();
+
+      ctx.clearRect(0, 0, W, H);
+
+      // グリッド（薄いグレー）
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.09)';
+      ctx.lineWidth = 2;
+      const yCenter = (y0 + y1) / 2;          // 原点のcanvas y座標
+      const step = (y0 - y1) / (2 * DEFAULT_R); // 1単位(r=1)あたりのピクセル数
+      const yGridTop = y1 - 169;  // 縦軸の矢印先端と同じ
+      const yGridBot = y0 + 167;  // 縦軸の下端と同じ
+      const xGridRight = x1 + 102;   // 縦線の間隔計算に使う（変更しない）
+      const xAxisRight = x1 + 150;   // 横線・横軸の右端
+      const nSec = Math.round(GRAPH_TIME_WINDOW); // 表示窓の秒数（=8）
+      for (let k = 1; k <= nSec; k++){
+        const x = x0 + k * (xGridRight - x0) / nSec;
+        ctx.beginPath(); ctx.moveTo(x, yGridTop); ctx.lineTo(x, yGridBot); ctx.stroke();
+      }
+      for (let k = -3; k <= 3; k++){
+        const y = yCenter - k * step;
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(xAxisRight, y); ctx.stroke();
+      }
+    }
+
+    function drawGraph(){
+      if (!graphCtx || !graphCanvas || !graphTexture) return;
+
+      drawGraphBase();
+
+      const ctx = graphCtx;
+      const {x0,y0,x1,y1} = graphPlotRect();
+
+      const xMin = -3, xMax = 3;
+
+      // 横軸（時間）：
+      // tEnd = 現在（経過時間）
+      // tStart = 表示窓の開始（8秒窓）
+      const tEnd = graphTime;
+      const tStart = Math.max(0, tEnd - GRAPH_TIME_WINDOW);
+
+      // y=0 の画面上の位置（常に中央）
+      const yZero = y0 - ((0 - xMin) / (xMax - xMin)) * (y0 - y1);
+
+      // ===== 軸（矢印付き） =====
+      const AW = 16, AH = 8; // 矢印：長さ・半幅
+      ctx.strokeStyle = 'rgba(20, 20, 20, 0.92)';
+      ctx.fillStyle   = 'rgba(20, 20, 20, 0.92)';
+      ctx.lineWidth = 3;
+
+      // 縦軸（Y軸）：x=x0、下から上へ
+      const yTop = y1 - 169;
+      ctx.beginPath(); ctx.moveTo(x0, y0 + 167); ctx.lineTo(x0, yTop + AW); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x0, yTop);
+      ctx.lineTo(x0 - AH, yTop + AW);
+      ctx.lineTo(x0 + AH, yTop + AW);
+      ctx.closePath(); ctx.fill();
+
+      // 横軸（時間軸）：y=yZero、左から右へ
+      const xRight = x1 + 150;
+      ctx.beginPath(); ctx.moveTo(x0, yZero); ctx.lineTo(xRight - AW, yZero); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(xRight, yZero);
+      ctx.lineTo(xRight - AW, yZero - AH);
+      ctx.lineTo(xRight - AW, yZero + AH);
+      ctx.closePath(); ctx.fill();
+
+      // ===== ラベル =====
+      ctx.fillStyle = 'rgba(20, 20, 20, 0.92)';
+      ctx.font = '32px system-ui, -apple-system, sans-serif';
+
+      // キャンバスと3Dパネルのアスペクト比ずれを補正（縦方向を伸ばす）
+      const textScaleY = (graphCanvas.height * GRAPH_WIDTH) / (graphCanvas.width * GRAPH_HEIGHT);
+
+      // 縦軸「変位 y」
+      ctx.save();
+      ctx.translate(5, yTop - 4);
+      ctx.scale(1, textScaleY);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('変位 y', 0, 0);
+      ctx.restore();
+
+      // 横軸「時間 t」
+      ctx.save();
+      ctx.translate(xRight + 7, yZero);
+      ctx.scale(1, textScaleY);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('時間 t', 0, 0);
+      ctx.restore();
+
+      // ===== プロット線 =====
+      if (graphData.length >= 2){
+        ctx.strokeStyle = 'rgba(100, 220, 70, 0.95)'; // 明るい黄緑
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+
+        let started = false;
+
+        // 古い点→新しい点の順（左→右）に描く
+        const waveXMin = -DEFAULT_R;
+        const waveXMax = DEFAULT_R;
+        for (let i = 0; i < graphData.length; i++){
+          const p = graphData[i];
+          if (p.t < tStart || p.t > tEnd) continue;
+
+          const sx = x0 + ((p.t - tStart) / GRAPH_TIME_WINDOW) * (x1 + 102 - x0);
+
+          const v = (p.x - waveXMin) / (waveXMax - waveXMin);
+          const sy = y0 - v * (y0 - y1);
+
+          if (!started){
+            ctx.moveTo(sx, sy);
+            started = true;
+          } else {
+            ctx.lineTo(sx, sy);
+          }
+        }
+
+        if (started) ctx.stroke();
+      }
+
+      graphDirty = true;
+    }
+
+    function ensureGraph(){
+      if (graphGroup) return graphGroup;
+
+      graphCanvas = document.createElement('canvas');
+      graphCanvas.width = 1152;
+      graphCanvas.height = 786;
+      graphCtx = graphCanvas.getContext('2d');
+
+      graphTexture = new THREE.CanvasTexture(graphCanvas);
+      graphTexture.colorSpace = THREE.SRGBColorSpace;
+
+      drawGraph(); // 初期描画
+
+      const mat = new THREE.MeshBasicMaterial({
+        map: graphTexture,
+        transparent: true,
+        side: THREE.DoubleSide,
+      });
+
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(GRAPH_WIDTH, GRAPH_HEIGHT), mat);
+      graphPlaneMesh = plane;                 // クリック判定する対象
+      // --- 初期サイズ調整：縦軸(-r..+r)の物理長 = 円運動の直径(2r)に合わせる ---
+      // 現在の縦軸レンジは -r..+r（初期は r=2 なので -2..2）。その表示部分の高さだけを直径に一致させます。
+      {
+        const rect = graphPlotRect(); // {H, y0, y1, ...}
+        const plotFrac = (rect.y0 - rect.y1) / rect.H; // キャンバス全高のうち「プロット領域」が占める割合
+
+        const r0 = DEFAULT_R;            // 初期の半径（いまは2）
+        const diameter = 2 * r0;         // 円運動の直径（= 4）
+
+        // プロット領域の物理高さ = (GRAPH_HEIGHT * scale) * plotFrac
+        // これを diameter にしたい → scale = diameter / (GRAPH_HEIGHT * plotFrac)
+        const s = diameter / (GRAPH_HEIGHT * plotFrac);
+
+        plane.scale.set(s, s, s);        // 縦横比固定（等倍スケール）
+      }
+
+      // --- リサイズ用ハンドル（四隅、選択時のみ表示） ---
+      graphHandles = makeCornerHandles(plane);
+
+      plane.rotation.y = Math.PI / 2; // YZ平面
+      plane.position.copy(GRAPH_CENTER);
+
+      graphGroup = new THREE.Group();
+      graphGroup.add(plane);
+      graphGroup.visible = false;
+      scene.add(graphGroup);
+      liveGraphEntry = { group: graphGroup, planeMesh: graphPlaneMesh, handles: graphHandles };
+      return graphGroup;
+    }
+
+    function toggleGraph(){
+      // まだグラフ未生成なら、開くときだけ作る
+      if (!graphGroup){
+        ensureGraph();
+      }
+
+      graphGroup.visible = !graphGroup.visible;
+      document.getElementById('toolGraph')?.classList.toggle('active', graphGroup.visible);
+      document.getElementById('graphBtnGroup').style.maxHeight = graphGroup.visible ? '200px' : '0';
+
+      // 開いた瞬間は見た目を更新
+      if (graphGroup.visible){
+        graphLastTickSec = nowSec(); // 念のためdtジャンプ防止
+        drawGraph();
+      }
+    }
+
+    function saveCurrentGraph(){
+      if (!graphGroup || !graphGroup.visible) {
+        alert('グラフを表示してから保存してください。');
+        return;
+      }
+      if (graphData.length < 2) {
+        alert('グラフにデータがありません。先に円運動を記録してください。');
+        return;
+      }
+
+      // 現在の graphCanvas をスナップショット（静止画コピー）
+      const snapCanvas = document.createElement('canvas');
+      snapCanvas.width  = graphCanvas.width;
+      snapCanvas.height = graphCanvas.height;
+      snapCanvas.getContext('2d').drawImage(graphCanvas, 0, 0);
+
+      const snapTexture = new THREE.CanvasTexture(snapCanvas);
+      snapTexture.colorSpace = THREE.SRGBColorSpace;
+
+      // 現在の graphPlaneMesh と同じ位置・スケールの静止Plane
+      const snapPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(GRAPH_WIDTH, GRAPH_HEIGHT),
+        new THREE.MeshBasicMaterial({ map: snapTexture, transparent: true, side: THREE.DoubleSide })
+      );
+      snapPlane.rotation.y = Math.PI / 2;
+      snapPlane.position.copy(graphPlaneMesh.position);
+      snapPlane.scale.copy(graphPlaneMesh.scale);
+
+      // リサイズハンドル（四隅、選択時のみ表示）
+      const snapHandles = makeCornerHandles(snapPlane);
+
+      // 独立グループとして scene に追加（元グラフより右上にずらして配置）
+      const snapGroup = new THREE.Group();
+      snapGroup.add(snapPlane);
+      snapGroup.position.copy(graphGroup.position);
+      // 複製グラフの描画優先度を現在の枚数に合わせて設定
+      snapPlane.renderOrder = savedGraphEntries.length;
+      snapPlane.material.depthTest = false;
+      scene.add(snapGroup);
+
+      savedGraphEntries.push({ group: snapGroup, planeMesh: snapPlane, handles: snapHandles });
+
+      // 現在グラフをリセット（空の新しい座標平面として準備）
+      resetGraph();
+
+      // 新しい空グラフを複製グラフの右上・手前に移動
+      graphGroup.position.y += 1.0;  // 上
+      graphGroup.position.z -= 1.5;  // 右（カメラ視点）
+      // 新グラフを常に最前面に描画
+      graphPlaneMesh.renderOrder = 999;
+      graphPlaneMesh.material.depthTest = false;
+    }
+
+    function deleteSelectedGraph(){
+      if (!selectedGraphEntry) return;
+      const entry = selectedGraphEntry;
+      deselectGraph();
+      // ライブグラフは消せない（リセットのみ）
+      if (entry === liveGraphEntry) return;
+      const idx = savedGraphEntries.indexOf(entry);
+      if (idx !== -1) savedGraphEntries.splice(idx, 1);
+      scene.remove(entry.group);
+      entry.planeMesh.geometry?.dispose();
+      entry.planeMesh.material?.map?.dispose();
+      entry.planeMesh.material?.dispose();
+    }
+
+    function clearSavedGraphs(){
+      for (const entry of savedGraphEntries) {
+        scene.remove(entry.group);
+        entry.planeMesh.geometry?.dispose();
+        entry.planeMesh.material?.map?.dispose();
+        entry.planeMesh.material?.dispose();
+      }
+      savedGraphEntries = [];
+      if (graphGroup?.visible) drawGraph();
+    }
+
+
+    function resetGraph(){
+      
+      if (graphGroup?.visible) drawGraph();
+      // データと時間をリセット
+      graphData = [];
+      graphTime = 0;
+
+      // サンプリングとdtジャンプ防止
+      graphLastSampleT = -1e9;
+      graphLastTickSec = nowSec();
+
+      // 画面を描き直し
+      drawGraph();
+    }
+
+    // 毎フレーム呼ぶ：円運動が動いている間だけ graphTime を進め、点を追加する
+    function updateGraphTick(tNow){
+      // ★ここは毎フレーム更新（dtジャンプ防止）
+      const dt = Math.max(0, tNow - graphLastTickSec);
+      graphLastTickSec = tNow;
+
+      // ★グラフが「存在＆表示」していないなら、何もしない
+      if (!graphGroup || !graphGroup.visible) return;
+
+      // 球があれば球から、なければ sharedCirc から変位を取得
+      let x;
+      if (placedSphere?.userData?.circ?.active) {
+        x = placedSphere.position.y - ORBIT_CENTER.y;
+      } else if (sharedCirc.active) {
+        const omega = Math.PI * 2 / sharedCirc.T;
+        const elapsed = sharedCirc.frozenElapsed + (tNow - sharedCirc.startTime);
+        x = sharedCirc.r * Math.sin(sharedCirc.startTheta + omega * elapsed);
+      } else {
+        return;
+      }
+
+      // 停止中は進めない（再開で時間が飛ばない）
+      graphTime += dt;
+
+      // サンプリング間引き
+      if ((graphTime - graphLastSampleT) < GRAPH_SAMPLE_DT) return;
+      graphLastSampleT = graphTime;
+
+      graphData.push({ t: graphTime, x });
+
+      // 古いデータを捨てる（表示窓の外）
+      const tMinKeep = Math.max(0, graphTime - GRAPH_TIME_WINDOW);
+      while (graphData.length && graphData[0].t < tMinKeep){
+        graphData.shift();
+      }
+
+      // 表示中なので描き直す
+      drawGraph();
+    }
+
+    // ===== y-x グラフ =====
+    const GRAPH_CENTER2    = new THREE.Vector3(8, 5.0, 0.0);
+    // y-xグラフ8目盛分 = (xGridRight-mL)/canvasW × GRAPH_WIDTH × (canvasH/(GRAPH_HEIGHT×plotH/canvasH))
+    // = 936/1152 × 9.0 × 786/380 ≈ 15.1
+    const ROPE_LEN = 936 / 1152 * GRAPH_WIDTH * 786 / 380;
+    const GRAPH_DRAG_PLANE2 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // z=0 平面（ロープと手と同じ）
+    let graph2LineStyle = 'solid'; // 'solid' | 'dotted'
+    let graphGroup2 = null, graphCanvas2 = null, graphCtx2 = null, graphTexture2 = null;
+    let graphPlaneMesh2 = null, graphHandles2 = [], liveGraphEntry2 = null;
+    let savedGraphEntries2 = [], graphDirty2 = false;
+    let graphData2 = [], graphTime2 = 0, graphLastTickSec2 = nowSec(), graphLastSampleT2 = -1e9;
+
+    function graphPlotRect2(){
+      const W = graphCanvas2.width, H = graphCanvas2.height;
+      const mL = 35, mR = 283, mT = 237, mB = 169;
+      return { W, H, x0: mL, y0: H - mB, x1: W - mR, y1: mT };
+    }
+
+    function _drawGraph2Core(canvas, ctx, data, time, lineStyle) {
+      const W = canvas.width, H = canvas.height;
+      const mL = 35, mR = 283, mT = 237, mB = 169;
+      const x0 = mL, y0 = H - mB, x1 = W - mR, y1 = mT;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // グリッド
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.09)';
+      ctx.lineWidth = 2;
+      const yCenter = (y0 + y1) / 2;
+      const step = (y0 - y1) / (2 * DEFAULT_R);
+      const yGridTop = y1 - 169;
+      const yGridBot = y0 + 167;
+      const xGridRight = x1 + 102;
+      const xAxisRight = x1 + 150;
+      const nSec = Math.round(GRAPH_TIME_WINDOW);
+      for (let k = 1; k <= nSec; k++){
+        const x = x0 + k * (xGridRight - x0) / nSec;
+        ctx.beginPath(); ctx.moveTo(x, yGridTop); ctx.lineTo(x, yGridBot); ctx.stroke();
+      }
+      for (let k = -3; k <= 3; k++){
+        const y = yCenter - k * step;
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(xAxisRight, y); ctx.stroke();
+      }
+
+      // 縦軸レンジ
+      const xMin = -3, xMax = 3;
+      const yZero = y0 - ((0 - xMin) / (xMax - xMin)) * (y0 - y1);
+
+      // 軸
+      const AW = 16, AH = 8;
+      ctx.strokeStyle = 'rgba(20, 20, 20, 0.92)';
+      ctx.fillStyle   = 'rgba(20, 20, 20, 0.92)';
+      ctx.lineWidth = 3;
+      const yTop = y1 - 169;
+      const xRight = x1 + 150;
+      ctx.beginPath(); ctx.moveTo(x0, y0 + 167); ctx.lineTo(x0, yTop + AW); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x0, yTop); ctx.lineTo(x0 - AH, yTop + AW); ctx.lineTo(x0 + AH, yTop + AW);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x0, yZero); ctx.lineTo(xRight - AW, yZero); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(xRight, yZero);
+      ctx.lineTo(xRight - AW, yZero - AH); ctx.lineTo(xRight - AW, yZero + AH);
+      ctx.closePath(); ctx.fill();
+
+      // ラベル
+      ctx.fillStyle = 'rgba(20, 20, 20, 0.92)';
+      ctx.font = '32px system-ui, -apple-system, sans-serif';
+      const textScaleY = (H * GRAPH_WIDTH) / (W * GRAPH_HEIGHT);
+      ctx.save();
+      ctx.translate(5, yTop - 4);
+      ctx.scale(1, textScaleY);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillText('変位 y', 0, 0);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(xRight + 7, yZero);
+      ctx.scale(1, textScaleY);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText('位置 x', 0, 0);
+      ctx.restore();
+
+      // プロット
+      if (data.length >= 2){
+        ctx.strokeStyle = 'rgba(190, 70, 30, 0.95)';
+        ctx.lineWidth = 4;
+        ctx.setLineDash(lineStyle === 'dotted' ? [18, 12] : []);
+        ctx.beginPath();
+        let started = false;
+        const waveXMin = -DEFAULT_R, waveXMax = DEFAULT_R;
+        for (let i = 0; i < data.length; i++){
+          const p = data[i];
+          const sx = x0 + ((time - p.t) / GRAPH_TIME_WINDOW) * (x1 + 102 - x0);
+          const v = (p.x - waveXMin) / (waveXMax - waveXMin);
+          const sy = y0 - v * (y0 - y1);
+          if (!started){ ctx.moveTo(sx, sy); started = true; }
+          else { ctx.lineTo(sx, sy); }
+        }
+        if (started) ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    function drawGraph2(){
+      if (!graphCtx2 || !graphCanvas2 || !graphTexture2) return;
+      _drawGraph2Core(graphCanvas2, graphCtx2, graphData2, graphTime2, graph2LineStyle);
+      graphDirty2 = true;
+    }
+
+    function redrawSavedGraph2(entry) {
+      if (!entry.snapCanvas || !entry.snapCtx) return;
+      _drawGraph2Core(entry.snapCanvas, entry.snapCtx, entry.graphDataSnap, entry.graphTimeSnap, entry.lineStyle);
+      entry.planeMesh.material.map.needsUpdate = true;
+    }
+
+    function ensureGraph2(){
+      if (graphGroup2) return graphGroup2;
+      graphCanvas2 = document.createElement('canvas');
+      graphCanvas2.width = 1152; graphCanvas2.height = 786;
+      graphCtx2 = graphCanvas2.getContext('2d');
+      graphTexture2 = new THREE.CanvasTexture(graphCanvas2);
+      graphTexture2.colorSpace = THREE.SRGBColorSpace;
+      drawGraph2();
+      const mat = new THREE.MeshBasicMaterial({ map: graphTexture2, transparent: true, side: THREE.DoubleSide });
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(GRAPH_WIDTH, GRAPH_HEIGHT), mat);
+      graphPlaneMesh2 = plane;
+      { const rect = graphPlotRect2();
+        const plotFrac = (rect.y0 - rect.y1) / rect.H;
+        const s = (2 * DEFAULT_R) / (GRAPH_HEIGHT * plotFrac);
+        plane.scale.set(s, s, s); }
+      graphHandles2 = makeCornerHandles(plane);
+      plane.rotation.y = 0; // z=0 平面向き（ロープと手と同じ）
+      plane.position.copy(GRAPH_CENTER2);
+      graphGroup2 = new THREE.Group();
+      graphGroup2.add(plane);
+      graphGroup2.visible = false;
+      scene.add(graphGroup2);
+      liveGraphEntry2 = { group: graphGroup2, planeMesh: graphPlaneMesh2, handles: graphHandles2 };
+      return graphGroup2;
+    }
+
+    function toggleGraph2(){
+      if (!graphGroup2) ensureGraph2();
+      graphGroup2.visible = !graphGroup2.visible;
+      document.getElementById('toolGraph2')?.classList.toggle('active', graphGroup2.visible);
+      document.getElementById('graphBtnGroup2').style.maxHeight = graphGroup2.visible ? '200px' : '0';
+      if (graphGroup2.visible){ graphLastTickSec2 = nowSec(); drawGraph2(); }
+    }
+
+    function resetGraph2(){
+      graphData2 = []; graphTime2 = 0;
+      graphLastSampleT2 = -1e9; graphLastTickSec2 = nowSec();
+      drawGraph2();
+    }
+
+    function saveCurrentGraph2(){
+      if (!graphGroup2 || !graphGroup2.visible){ alert('グラフを表示してから保存してください。'); return; }
+      if (graphData2.length < 2){ alert('グラフにデータがありません。先に円運動を記録してください。'); return; }
+      const snapCanvas = document.createElement('canvas');
+      snapCanvas.width = graphCanvas2.width; snapCanvas.height = graphCanvas2.height;
+      snapCanvas.getContext('2d').drawImage(graphCanvas2, 0, 0);
+      const snapTexture = new THREE.CanvasTexture(snapCanvas);
+      snapTexture.colorSpace = THREE.SRGBColorSpace;
+      const snapPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(GRAPH_WIDTH, GRAPH_HEIGHT),
+        new THREE.MeshBasicMaterial({ map: snapTexture, transparent: true, side: THREE.DoubleSide })
+      );
+      snapPlane.rotation.y = 0;
+      snapPlane.position.copy(graphPlaneMesh2.position);
+      snapPlane.scale.copy(graphPlaneMesh2.scale);
+      const snapHandles = makeCornerHandles(snapPlane);
+      const snapGroup = new THREE.Group();
+      snapGroup.add(snapPlane);
+      snapGroup.position.copy(graphGroup2.position);
+      snapPlane.renderOrder = savedGraphEntries2.length;
+      snapPlane.material.depthTest = false;
+      scene.add(snapGroup);
+      savedGraphEntries2.push({
+        group: snapGroup, planeMesh: snapPlane, handles: snapHandles,
+        snapCanvas, snapCtx: snapCanvas.getContext('2d'),
+        graphDataSnap: graphData2.map(p => ({ t: p.t, x: p.x })),
+        graphTimeSnap: graphTime2,
+        lineStyle: graph2LineStyle
+      });
+      resetGraph2();
+      graphGroup2.position.y += 1.0;
+      graphGroup2.position.x += 1.5;
+      graphPlaneMesh2.renderOrder = 999;
+      graphPlaneMesh2.material.depthTest = false;
+    }
+
+    function clearSavedGraphs2(){
+      for (const e of savedGraphEntries2){
+        scene.remove(e.group);
+        e.planeMesh.geometry?.dispose();
+        e.planeMesh.material?.map?.dispose();
+        e.planeMesh.material?.dispose();
+      }
+      savedGraphEntries2 = [];
+      if (graphGroup2?.visible) drawGraph2();
+    }
+
+    function deleteSelectedGraph2(){
+      if (!selectedGraphEntry) return;
+      const entry = selectedGraphEntry;
+      deselectGraph();
+      if (entry === liveGraphEntry2) return;
+      const idx = savedGraphEntries2.indexOf(entry);
+      if (idx !== -1) savedGraphEntries2.splice(idx, 1);
+      scene.remove(entry.group);
+      entry.planeMesh.geometry?.dispose();
+      entry.planeMesh.material?.map?.dispose();
+      entry.planeMesh.material?.dispose();
+    }
+
+    function updateGraphTick2(tNow){
+      const dt = Math.max(0, tNow - graphLastTickSec2);
+      graphLastTickSec2 = tNow;
+      if (!graphGroup2 || !graphGroup2.visible) return;
+      let x;
+      if (placedSphere?.userData?.circ?.active) {
+        x = placedSphere.position.y - ORBIT_CENTER.y;
+      } else if (sharedCirc.active) {
+        const omega = Math.PI * 2 / sharedCirc.T;
+        const elapsed = sharedCirc.frozenElapsed + (tNow - sharedCirc.startTime);
+        x = sharedCirc.r * Math.sin(sharedCirc.startTheta + omega * elapsed);
+      } else {
+        return;
+      }
+      graphTime2 += dt;
+      if ((graphTime2 - graphLastSampleT2) < GRAPH_SAMPLE_DT) return;
+      graphLastSampleT2 = graphTime2;
+      graphData2.push({ t: graphTime2, x });
+      const tMinKeep = Math.max(0, graphTime2 - GRAPH_TIME_WINDOW);
+      while (graphData2.length && graphData2[0].t < tMinKeep) graphData2.shift();
+      drawGraph2();
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    // クリックで置く平面（水平面）: y=0 に固定
+    // ※球は最終的に BASE_Y(=5) に置くので、交点は y=0 でOK
+    const PLACE_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+
+    function setMode(newMode){
+      mode = newMode;
+    }
+
+    // TransformControls（選択した物体を矢印で動かす）
+    const tctrl = new TransformControls(camera, renderer.domElement);
+    tctrl.setMode('translate');
+    tctrl.showRotation = false;
+    tctrl.showScale = false;
+    scene.add(tctrl);
+    tctrl.enabled = false;
+    tctrl.visible = false;
+
+
+    // つまんでいる間は、視点操作を無効にする
+    tctrl.addEventListener('dragging-changed', (e) => {
+      controls.enabled = !e.value;
+    });
+
+    // Y方向は固定（床に置いたまま）
+    tctrl.addEventListener('objectChange', () => {
+      if (selected) selected.position.y = 0.25;
+    });
+
+    function selectObject(obj){
+      selected = obj || null;
+      tctrl.detach();
+    }
+
+
+    function deleteSelected(){
+      if (!selected) return;
+      const toRemove = selected;
+
+      selectObject(null);
+      if (toRemove === placedSphere) {
+        if (sphereGroup) { scene.remove(sphereGroup); sphereGroup = null; }
+        sphereHitbox = null;
+        placedSphere = null;
+      } else {
+        placedGroup.remove(toRemove);
+      }
+      toRemove.geometry?.dispose?.();
+      toRemove.material?.dispose?.();
+    }
+
+    function clearAll(){
+      selectObject(null);
+      for (const child of [...placedGroup.children]){
+        placedGroup.remove(child);
+        child.geometry?.dispose?.();
+        child.material?.dispose?.();
+      }
+      if (sphereGroup) { scene.remove(sphereGroup); sphereGroup = null; }
+      sphereHitbox = null;
+      placedSphere = null;
+    }
+
+    function getPointerNDC(ev){
+      const rect = canvas.getBoundingClientRect();
+      const x = ( (ev.clientX - rect.left) / rect.width ) * 2 - 1;
+      const y = - ( (ev.clientY - rect.top) / rect.height ) * 2 + 1;
+      mouse.set(x, y);
+    }
+
+    function makeShadedSphereMaterial(hexColor) {
+      return new THREE.ShaderMaterial({
+        uniforms: { baseColor: { value: new THREE.Color(hexColor) } },
+        vertexShader: `
+          varying vec3 vNormalView;
+          void main() {
+            vNormalView = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 baseColor;
+          varying vec3 vNormalView;
+          void main() {
+            vec3 N = normalize(vNormalView);
+            vec3 V = vec3(0.0, 0.0, 1.0);
+            float ndotv = max(dot(N, V), 0.0);
+            float shade = pow(ndotv, 0.5);
+            vec3 dark   = baseColor * 0.45;
+            vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+            vec3 color  = mix(dark, bright, shade);
+            vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+            vec3 H = normalize(L + V);
+            float spec = pow(max(dot(N, H), 0.0), 52.0);
+            color += vec3(1.0) * spec * 1.1;
+            float fresnel = pow(1.0 - ndotv, 3.0);
+            color += baseColor * fresnel * 0.45;
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `,
+      });
+    }
+
+    function spawnSphere() {
+      if (placedSphere) return;
+
+      const geo = new THREE.SphereGeometry(0.25, 32, 16);
+      const mat = makeShadedSphereMaterial(0xffff00);
+      const mesh = new THREE.Mesh(geo, mat);
+
+      // ★ 出現位置を固定（あなたの指定）
+      mesh.position.copy(SPHERE_START);     // (-6,5,0)
+      snapToGrid(mesh);                    // x,zだけ吸着（yはそのまま5）
+
+      sphereGroup = new THREE.Group();
+      scene.add(sphereGroup);
+      sphereGroup.add(mesh);
+
+      // 透明ヒットボックス（軌道内側を円盤でカバー）
+      sphereHitbox = new THREE.Mesh(new THREE.CircleGeometry(DEFAULT_R, 64), _hitboxMat);
+      sphereHitbox.position.copy(ORBIT_CENTER);
+      sphereGroup.add(sphereHitbox);
+
+      placedSphere = mesh;
+
+      // ★ 視点中心も常に円運動中心へ
+      orbitCenter.copy(ORBIT_CENTER);      // (0,5,0)
+      controls.target.copy(orbitCenter);
+      controls.update();
+
+      setMode('select');
+
+      // 円運動の中心点・軌跡・中心線（初回のみ生成）
+      if (!centerDot) {
+        // 中心点（赤い点）
+        centerDot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.05, 16, 16),
+          new THREE.MeshBasicMaterial({ color: 0xff3344 })
+        );
+        centerDot.position.copy(ORBIT_CENTER);
+        centerDot.visible = false;
+        sphereGroup.add(centerDot);
+        // 軌跡（黄色い円）
+        trajectoryLine = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(buildOrbitCirclePoints(DEFAULT_R)),
+          new THREE.LineBasicMaterial({ color: 0xffee00 })
+        );
+        trajectoryLine.visible = false;
+        sphereGroup.add(trajectoryLine);
+        // 中心線（中心→球、黄色）
+        centerLineMesh = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([ORBIT_CENTER.clone(), ORBIT_CENTER.clone()]),
+          new THREE.LineBasicMaterial({ color: 0xffee00 })
+        );
+        centerLineMesh.visible = false;
+        sphereGroup.add(centerLineMesh);
+      }
+    }
+
+    function tryStartSpringRopeDrag() {
+      const spTargets = [placedSphere, sphereHitbox].filter(Boolean);
+      if (spTargets.length) {
+        const hits = raycaster.intersectObjects(spTargets);
+        if (hits.length) {
+          _dragGroup = sphereGroup;
+          raycaster.ray.intersectPlane(_dragPlane, _dragHitPt);
+          _dragOffset.copy(sphereGroup.position).sub(_dragHitPt);
+          controls.enabled = false;
+          return true;
+        }
+      }
+      const sTargets = [springBall, springCeil, springMesh, springHitbox].filter(Boolean);
+      if (sTargets.length) {
+        const hits = raycaster.intersectObjects(sTargets);
+        if (hits.length) {
+          _dragGroup = springGroup;
+          raycaster.ray.intersectPlane(_dragPlane, _dragHitPt);
+          _dragOffset.copy(springGroup.position).sub(_dragHitPt);
+          controls.enabled = false;
+          return true;
+        }
+      }
+      const rTargets = [ropeLine, ropeHitbox, ropeHandHitbox].filter(Boolean);
+      if (rTargets.length) {
+        const hits = raycaster.intersectObjects(rTargets);
+        if (hits.length) {
+          _dragGroup = ropeGroup;
+          raycaster.ray.intersectPlane(_dragPlane, _dragHitPt);
+          _dragOffset.copy(ropeGroup.position).sub(_dragHitPt);
+          controls.enabled = false;
+          return true;
+        }
+      }
+      return false;
+    }
+
+    canvas.addEventListener('pointerdown', (ev) => {
+      // ペン/消しゴムは右クリックのみで描画（左クリックは視点移動に使える）
+      if (inkMode !== 'none' && ev.button === 2) { tryStartGraphInk(ev); return; }
+
+      getPointerNDC(ev);
+      raycaster.setFromCamera(mouse, camera);
+
+      // 球とばね / ロープと手のドラッグ
+      if (tryStartSpringRopeDrag()) return;
+
+      // グラフを掴んだらドラッグ開始
+      if (tryStartGraphResize(ev)) return;
+      if (tryStartGraphDrag(ev)) return;
+
+      // 何もヒットしなければ選択解除
+      deselectGraph();
+    });
+
+    // グラフドラッグ（移動・終了）
+    window.addEventListener('pointermove', (ev) => {
+      if (_dragGroup) {
+        getPointerNDC(ev);
+        raycaster.setFromCamera(mouse, camera);
+        if (raycaster.ray.intersectPlane(_dragPlane, _dragHitPt)) {
+          _dragGroup.position.x = _dragHitPt.x + _dragOffset.x;
+          _dragGroup.position.y = _dragHitPt.y + _dragOffset.y;
+        }
+        return;
+      }
+      if (inkDrawing) updateGraphInk(ev);
+      else if (graphResizing) updateGraphResize(ev);
+      else if (graphDragging) updateGraphDrag(ev);
+    }, { passive: false });
+
+    window.addEventListener('pointerup', (ev) => {
+      if (_dragGroup) { _dragGroup = null; controls.enabled = true; return; }
+      endGraphInk(ev);
+      endGraphResize(ev);
+      endGraphDrag(ev);
+    });
+
+    window.addEventListener('pointercancel', (ev) => {
+      if (_dragGroup) { _dragGroup = null; controls.enabled = true; return; }
+      endGraphInk(ev);
+      endGraphResize(ev);
+      endGraphDrag(ev);
+    });
+
+    // ===== 保存済みグラフの右クリック削除 =====
+    const _graphCtxMenuEl = document.getElementById('graphContextMenu');
+    const _graphDeleteBtn  = document.getElementById('graphDeleteBtn');
+    let graphCtxMenuTarget = null;
+
+    function hideGraphContextMenu() {
+      _graphCtxMenuEl.style.display = 'none';
+      graphCtxMenuTarget = null;
+    }
+    function showGraphContextMenu(entry, cx, cy) {
+      graphCtxMenuTarget = entry;
+      const isG2 = savedGraphEntries2.includes(entry);
+      document.getElementById('graphCtxStyleSection').style.display = isG2 ? 'block' : 'none';
+      _graphCtxMenuEl.style.left = cx + 'px';
+      _graphCtxMenuEl.style.top  = cy + 'px';
+      _graphCtxMenuEl.style.display = 'block';
+    }
+
+    // ===== y-xグラフ 線種メニュー =====
+    const _graph2StyleMenuEl = document.getElementById('graph2StyleMenu');
+
+    function hideGraph2StyleMenu() {
+      _graph2StyleMenuEl.style.display = 'none';
+    }
+    function showGraph2StyleMenu(cx, cy) {
+      _graph2StyleMenuEl.style.left = cx + 'px';
+      _graph2StyleMenuEl.style.top  = cy + 'px';
+      _graph2StyleMenuEl.style.display = 'block';
+    }
+
+    canvas.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if (inkMode !== 'none') return; // ペンモード中は右クリックメニューを出さない
+      getPointerNDC(e);
+      raycaster.setFromCamera(mouse, camera);
+
+      // y-xライブグラフを優先チェック
+      if (graphGroup2 && graphGroup2.visible && graphPlaneMesh2) {
+        if (raycaster.intersectObject(graphPlaneMesh2, false).length) {
+          hideGraphContextMenu();
+          showGraph2StyleMenu(e.clientX, e.clientY);
+          return;
+        }
+      }
+      hideGraph2StyleMenu();
+
+      let hitEntry = null;
+      for (const entry of [...savedGraphEntries, ...savedGraphEntries2]) {
+        if (raycaster.intersectObject(entry.planeMesh, false).length) { hitEntry = entry; break; }
+      }
+      if (hitEntry) showGraphContextMenu(hitEntry, e.clientX, e.clientY);
+      else hideGraphContextMenu();
+    });
+
+    document.getElementById('graphCtxStyleSolid')?.addEventListener('click', () => {
+      if (!graphCtxMenuTarget) return;
+      graphCtxMenuTarget.lineStyle = 'solid';
+      hideGraphContextMenu();
+      redrawSavedGraph2(graphCtxMenuTarget);
+    });
+    document.getElementById('graphCtxStyleDotted')?.addEventListener('click', () => {
+      if (!graphCtxMenuTarget) return;
+      graphCtxMenuTarget.lineStyle = 'dotted';
+      hideGraphContextMenu();
+      redrawSavedGraph2(graphCtxMenuTarget);
+    });
+
+    _graphDeleteBtn.addEventListener('click', () => {
+      if (!graphCtxMenuTarget) return;
+      const entry = graphCtxMenuTarget;
+      hideGraphContextMenu();
+      if (selectedGraphEntry === entry) deselectGraph();
+      const idx1 = savedGraphEntries.indexOf(entry);
+      if (idx1 !== -1) savedGraphEntries.splice(idx1, 1);
+      const idx2 = savedGraphEntries2.indexOf(entry);
+      if (idx2 !== -1) savedGraphEntries2.splice(idx2, 1);
+      scene.remove(entry.group);
+      entry.planeMesh.geometry?.dispose();
+      entry.planeMesh.material?.map?.dispose();
+      entry.planeMesh.material?.dispose();
+    });
+
+    document.getElementById('graph2StyleSolid')?.addEventListener('click', () => {
+      graph2LineStyle = 'solid';
+      hideGraph2StyleMenu();
+      if (graphGroup2?.visible) drawGraph2();
+    });
+    document.getElementById('graph2StyleDotted')?.addEventListener('click', () => {
+      graph2LineStyle = 'dotted';
+      hideGraph2StyleMenu();
+      if (graphGroup2?.visible) drawGraph2();
+    });
+
+    window.addEventListener('pointerdown', e => {
+      if (_graphCtxMenuEl.style.display !== 'none' && !_graphCtxMenuEl.contains(e.target)) {
+        hideGraphContextMenu();
+      }
+      if (_graph2StyleMenuEl.style.display !== 'none' && !_graph2StyleMenuEl.contains(e.target)) {
+        hideGraph2StyleMenu();
+      }
+    });
+
+
+
+
+    // ===== ロープ InstancedMesh 更新ヘルパー =====
+    const _rDummy = new THREE.Object3D();
+    const _rYAxis = new THREE.Vector3(0, 1, 0);
+    const _rDir   = new THREE.Vector3();
+    function updateRopeInstances(inst) {
+      const pos = inst.userData.posArr;
+      const n   = inst.userData.segs;
+      for (let i = 0; i < n - 1; i++) {
+        const x0 = pos[i*3], y0 = pos[i*3+1], z0 = pos[i*3+2];
+        const x1 = pos[(i+1)*3], y1 = pos[(i+1)*3+1], z1 = pos[(i+1)*3+2];
+        const dx = x1-x0, dy = y1-y0, dz = z1-z0;
+        const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+        _rDummy.position.set((x0+x1)/2, (y0+y1)/2, (z0+z1)/2);
+        _rDummy.scale.set(1, len, 1);
+        _rDir.set(dx/len, dy/len, dz/len);
+        _rDummy.quaternion.setFromUnitVectors(_rYAxis, _rDir);
+        _rDummy.updateMatrix();
+        inst.setMatrixAt(i, _rDummy.matrix);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+    }
+
+    // ===== 手のイラスト（スプライト） =====
+    function buildHandGroup() {
+      const g = new THREE.Group();
+      // 手のイラスト画像（base64埋め込み）
+      const HAND_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAlgCWAAD/4QMmRXhpZgAATU0AKgAAAAgABQEOAAIAAAAQAAABVodpAAQAAAABAAABZpybAAEAAAAgAAAC3pyfAAEAAAAgAAAC/uocAAcAAAEMAAAASgAAAAAc6gAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaGFuZF8xMzNfY29sb3VyAAAFkAMAAgAAABQAAAK0kAQAAgAAABQAAALIkpEAAgAAAAMwMAAAkpIAAgAAAAMwMAAA6hwABwAAAQwAAAGoAAAAABzqAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAyMDI1OjAxOjE0IDExOjMzOjQ1ADIwMjU6MDE6MTQgMTE6MzM6NDUAAABoAGEAbgBkAF8AMQAzADMAXwBjAG8AbABvAHUAcgAAAGgAYQBuAGQAXwAxADMAMwBfAGMAbwBsAG8AdQByAAAA/+EE9mh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8APD94cGFja2V0IGJlZ2luPSfvu78nIGlkPSdXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQnPz4NCjx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iPjxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+PHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9InV1aWQ6ZmFmNWJkZDUtYmEzZC0xMWRhLWFkMzEtZDMzZDc1MTgyZjFiIiB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+PGV4aWY6RGF0ZVRpbWVPcmlnaW5hbD4yMDI1LTAxLTE0VDExOjMzOjQ1PC9leGlmOkRhdGVUaW1lT3JpZ2luYWw+PC9yZGY6RGVzY3JpcHRpb24+PHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9InV1aWQ6ZmFmNWJkZDUtYmEzZC0xMWRhLWFkMzEtZDMzZDc1MTgyZjFiIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iPjxkYzp0aXRsZT48cmRmOkFsdCB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPjxyZGY6bGkgeG1sOmxhbmc9IngtZGVmYXVsdCI+aGFuZF8xMzNfY29sb3VyPC9yZGY6bGk+PC9yZGY6QWx0Pg0KCQkJPC9kYzp0aXRsZT48L3JkZjpEZXNjcmlwdGlvbj48cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0idXVpZDpmYWY1YmRkNS1iYTNkLTExZGEtYWQzMS1kMzNkNzUxODJmMWIiIHhtbG5zOmRjPSJodHRwOi8vcHVybC5vcmcvZGMvZWxlbWVudHMvMS4xLyI+PGRjOmRlc2NyaXB0aW9uPjxyZGY6QWx0IHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+PHJkZjpsaSB4bWw6bGFuZz0ieC1kZWZhdWx0Ij5oYW5kXzEzM19jb2xvdXI8L3JkZjpsaT48L3JkZjpBbHQ+DQoJCQk8L2RjOmRlc2NyaXB0aW9uPjwvcmRmOkRlc2NyaXB0aW9uPjwvcmRmOlJERj48L3g6eG1wbWV0YT4NCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA8P3hwYWNrZXQgZW5kPSd3Jz8+/9sAQwADAgIDAgIDAwMDBAMDBAUIBQUEBAUKBwcGCAwKDAwLCgsLDQ4SEA0OEQ4LCxAWEBETFBUVFQwPFxgWFBgSFBUU/9sAQwEDBAQFBAUJBQUJFA0LDRQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU/8AAEQgBEwGaAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/aAAwDAQACEQMRAD8A/VOiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAEziobqZIIjI7rGiAszucKoAySfwp8pwAckDvjvXwj8cfHOv/tnfFzUvgf4A1WbSPhp4fcL488U2LANdNk/8S6B+RyQVb1IbI2IQ8ykoq7Gk5OyOo8cftx638QfF1/4J/Z08IJ8R9Zsn8q/8U3kph0LT256y5HnEdcKwBx8peshlP2Z/j18Sg1x8TP2idW0pJlAbRfAdiljBEO6iY7Wb6lD/ALxr6N+HHw48OfCbwfYeF/CekwaLodku2G2gXGTgbncnl3YjJdsknqa6bPFeVUxUm/cO+NBJanycv/BPDQY4xND8WvipFqo6akPEZMn5bcYqGXwD+1T8B2N34K+Idj8a9Bi+ZvD3jKEQX5XniO5VvmbsNzgf7Wavral/L8eRWUcRUju7lujGXQ8A+En/AAUD8F+LPESeD/iHpl/8IPiApVTonihTFFMxOP3NyQquCeBuCZ7A9a+po5VdQykEEZB45ryT4p/BrwV8bPDp0Txt4cs/EFh1i+0r+9gJ43RSqQ8Z91I9818+af8AsZ/Er4ao+kfCz9onxL4V8HPkLpGrWUWqNaLn7sEjkbQB0wq9uTXfDFQkve0OWVCUXofZviXxXo3g7SpdU17VLLRtNhGZLvULhIIl+rMQK+YfGX/BSz4PaTqT6T4Tk1z4m64uQLHwfpkl1k/9dG2qR7ru6fSuf0X/AIJ4+B9Q1WPWvib4k8U/F/WkbeJPFGpP9nU+iwo3A/2SxHSvo7wj4I8PfD/S003wzomn+HrBAFW30y1S3TA6ZCqMnk8nJqZYuK+FXKjh29z52P7XX7QHiYK3hT9l3V4rV1DS3HiTXIbFznoTGyLjtxn1pkv7dXxC+GKLcfGD9nrxH4V0NWAl1zw9eR6tbQL/AHpNijaBg/xHtgV9S4wc/wAzzQRkN6kYIPQisfrkr7F/Vl3Knwj+NHgv44+F4/EPgjxBaeINMfAd7dsPC2M7JI2+eNv9lgDXcA7hmviT4wfsf6j4Z8WSfFP9nu+i8B/EWDMl1pEIEela8mctDNDwiM3XOApPPysQ49X/AGXP2tdL/aCsNQ0TUtPk8IfEzQW8jXvCl/lZraQHaZIw2C8ROOeq5APZm76dWNRXics4OD1PoWimR9+v0OKfWxmFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAVHLjA5x6U5h0rxf9p/9qDwz+zJ4FXV9XD6lrl8xt9F0C0O661K5PCogGSFBK7mwcZAwSVUgHE/tt/tC6p8M/CumeBPAg+3fFfxzIdL0K0if57VW+WW7buqoM4Y8bhjojV0f7N3wK0r9nb4UaT4Q05luruMG51PUiPnv71/9bMx75ICqCThVUV5p+yz8A/Etl4o1f4z/F5kvvix4lj2paA5i8P2RwVs4QchWxgNgnA+XJJkY/Tec89+/sfSvIxNbnfLHY9ChT5VeQlFFHOR/TmuE6w68c1x/wAS/idp3w2060Mttcatr2pyG10fQNPAa81OcLnZGp4CjgvIxCRr8zEDg0viV8U4/BU1houkac3iXxtq4P8AZegQS7WdQQHuJ3wfItUJ+aVgecKoZiFMfwz+Fsvha/vfE3ia/TxJ491SNY77WPLKRQRcEWdpHn9zbKcnb95z88hLHjRRsryMpSb0R3dlJPNZwSXMC2ty8atLAsvmiNyAWUPxuAORnHOKmo7Dv2orP0NFe2oUUUUDCiiigBeM8818+/tKfss/8LU1HT/HngfVT4J+L+hLnSvEduMC42g4t7lRnfGRkAsGKgkYZcivoGl/LjnnvVwk6bujOUFLc+e/2e/21bfxL4mHw0+LunD4cfF20xE+m3h8uy1Q9BLaTH5WD4yEyc5+VnA4+rYjuzxx0rw/44fs/wDgj9oTwt/YnjPSFvVjBNnfxfu7yyc4IeGUDKnPUcqcYYHivnvSPiN8av2HGGn+Obe/+M/waiwtt4o06LdrOjxZwBcxk5kRR3LY9HGAlenSxEais9GefUpOGqPviivOvhB8evAXx40Aax4G8TWOvWgXMscD4ntyf4ZYWAdD7MB7Zr0NDmurcwHUUUUwCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKjl7HkgFolltIwFBJx6d6+WP2lP2wp/Bvim+E3wp00eOPyakRFtdITjNxeODhAAQ2wkccuVBAYvYaVzq/2oP2sdA/Z00e0soLWTxT8QNawieFxmHy7bfuAkmmwfLjABJIBb5SAMFlHmHg/9iTxX8a/ENn41/aa1xPEd1C4n0/4f6W7R6PpjdQsoRj5r9MjkZ5LkHb1H7O/7NPiC48dH4w/G+5h1z4rXMZXTdLiINh4bs2z/o8AHAc7iGYe+0FhIw+mM9+OfXNfP4jGcz5Y7Hrww9lqfOHxh/Yl+Dfxl1V9b1LwtJ4Y8R5Dpr3hWT7FdhweuQNsn1ZPUZ7VwjfBv9qH4IIYLH4reGPjRoiHCaf48shBfFfRbmPzMDrztNfa9FAHxrb/tVftB/CsGPx7+zVr+tWUR2nWfB96t6j+pMHLfT5hg9Mdas6x/wUd8D+Hnjt7/AMBfE0avKuY9Kj0Ly5z7YafaP+Bjj1r7G5I7E+tYF/8AD3wrqtwJ77w1ol1OMYlutPid+AQACVzjgfpVe1pveJDpzWzPk23/AOCmvh7S7WbUPEfw3+IPhfSLbDzajfaIHiRTgBiYpHbBJx0HrXL+I/8Agpxq/i69t/DHwD+FPiH4h63cHy4r7VbNk0mFiOruxUvGO5wq+9foxFBFBDHDFGkUUShEjRQqoo6AAdAKUIMnCgH1BPP5YqPb0/sofsqhLqfCfhH9mb9on4v3MGpfGj43Xvg/TZXEg8L/D2H7PFGM5WOSQKrE/R8EcbTX1X8Lvgp4F+C+gppHgTwnpvhywA+c2cP72b1LyuS7t9Wbgdq7TANV4gGJbr/hV+2b6E+zS1ZMRgdu1FRgkHqR/np+lPyfpWRSCtpBRRRTA5GiiivmT2wooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiijk9OaAI5pBjABwcAkc0kTNIpdjhT0z0HvSiCRo3YAFhwoJA57/pUEbS7MuqjHG0E4H45oAbPMrHHqCCCOMGq7lQSSOfUdc0kjiNFAGMcBR/MVBM4I4bIz94dRXPUmoq7ESTxOmS54wcgjpiqbBJx85Ck+h610UlqJ4DIucoMEAcjHJrn7w7Mgj5h6dq4akn1G+5WnjUHahUcZ46fjXL3OFkOPTPFdTNHv5BBBGSAfWub1BTDKe3PPFedibNGJVjkIdSueK0YQWEZxuxzzWVHgEsT0z1roLFY5IvJl5GOhHI9683Wp3O6DRchhZLiJiSpPzMe/I7V0LmGTknDd/esKRN46H8O2KTd5hAHGPyFd8G3ocdSN3qaMk4B46e3NUpbgAHqD0ANNz5mCRgmmNb5y27I9OorogkkcspNkJn3L1GT05FVb25SNiowWPJ9Bmm3d0iBXlZifvYGc1grLcXFwzSZCA4A9BXqUaFtZHPKp0Rfv9Rit2VkJLHouMBj9BVGwuYLi8kVT8r8E4656Cs/UbtJWAc4x0HrVGGYxSrLGwDL3HFdShZHFzanW3mntMoLHBH41z0twLO+A5C44xXTaZqEM0BSQYZ+mRnjvXO6rAmJHUckjdz1P4CrhtqJPW5s2d1LOFJySe3cVl3kIluHBBz6g1TsLiWA7d2QT8uB0rVVd6cEcjGKiulEJNboS0sxbbFkxuzgAY6CrMcZXoOB3HQn3rJEkqHB64Hykirgn8pDhcg/KVPJ561MLp6m8WaAuFijPTPcnrVvTWheT5ZMtjJRep9a5i7vg6oBkA+4GayYJ2hnEimRWHQbuvPWuqNJtmk6isd9fXBhtyUAI78Hn6c15ZrepTXOtyMzZRTtCKeAPT8K7tbtpIgoEQH94LzXBa1GBqMxB3ZfkH61pF26iqSbRraTpU9zOJomwGUnYw79hn3ru9N0RrFhuJxjHyjHU8157YX/AJSkbSSRg49fWu70LWVnijSVWRwM4J+X3596c4W1ZnCUlsa08JGxicEDj07/AEqCING4y5x0AHANWre8ikuF3MAoGTVq4tkUFgoJNVzJGikmZUsZdnbJGenrSmJlx1AOB8tKXQDLAE+3NRFyw4O7PQetCvckuWkvlFvK6qWGOmaqyIuT5WdoHrk1VR2PPqePUirMO6TJJwADkfSsaqsxmRqsUhLCPBBOBWdGixq4JP4noKuzXKSSBG+6M84ByKoXRxFgMCeuOtcUr3scU9i5p0W5gf4QOOec1ekVY4l6AdgBVDT5VJQE9OpHXBq1MmxQ2Cxx3NTJFRYjZUEhT6Y5qs7jHPQfzq3GOgYZwahZF3nJ6mos2y7k1qvlr5jqMdBt4/GqNwY2bKqeeeRjFE1wHVQoA4x1qjLcHzCAQvPJ7n6VpTg27iMrUf3c7AHBY8e9dJYbBpyxBQ2VJYgc5Jrjr6UiYgHJzjArrNLmB09IUQ7T1cnIFehSmkjN7svabAfs0ZPDc8+vJrRjhPlktyAOB2+pqrBvdFLNhvQdqvRYWMjpjgc1covoOLTIbuJVGMkHHJrNntSgB2nA5JB5p98ZCdxGF7e1Qb/L+bA5OM4zRFO4N2Nc2Ec1grMFc5PbIPNZktuwjb5ck/dPeoRfTh/l7d6vxubiJwCCMck0RfKrMW6sz4GWSaPlUjAWMnqF6k/WogkUY4VQMZJzU7RmJm2Eg4wD39aj27y3Y59RXt052PBqx5rk0Uf2mNiDyuc8H0FZXiD43fCnwbOyax8S/CWl7OcXWuWyMQPRd+cfhzXtXw8/Zt8ffEO1+3af4FNhauTj7bKsWRnHCbmPJ7EAV9K+Cv+CK/wAFvFkJm1bxJ43t5pDv/wCJfdQqy+wJiJI9yc+9ehGMb6Hl80rafcfk18WP2ivGfja8+xXmv3UGmLxHYaZMLKCJew2RbQSPfNdp+wp/wT/8bftueNJW0sNovgXSZR/b/iFlBMeQpS3h7STMp4HRfvHJAWv1itf+CSv7NtqJPO8N6xqSSHJjuta3ov0IQ4/M+9dT8Jf2J/hh+zVYeJR8F9Dj8Nan4khW2vNR8yW5uBGGLhJJJGZtgbLYGASMjGAB2OiuXRHK6rfI+Mf2b/+CY3xB+FPxW+GnjS4+Iegvp2ha7D4i/syxjkk1i8hEqSyQRqoDPIY9oyAqgI7EkAhv01RSOCpT0NRW9nBbBRBCkCqoCrCoAAHTAFWVGPTk9K8ypUlPc6YQUNhaKKKzLCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAOQooor5o9sKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigDkaKKK+aPbCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP/Z';
+      new THREE.TextureLoader().load('hand.jpeg', (tex) => {
+        // 白背景を透過処理
+        const img = tex.image;
+        const can = document.createElement('canvas');
+        can.width = img.width; can.height = img.height;
+        const ctx = can.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const id = ctx.getImageData(0, 0, can.width, can.height);
+        const d = id.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const m = Math.min(d[i], d[i+1], d[i+2]);
+          if (m > 230) d[i+3] = 0;
+          else if (m > 200) d[i+3] = Math.round((230 - m) / 30 * 255);
+        }
+        ctx.putImageData(id, 0, 0);
+        const geo = new THREE.PlaneGeometry(3.6, 2.7);
+        const mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(can), transparent: true, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(0 - (0.78 - 0.5) * 3.6, -(0.45 - 0.5) * 2.7, 0);
+        g.add(mesh);
+      });
+      return g;
+    }
+
+    // ===== UIボタン =====
+    // グラフ（YZ平面 / x=0）を出す
+    document.getElementById('toolGraph')?.addEventListener('click', () => {
+      toggleGraph();
+    });
+    document.getElementById('toolSpring')?.addEventListener('click', () => {
+      if (springBall) {
+        scene.remove(springGroup);
+        springGroup = null; springBall = null; springMesh = null; springCeil = null; springHitbox = null;
+        document.getElementById('toolSpring').classList.remove('active');
+        return;
+      }
+
+      springGroup = new THREE.Group();
+      scene.add(springGroup);
+
+      // 球
+      const geo = new THREE.SphereGeometry(0.25, 32, 16);
+      const mat = makeShadedSphereMaterial(0xffff00);
+      springBall = new THREE.Mesh(geo, mat);
+      springBall.position.set(-4, 5, 0);
+      springGroup.add(springBall);
+
+      // ばね（下端・上端ともに直線→コイル→直線、単一TubeGeometry）
+      const springMat = new THREE.MeshPhongMaterial({ color: 0x999999, specular: 0xffffff, shininess: 100 });
+
+      const bx = -4, bz = 0;
+      const springBotY   = 5;    // 球の中心（ばね下端）
+      const springTopY   = 8.6;  // 天井下面（ばね上端）
+      const totalH       = springTopY - springBotY;
+      const coilR        = 0.15;
+      const turns        = 10;
+      const straightFrac = 0.14; // 直線部分の割合（上下対称）
+      const blendFrac    = 0.04; // コイルへのブレンド幅
+
+      const springCurve = new THREE.Curve();
+      springCurve.getPoint = (t) => {
+        const y = springBotY + t * totalH;
+
+        // コイル進行度（straightFrac〜(1-straightFrac) を 0〜1 に正規化）
+        const coilStart = straightFrac;
+        const coilEnd   = 1 - straightFrac;
+        const coilT     = Math.max(0, Math.min(1, (t - coilStart) / (coilEnd - coilStart)));
+        const angle     = coilT * turns * Math.PI * 2;
+
+        // 下端ブレンド（r: 0→coilR）
+        const bb = Math.min(1, Math.max(0, t - straightFrac) / blendFrac);
+        const blendBot = bb * bb * (3 - 2 * bb);
+
+        // 上端ブレンド（r: coilR→0）
+        const bt = Math.min(1, Math.max(0, (1 - t) - straightFrac) / blendFrac);
+        const blendTop = bt * bt * (3 - 2 * bt);
+
+        const r = coilR * Math.min(blendBot, blendTop);
+        return new THREE.Vector3(
+          bx + Math.cos(angle) * r,
+          y,
+          bz + Math.sin(angle) * r
+        );
+      };
+
+      const tubeGeo = new THREE.TubeGeometry(springCurve, 500, 0.035, 8, false);
+      springMesh = new THREE.Mesh(tubeGeo, springMat);
+      springGroup.add(springMesh);
+
+      // 天井（茶色い直方体）
+      const ceilGeo = new THREE.BoxGeometry(2.0, 0.4, 1.5);
+      const ceilMat = new THREE.MeshPhongMaterial({ color: 0x8b5e3c, specular: 0x442200, shininess: 30 });
+      springCeil = new THREE.Mesh(ceilGeo, ceilMat);
+      springCeil.position.set(-4, springTopY + 0.2, 0);
+      springGroup.add(springCeil);
+
+      // 透明ヒットボックス（コイル＋球の動く範囲）
+      springHitbox = new THREE.Mesh(new THREE.BoxGeometry(0.7, 5.5, 0.7), _hitboxMat);
+      springHitbox.position.set(-4, 6.3, 0);
+      springGroup.add(springHitbox);
+
+      document.getElementById('toolSpring').classList.add('active');
+    });
+
+    document.getElementById('toolRopeHand')?.addEventListener('click', () => {
+      if (ropeLine) {
+        scene.remove(ropeGroup);
+        ropeGroup = null; ropeLine = null; ropeHandGroup = null; ropeHitbox = null; ropeHandHitbox = null;
+        document.getElementById('toolRopeHand').classList.remove('active');
+        return;
+      }
+
+      ropeGroup = new THREE.Group();
+      scene.add(ropeGroup);
+
+      const RX0 = 0, RX1 = ROPE_LEN, RY = 5, RZ = 0;
+      const RSEGS = 80;
+      const ropePosArr = new Float32Array(RSEGS * 3);
+      for (let i = 0; i < RSEGS; i++) {
+        ropePosArr[i*3]   = RX0 + (RX1 - RX0) * i / (RSEGS - 1);
+        ropePosArr[i*3+1] = RY;
+        ropePosArr[i*3+2] = RZ;
+      }
+      const ropeTC = document.createElement('canvas');
+      ropeTC.width = 64; ropeTC.height = 64;
+      const ropeRCtx = ropeTC.getContext('2d');
+      ropeRCtx.fillStyle = '#c89050';
+      ropeRCtx.fillRect(0, 0, 64, 64);
+      ropeRCtx.strokeStyle = '#7a5020';
+      ropeRCtx.lineWidth = 10;
+      for (let yy = -64; yy < 128; yy += 20) {
+        ropeRCtx.beginPath();
+        ropeRCtx.moveTo(0, yy); ropeRCtx.lineTo(64, yy + 64);
+        ropeRCtx.stroke();
+      }
+      const ropeTex = new THREE.CanvasTexture(ropeTC);
+      ropeTex.wrapS = THREE.RepeatWrapping;
+      ropeTex.wrapT = THREE.RepeatWrapping;
+      ropeTex.repeat.set(2, 2);
+      const ropeInstGeo = new THREE.CylinderGeometry(0.12, 0.12, 1, 8, 1);
+      const ropeInstMat = new THREE.MeshLambertMaterial({ map: ropeTex });
+      ropeLine = new THREE.InstancedMesh(ropeInstGeo, ropeInstMat, RSEGS - 1);
+      ropeLine.userData.posArr = ropePosArr;
+      ropeLine.userData.segs   = RSEGS;
+      updateRopeInstances(ropeLine);
+      // 全セグメント白（テクスチャそのまま）
+      const _white = new THREE.Color(0xffffff);
+      for (let i = 0; i < RSEGS - 1; i++) ropeLine.setColorAt(i, _white);
+      ropeLine.instanceColor.needsUpdate = true;
+      ropeGroup.add(ropeLine);
+
+      // ノード球（継ぎ目の隙間を埋める）
+      const ropeNodeGeo = new THREE.SphereGeometry(0.12, 8, 8);
+      const ropeNodeMat = new THREE.MeshLambertMaterial({ map: ropeTex });
+      ropeNodes = new THREE.InstancedMesh(ropeNodeGeo, ropeNodeMat, RSEGS);
+      const _nodeDummy = new THREE.Object3D();
+      for (let i = 0; i < RSEGS; i++) {
+        ropeNodes.setColorAt(i, _white);
+        _nodeDummy.position.set(ropePosArr[i*3], ropePosArr[i*3+1], ropePosArr[i*3+2]);
+        _nodeDummy.updateMatrix();
+        ropeNodes.setMatrixAt(i, _nodeDummy.matrix);
+      }
+      ropeNodes.instanceColor.needsUpdate = true;
+      ropeNodes.instanceMatrix.needsUpdate = true;
+      ropeGroup.add(ropeNodes);
+
+      // 中央の目印（MeshBasicMaterial で純色、テクスチャ非依存）
+      const _midX = (RX0 + RX1) / 2;
+      ropeCenterMarker = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.14, (RX1 - RX0) / (RSEGS - 1) * 1.05, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+      );
+      ropeCenterMarker.position.set(_midX, RY, RZ);
+      ropeGroup.add(ropeCenterMarker);
+
+      ropeHandGroup = buildHandGroup();
+      ropeHandGroup.position.set(RX0, RY, RZ);
+      ropeGroup.add(ropeHandGroup);
+
+      // 透明ヒットボックス
+      ropeHitbox = new THREE.Mesh(new THREE.BoxGeometry(RX1 - RX0, 4.0, 0.5), _hitboxMat);
+      ropeHitbox.position.set((RX0 + RX1) / 2, RY, RZ);
+      ropeGroup.add(ropeHitbox);
+
+      ropeHandHitbox = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.7), _hitboxMat);
+      ropeHandHitbox.position.set(-1.008, 0.135, 0);
+      ropeHandGroup.add(ropeHandHitbox);
+
+      document.getElementById('toolRopeHand').classList.add('active');
+    });
+
+    document.getElementById('toolPen')?.addEventListener('click', () => {
+      setInkMode('pen');
+    });
+    document.getElementById('toolEraser')?.addEventListener('click', () => {
+      setInkMode('eraser');
+    });
+    document.getElementById('inkClear')?.addEventListener('click', () => {
+      clearInkAll();
+    });
+
+    document.getElementById('graphReset')?.addEventListener('click', () => { resetGraph(); });
+
+    document.getElementById('toolGraph2')?.addEventListener('click', () => { toggleGraph2(); });
+    document.getElementById('graphReset2')?.addEventListener('click', () => { resetGraph2(); });
+    document.getElementById('graphSave2')?.addEventListener('click', saveCurrentGraph2);
+    document.getElementById('graphSavedClear2')?.addEventListener('click', clearSavedGraphs2);
+    document.getElementById('graphDeleteSelected2')?.addEventListener('click', deleteSelectedGraph2);
+
+
+
+    // ===== 円運動UI =====
+    const circD = document.getElementById('circD');
+    circD.addEventListener('change', () => {
+      const v = parseFloat(circD.value);
+      if (!isNaN(v) && v > 3) circD.value = '3';
+    });
+    const circT = document.getElementById('circT');
+    const circToggle = document.getElementById('circToggle');
+
+    // ===== 視点ボタン =====
+    document.getElementById('viewXY')?.addEventListener('click', () => {
+      snapToXY();
+    });
+
+    document.getElementById('viewYZ')?.addEventListener('click', () => {
+      snapToYZ();
+    });
+
+    function readCircParams(){
+      return {
+        r: Math.max(0, parseFloat(circD.value || "0")),
+        T: parseFloat(circT.value || "1"),
+      };
+    }
+
+    // ===== 道具箱の開閉 =====
+    (function setupToolboxToggle(){
+      const panel = document.getElementById('toolboxPanel');
+      const btn = document.getElementById('toolboxToggle');
+      if (!panel || !btn) return;
+
+      let open = true;
+
+      function apply(){
+        panel.classList.toggle('is-collapsed', !open);
+        btn.textContent = open ? '＜' : '＞';
+        btn.setAttribute('aria-expanded', String(open));
+      }
+
+      apply();
+
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        open = !open;
+        apply();
+      });
+    })();
+
+    function updateCircToggleBtn(){
+      if (circToggle) circToggle.textContent = sharedCirc.active ? '■ 停止' : '▶ 開始';
+    }
+
+    circToggle?.addEventListener('click', () => {
+      if (!placedSphere && !springBall && !ropeLine) return;
+      const { r, T } = readCircParams();
+      if (placedSphere) {
+        toggleCircular(placedSphere, r, T);
+      } else {
+        if (sharedCirc.active) stopSharedCirc(); else startSharedCirc(r, T);
+      }
+      updateCircToggleBtn();
+    });
+    document.getElementById('circRun10')?.addEventListener('click', () => {
+      if (!placedSphere && !springBall && !ropeLine) return;
+      const { r, T } = readCircParams();
+      if (placedSphere) startCircular(placedSphere, r, T);
+      else startSharedCirc(r, T);
+      updateCircToggleBtn();
+      setTimeout(() => {
+        if (placedSphere) stopCircular(placedSphere);
+        else stopSharedCirc();
+        updateCircToggleBtn();
+      }, 10000);
+    });
+
+    document.getElementById('circReset')?.addEventListener('click', () => {
+      if (!placedSphere && !springBall && !ropeLine) return;
+      if (placedSphere) {
+        stopCircular(placedSphere);
+        sharedCirc.frozenElapsed = 0;
+        sharedCirc.startTheta = 0;
+        const d = placedSphere.userData.circ;
+        if (d) {
+          d.startTheta = 0;
+          // θ=0 の位置に即座に描画（軌道中心はそのまま）
+          placedSphere.position.set(d.center.x + d.r, d.center.y, d.center.z);
+        }
+      } else {
+        sharedCirc.active = false;
+        sharedCirc.startTheta = 0;
+        sharedCirc.frozenElapsed = 0;
+      }
+      updateCircToggleBtn();
+      // バネ・ロープは初期位置（直線状態）に即座に戻す
+      if (springBall && springMesh) {
+        springBall.position.y = 5;
+        springMesh.scale.y = 1;
+        springMesh.position.y = 0;
+      }
+      if (ropeLine) {
+        const pos = ropeLine.userData.posArr;
+        const n   = ropeLine.userData.segs;
+        for (let i = 0; i < n; i++) {
+          pos[i*3] = ROPE_LEN * i / (n - 1); pos[i*3+1] = 5; pos[i*3+2] = 0;
+        }
+        updateRopeInstances(ropeLine);
+        if (ropeHandGroup) ropeHandGroup.position.y = 5;
+      }
+    });
+
+    document.getElementById('toolSphere')?.addEventListener('click', () => {
+      const subPanel = document.getElementById('sphereSubBtns');
+      if (placedSphere) {
+        stopCircular(placedSphere);
+        selectObject(null);
+        placedSphere.geometry?.dispose?.();
+        placedSphere.material?.dispose?.();
+        if (sphereGroup) { scene.remove(sphereGroup); sphereGroup = null; }
+        sphereHitbox = null;
+        placedSphere = null;
+        updateCircToggleBtn();
+        document.getElementById('toolSphere').classList.remove('active');
+        if (subPanel) subPanel.style.maxHeight = '0';
+      } else {
+        spawnSphere();
+        document.getElementById('toolSphere').classList.add('active');
+        if (subPanel) subPanel.style.maxHeight = '60px';
+      }
+    });
+
+    // 中心点／軌跡／中心線のトグル（3要素まとめて）
+    document.getElementById('toggleOrbitVisuals')?.addEventListener('click', () => {
+      if (!centerDot) return;
+      const next = !centerDot.visible;
+      centerDot.visible = next;
+      if (trajectoryLine) trajectoryLine.visible = next;
+      if (centerLineMesh) centerLineMesh.visible = next;
+      document.getElementById('toggleOrbitVisuals').classList.toggle('active', next);
+    });
+
+
+
+    // ===== リサイズ＆描画 =====
+    // hor+: 16:9基準で水平方向の見え方を固定するためのFOV計算
+    const BASE_FOV    = 50;
+    const BASE_ASPECT = 16 / 9;
+    function hPlusFov(aspect){
+      return aspect >= BASE_ASPECT
+        ? BASE_FOV
+        : 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * BASE_ASPECT / aspect) * 180 / Math.PI;
+    }
+    function resize(){
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      const aspect = w / h;
+      camera.fov    = hPlusFov(aspect);
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function startViewSnapAroundCenter(dirVec, duration = 0.35, center = null) {
+      // ★視点の中心は常に「円運動の中心」（オーバーライド可）
+      center = center ?? orbitCenter.clone();
+
+      // 今のズーム感（中心からの距離）を保つ
+      const dist = camera.position.distanceTo(controls.target);
+
+      // dirVec方向へ dist だけ離れた位置にカメラを置く
+      const dir = dirVec.clone().normalize();
+      const endPos = center.clone().add(dir.multiplyScalar(dist));
+
+      // カメラが見る中心（target）は center 固定
+      const endTarget = center;
+
+      // Tween（スムーズ移動）
+      viewTween = {
+        startPos: camera.position.clone(),
+        endPos: endPos,
+        startTarget: controls.target.clone(),
+        endTarget: endTarget,
+        startTime: nowSec(),
+        dur: duration,
+      };
+    }
+
+
+    // ===== タブ切り替え =====
+    let currentTab = 'waveDisplay';
+    const transverseGroup = new THREE.Group();
+    scene.add(transverseGroup);
+    transverseGroup.visible = false;
+
+    function switchTab(tab) {
+      currentTab = tab;
+      const isWave = tab === 'waveDisplay';
+      document.getElementById('tabWaveDisplay').classList.toggle('active', isWave);
+      document.getElementById('tabTransverse').classList.toggle('active', !isWave);
+      document.getElementById('sidebarWaveDisplay').style.display = isWave ? '' : 'none';
+      document.getElementById('sidebarTransverse').style.display = isWave ? 'none' : '';
+
+      // グリッド（地面のマス目）は「波の表し方」タブのみ表示
+      if (grid) grid.visible = isWave;
+
+      // 波の表し方オブジェクト の表示/非表示
+      [placedGroup, springGroup, ropeGroup, graphGroup, graphGroup2,
+       centerDot, trajectoryLine, centerLineMesh]
+        .forEach(o => { if (o) o.visible = isWave; });
+      savedGraphEntries.forEach(e => { if (e.group) e.group.visible = isWave; });
+      savedGraphEntries2.forEach(e => { if (e.group) e.group.visible = isWave; });
+      if (inkBoardMesh) inkBoardMesh.visible = isWave;
+      if (!isWave) {
+        if (horizonXY) horizonXY.visible = false;
+        if (horizonYZ) horizonYZ.visible = false;
+      }
+
+      // 横波と縦波オブジェクト
+      transverseGroup.visible = !isWave;
+    }
+
+    document.getElementById('tabWaveDisplay').addEventListener('click', () => switchTab('waveDisplay'));
+    document.getElementById('tabTransverse').addEventListener('click', () => switchTab('transverse'));
+
+    // ===== スキンリー（横波と縦波タブ） =====
+    const SL_LENGTH      = 20;
+    const SL_TURNS       = 40;
+    const SL_HELIX_R     = 0.65;
+    const SL_TUBE_R      = 0.055;
+    const SL_N_PTS       = 600;
+    const SL_TUB_SEG     = 1200;
+    const SL_RAD_SEG     = 8;
+    const SL_WAVE_V      = 4;
+    const SL_WAVE_LAMBDA = 6;
+    const SL_WAVE_K      = (Math.PI * 2) / SL_WAVE_LAMBDA;
+    const SL_WAVE_OMEGA  = SL_WAVE_V * SL_WAVE_K;
+    const SL_WAVE_A      = 0.55;
+    const SL_WAVE_CYCLES = 3;
+
+    const SL_N_BALLS = 30;
+    const SL_N_CURVE = 200;  // 正弦曲線のサンプリング点数
+    const SL_BALL_R  = 0.12;
+    const _slBallMat = new THREE.Matrix4();
+
+    let slinkyMesh    = null;
+    let slinkyGeo     = null;
+    let slinkyOrigPos = null;
+    let slinkyBalls    = null;
+    let slinkyBallMode = false;
+    let slinkyGridLines = null;
+    let slinkyGridMode  = false;
+    let slinkyDispLines = null;
+    let slinkyDispMode  = false;
+    let slinkyWaveLine  = null;
+    window.addEventListener('resize', () => {
+      if (slinkyDispLines) slinkyDispLines.material.resolution.set(window.innerWidth, window.innerHeight);
+      if (slinkyWaveLine)  slinkyWaveLine.material.resolution.set(window.innerWidth, window.innerHeight);
+    });
+    let slinkyDispZOffset = 0;
+    let slinkySlideFrom   = 0;
+    let slinkySlideTarget = 0;
+    let slinkySlideStartT = -1;
+    let slinkyRotAngle  = 0;
+    let slinkyRotFrom   = 0;
+    let slinkyRotTarget = 0;
+    let slinkyRotStartT = -1;
+    let slinkyGraphMode       = false;
+    let slinkyGraphAxes       = null;
+    let slinkyGraphAlpha      = 1;
+    let slinkyGraphFadeDir    = 0;   // 1=fade-in, -1=fade-out, 0=stable
+    let slinkyGraphFadeStartT = -1;
+    let slinkyWaveLineMode       = false;
+    let slinkyWaveFill           = null;
+    let slinkyWaveLineAlpha      = 1;
+    let slinkyWaveLineFadeDir    = 0;
+    let slinkyWaveLineFadeStartT = -1;
+    let waveActive        = false;
+    let slinkyWaveMode    = 'continuous'; // 'continuous' | 'single'
+    let waveStartTime     = 0;
+    let wavePausedElapsed = 0;
+
+    function buildSlinkyBalls() {
+      if (slinkyBalls) return;
+      const geo = new THREE.SphereGeometry(SL_BALL_R, 12, 8);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x3377ee, metalness: 0.3, roughness: 0.5 });
+      slinkyBalls = new THREE.InstancedMesh(geo, mat, SL_N_BALLS);
+      slinkyBalls.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      resetSlinkyBalls();
+      transverseGroup.add(slinkyBalls);
+    }
+
+    function removeSlinkyBalls() {
+      if (!slinkyBalls) return;
+      transverseGroup.remove(slinkyBalls);
+      slinkyBalls.geometry.dispose();
+      slinkyBalls.material.dispose();
+      slinkyBalls = null;
+    }
+
+    function resetSlinkyBalls() {
+      if (!slinkyBalls) return;
+      for (let i = 0; i < SL_N_BALLS; i++) {
+        const x0 = (i / (SL_N_BALLS - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        _slBallMat.setPosition(x0, 0.9, 0);
+        slinkyBalls.setMatrixAt(i, _slBallMat);
+      }
+      slinkyBalls.instanceMatrix.needsUpdate = true;
+    }
+
+    function slinkyWaveDx(x0, x_front) {
+      if (x0 > x_front) return 0;
+      if (slinkyWaveMode === 'single' && x0 < x_front - SL_WAVE_LAMBDA) return 0;
+      return SL_WAVE_A * Math.sin(SL_WAVE_K * (x_front - x0));
+    }
+    function updateSlinkyBalls(elapsed, x_front) {
+      if (!slinkyBalls) return;
+      for (let i = 0; i < SL_N_BALLS; i++) {
+        const x0 = (i / (SL_N_BALLS - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        const dx = slinkyWaveDx(x0, x_front);
+        _slBallMat.setPosition(x0 + dx, 0.9, 0);
+        slinkyBalls.setMatrixAt(i, _slBallMat);
+      }
+      slinkyBalls.instanceMatrix.needsUpdate = true;
+    }
+
+    function buildSlinkyDispLines() {
+      if (slinkyDispLines) return;
+      const geo = new LineSegmentsGeometry();
+      geo.setPositions(new Float32Array(SL_N_BALLS * 6));
+      const mat = new LineMaterial({ color: 0xff2222, linewidth: 2 });
+      mat.resolution.set(window.innerWidth, window.innerHeight);
+      slinkyDispLines = new LineSegments2(geo, mat);
+      slinkyDispLines.frustumCulled = false;
+      resetSlinkyDispLines();
+      transverseGroup.add(slinkyDispLines);
+    }
+
+    function removeSlinkyDispLines() {
+      if (!slinkyDispLines) return;
+      transverseGroup.remove(slinkyDispLines);
+      slinkyDispLines.geometry.dispose();
+      slinkyDispLines.material.dispose();
+      slinkyDispLines = null;
+    }
+
+    function buildSlinkyWaveLine() {
+      if (slinkyWaveLine) return;
+      const geo = new LineGeometry();
+      geo.setPositions(new Float32Array(SL_N_CURVE * 3));
+      const mat = new LineMaterial({ color: 0xff2222, linewidth: 2, transparent: true, opacity: 0 });
+      mat.resolution.set(window.innerWidth, window.innerHeight);
+      slinkyWaveLine = new Line2(geo, mat);
+      slinkyWaveLine.frustumCulled = false;
+      transverseGroup.add(slinkyWaveLine);
+      buildSlinkyWaveFill();
+    }
+    function removeSlinkyWaveLine() {
+      if (!slinkyWaveLine) return;
+      transverseGroup.remove(slinkyWaveLine);
+      slinkyWaveLine.geometry.dispose();
+      slinkyWaveLine.material.dispose();
+      slinkyWaveLine = null;
+      removeSlinkyWaveFill();
+    }
+    function _fillWaveLinePts(pts, elapsed, x_front) {
+      const cosR = Math.cos(slinkyRotAngle);
+      const sinR = Math.sin(slinkyRotAngle);
+      for (let i = 0; i < SL_N_CURVE; i++) {
+        const x0 = (i / (SL_N_CURVE - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        const dx = elapsed >= 0 ? slinkyWaveDx(x0, x_front) : 0;
+        pts[i * 3 + 0] = x0 + dx * cosR;
+        pts[i * 3 + 1] = 0.9;
+        pts[i * 3 + 2] = slinkyDispZOffset - dx * sinR;
+      }
+    }
+    function updateSlinkyWaveLine(elapsed, x_front) {
+      if (!slinkyWaveLine) return;
+      const pts = new Float32Array(SL_N_CURVE * 3);
+      _fillWaveLinePts(pts, elapsed, x_front);
+      slinkyWaveLine.geometry.setPositions(pts);
+      updateSlinkyWaveFill(elapsed, x_front);
+    }
+    function resetSlinkyWaveLine() {
+      if (!slinkyWaveLine) return;
+      const pts = new Float32Array(SL_N_CURVE * 3);
+      for (let i = 0; i < SL_N_CURVE; i++) {
+        const x0 = (i / (SL_N_CURVE - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        pts[i * 3 + 0] = x0; pts[i * 3 + 1] = 0.9; pts[i * 3 + 2] = slinkyDispZOffset;
+      }
+      slinkyWaveLine.geometry.setPositions(pts);
+      resetSlinkyWaveFill();
+    }
+    function buildSlinkyWaveFill() {
+      if (slinkyWaveFill) return;
+      const N = SL_N_CURVE;
+      const posArr = new Float32Array(N * 2 * 3);
+      const idxArr = new Uint32Array((N - 1) * 6);
+      for (let i = 0; i < N - 1; i++) {
+        const b = i * 6;
+        idxArr[b+0]=i;   idxArr[b+1]=N+i;   idxArr[b+2]=i+1;
+        idxArr[b+3]=N+i; idxArr[b+4]=N+i+1; idxArr[b+5]=i+1;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      geo.setIndex(new THREE.BufferAttribute(idxArr, 1));
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff2222, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+      slinkyWaveFill = new THREE.Mesh(geo, mat);
+      slinkyWaveFill.frustumCulled = false;
+      transverseGroup.add(slinkyWaveFill);
+    }
+    function removeSlinkyWaveFill() {
+      if (!slinkyWaveFill) return;
+      transverseGroup.remove(slinkyWaveFill);
+      slinkyWaveFill.geometry.dispose();
+      slinkyWaveFill.material.dispose();
+      slinkyWaveFill = null;
+    }
+    function updateSlinkyWaveFill(elapsed, x_front) {
+      if (!slinkyWaveFill) return;
+      const N = SL_N_CURVE;
+      const cosR = Math.cos(slinkyRotAngle);
+      const sinR = Math.sin(slinkyRotAngle);
+      const posArr = slinkyWaveFill.geometry.attributes.position.array;
+      for (let i = 0; i < N; i++) {
+        const x0 = (i / (N - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        const dx = elapsed >= 0 ? slinkyWaveDx(x0, x_front) : 0;
+        posArr[i*3+0] = x0 + dx * cosR; posArr[i*3+1] = 0.9; posArr[i*3+2] = slinkyDispZOffset - dx * sinR;
+        posArr[(N+i)*3+0] = x0;         posArr[(N+i)*3+1] = 0.9; posArr[(N+i)*3+2] = slinkyDispZOffset;
+      }
+      slinkyWaveFill.geometry.attributes.position.needsUpdate = true;
+      slinkyWaveFill.geometry.computeBoundingSphere();
+    }
+    function resetSlinkyWaveFill() {
+      if (!slinkyWaveFill) return;
+      const N = SL_N_CURVE;
+      const posArr = slinkyWaveFill.geometry.attributes.position.array;
+      for (let i = 0; i < N; i++) {
+        const x0 = (i / (N - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        posArr[i*3+0]=x0; posArr[i*3+1]=0.9; posArr[i*3+2]=slinkyDispZOffset;
+        posArr[(N+i)*3+0]=x0; posArr[(N+i)*3+1]=0.9; posArr[(N+i)*3+2]=slinkyDispZOffset;
+      }
+      slinkyWaveFill.geometry.attributes.position.needsUpdate = true;
+      slinkyWaveFill.geometry.computeBoundingSphere();
+    }
+
+    function resetSlinkyDispLines() {
+      if (!slinkyDispLines) return;
+      const arr = slinkyDispLines.geometry.attributes.instanceStart.data.array;
+      for (let i = 0; i < SL_N_BALLS; i++) {
+        const x0 = (i / (SL_N_BALLS - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        arr[i * 6 + 0] = x0; arr[i * 6 + 1] = 0.9; arr[i * 6 + 2] = slinkyDispZOffset;
+        arr[i * 6 + 3] = x0; arr[i * 6 + 4] = 0.9; arr[i * 6 + 5] = slinkyDispZOffset;
+      }
+      slinkyDispLines.geometry.attributes.instanceStart.needsUpdate = true;
+      slinkyDispLines.geometry.attributes.instanceEnd.needsUpdate = true;
+      resetSlinkyWaveLine();
+    }
+
+    function updateSlinkyDispLines(elapsed, x_front) {
+      if (!slinkyDispLines) return;
+      const arr = slinkyDispLines.geometry.attributes.instanceStart.data.array;
+      const cosR = Math.cos(slinkyRotAngle);
+      const sinR = Math.sin(slinkyRotAngle);
+      for (let i = 0; i < SL_N_BALLS; i++) {
+        const x0 = (i / (SL_N_BALLS - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        const dx = slinkyWaveDx(x0, x_front);
+        arr[i * 6 + 0] = x0;              arr[i * 6 + 1] = 0.9; arr[i * 6 + 2] = slinkyDispZOffset;
+        arr[i * 6 + 3] = x0 + dx * cosR;  arr[i * 6 + 4] = 0.9; arr[i * 6 + 5] = slinkyDispZOffset - dx * sinR;
+      }
+      slinkyDispLines.geometry.attributes.instanceStart.needsUpdate = true;
+      slinkyDispLines.geometry.attributes.instanceEnd.needsUpdate = true;
+      updateSlinkyWaveLine(elapsed, x_front);
+    }
+
+    function buildSlinkyGridLines() {
+      if (slinkyGridLines) return;
+      const positions = [];
+      for (let i = 0; i < SL_N_BALLS; i++) {
+        const x0 = (i / (SL_N_BALLS - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        // Z方向の点線（真上視点で縦線として見える）
+        positions.push(x0, 0.9, -1.8,  x0, 0.9, 1.8);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const mat = new THREE.LineDashedMaterial({ color: 0x4477aa, dashSize: 0.15, gapSize: 0.12 });
+      slinkyGridLines = new THREE.LineSegments(geo, mat);
+      slinkyGridLines.computeLineDistances();
+      transverseGroup.add(slinkyGridLines);
+    }
+
+    function removeSlinkyGridLines() {
+      if (!slinkyGridLines) return;
+      transverseGroup.remove(slinkyGridLines);
+      slinkyGridLines.geometry.dispose();
+      slinkyGridLines.material.dispose();
+      slinkyGridLines = null;
+    }
+
+    function buildSlinky() {
+      if (slinkyMesh) return;
+      const pts = [];
+      for (let i = 0; i <= SL_N_PTS; i++) {
+        const frac  = i / SL_N_PTS;
+        const angle = frac * SL_TURNS * Math.PI * 2;
+        pts.push(new THREE.Vector3(
+          frac * SL_LENGTH - SL_LENGTH / 2,
+          Math.cos(angle) * SL_HELIX_R,
+          Math.sin(angle) * SL_HELIX_R
+        ));
+      }
+      const curve  = new THREE.CatmullRomCurve3(pts);
+      slinkyGeo    = new THREE.TubeGeometry(curve, SL_TUB_SEG, SL_TUBE_R, SL_RAD_SEG, false);
+      slinkyOrigPos = new Float32Array(slinkyGeo.attributes.position.array);
+      const mat    = new THREE.MeshStandardMaterial({ color: 0x99bbdd, metalness: 0.85, roughness: 0.15 });
+      slinkyMesh   = new THREE.Mesh(slinkyGeo, mat);
+      slinkyMesh.position.set(0, 0.9, 0);
+      transverseGroup.add(slinkyMesh);
+      document.getElementById('btnSlinky').classList.add('active');
+      document.getElementById('slinkyBallRow').style.maxHeight = '400px';
+    }
+
+    function removeSlinky() {
+      if (!slinkyMesh) return;
+      waveActive = false;
+      wavePausedElapsed = 0;
+      document.getElementById('btnSlinkyStart').textContent = '▶ 開始';
+      // 球モードをリセット
+      slinkyBallMode = false;
+      document.getElementById('ckSlinkyBall').textContent = '□';
+      slinkyGridMode = false;
+      document.getElementById('ckSlinkyGrid').textContent = '□';
+      slinkyDispMode = false;
+      document.getElementById('ckSlinkyDisp').textContent = '□';
+      slinkyDispZOffset = 0;
+      slinkySlideFrom = 0; slinkySlideTarget = 0; slinkySlideStartT = -1;
+      slinkyRotAngle = 0; slinkyRotFrom = 0; slinkyRotTarget = 0; slinkyRotStartT = -1;
+      document.getElementById('ckSlinkyRot').textContent = '□';
+      document.getElementById('slinkyRotRow').style.display = 'none';
+      resetSlinkyGraph();
+      document.getElementById('btnSlinkySlide').classList.remove('active');
+      document.getElementById('slinkySlideRow').style.display = 'none';
+      document.getElementById('slinkyBallRow').style.maxHeight = '0';
+      removeSlinkyBalls();
+      removeSlinkyGridLines();
+      removeSlinkyDispLines();
+      transverseGroup.remove(slinkyMesh);
+      slinkyMesh.material.dispose();
+      slinkyGeo.dispose();
+      slinkyMesh = null; slinkyGeo = null; slinkyOrigPos = null;
+      document.getElementById('btnSlinky').classList.remove('active');
+    }
+
+    function pauseSlinkyWave() {
+      wavePausedElapsed = nowSec() - waveStartTime;
+      waveActive = false;
+      document.getElementById('btnSlinkyStart').textContent = '▶ 開始';
+    }
+
+    function resetSlinkyWave() {
+      waveActive = false;
+      wavePausedElapsed = 0;
+      document.getElementById('btnSlinkyStart').textContent = '▶ 開始';
+      if (slinkyGeo && slinkyOrigPos) {
+        slinkyGeo.attributes.position.array.set(slinkyOrigPos);
+        slinkyGeo.attributes.position.needsUpdate = true;
+      }
+      slinkyDispZOffset = 0;
+      slinkySlideFrom = 0; slinkySlideTarget = 0; slinkySlideStartT = -1;
+      slinkyRotAngle = 0; slinkyRotFrom = 0; slinkyRotTarget = 0; slinkyRotStartT = -1;
+      document.getElementById('ckSlinkyRot').textContent = '□';
+      document.getElementById('slinkyRotRow').style.display = 'none';
+      resetSlinkyGraph();
+      document.getElementById('btnSlinkySlide').classList.remove('active');
+      document.getElementById('slinkySlideRow').style.display = 'none';
+      resetSlinkyBalls();
+      resetSlinkyDispLines();
+    }
+
+    function startSlinkyWave() {
+      buildSlinky();
+      waveStartTime = nowSec() - wavePausedElapsed;
+      waveActive    = true;
+      document.getElementById('btnSlinkyStart').textContent = '■ 停止';
+    }
+
+    function autoStopSingleWave() {
+      waveActive = false;
+      wavePausedElapsed = 0;
+      document.getElementById('btnSlinkyStart').textContent = '▶ 開始';
+      if (slinkyGeo && slinkyOrigPos) {
+        slinkyGeo.attributes.position.array.set(slinkyOrigPos);
+        slinkyGeo.attributes.position.needsUpdate = true;
+      }
+      resetSlinkyBalls();
+      resetSlinkyDispLines();
+    }
+    function updateSlinkyWave(t) {
+      if (!waveActive) return;
+      const elapsed = t - waveStartTime;
+      const x_front = -SL_LENGTH / 2 + SL_WAVE_V * elapsed;
+
+      // 単体モード: 波パケット末端が右端を通過したら自動停止
+      if (slinkyWaveMode === 'single' && x_front - SL_WAVE_LAMBDA > SL_LENGTH / 2) {
+        autoStopSingleWave();
+        return;
+      }
+
+      if (slinkyGeo && slinkyOrigPos) {
+        const posArr = slinkyGeo.attributes.position.array;
+        const vps    = SL_RAD_SEG + 1;
+        for (let s = 0; s <= SL_TUB_SEG; s++) {
+          const x0 = (s / SL_TUB_SEG) * SL_LENGTH - SL_LENGTH / 2;
+          const dx = slinkyWaveDx(x0, x_front);
+          const base = s * vps;
+          for (let v = 0; v < vps; v++) {
+            posArr[(base + v) * 3] = slinkyOrigPos[(base + v) * 3] + dx;
+          }
+        }
+        slinkyGeo.attributes.position.needsUpdate = true;
+      }
+
+      updateSlinkyBalls(elapsed, x_front);
+      updateSlinkyDispLines(elapsed, x_front);
+    }
+
+    document.getElementById('btnSlinky').addEventListener('click', () => {
+      if (slinkyMesh) removeSlinky(); else buildSlinky();
+    });
+    document.getElementById('ckSlinkyBall').addEventListener('click', () => {
+      slinkyBallMode = !slinkyBallMode;
+      document.getElementById('ckSlinkyBall').textContent = slinkyBallMode ? '☑' : '□';
+      if (slinkyBallMode) {
+        if (slinkyMesh) slinkyMesh.visible = false;
+        buildSlinkyBalls();
+      } else {
+        removeSlinkyBalls();
+        if (slinkyMesh) slinkyMesh.visible = true;
+      }
+      updateSlideButtonVisibility();
+    });
+    document.getElementById('ckSlinkyGrid').addEventListener('click', () => {
+      slinkyGridMode = !slinkyGridMode;
+      document.getElementById('ckSlinkyGrid').textContent = slinkyGridMode ? '☑' : '□';
+      if (slinkyGridMode) buildSlinkyGridLines();
+      else removeSlinkyGridLines();
+      updateSlideButtonVisibility();
+    });
+    document.getElementById('ckSlinkyDisp').addEventListener('click', () => {
+      slinkyDispMode = !slinkyDispMode;
+      document.getElementById('ckSlinkyDisp').textContent = slinkyDispMode ? '☑' : '□';
+      if (slinkyDispMode) buildSlinkyDispLines();
+      else removeSlinkyDispLines();
+      updateSlideButtonVisibility();
+    });
+    function updateSlideButtonVisibility() {
+      const show = slinkyBallMode && slinkyGridMode && slinkyDispMode;
+      document.getElementById('slinkySlideRow').style.display = show ? '' : 'none';
+      if (!show) {
+        if (slinkyDispZOffset !== 0 || slinkyRotAngle !== 0) {
+          slinkyDispZOffset = 0;
+          slinkySlideFrom = 0; slinkySlideTarget = 0; slinkySlideStartT = -1;
+          slinkyRotAngle = 0; slinkyRotFrom = 0; slinkyRotTarget = 0; slinkyRotStartT = -1;
+          document.getElementById('ckSlinkyRot').textContent = '□';
+          document.getElementById('slinkyRotRow').style.display = 'none';
+          resetSlinkyGraph();
+          document.getElementById('btnSlinkySlide').classList.remove('active');
+          resetSlinkyDispLines();
+        }
+      }
+    }
+    function refreshSlinkyDispLines() {
+      if (!slinkyDispLines) return;
+      const arr = slinkyDispLines.geometry.attributes.instanceStart.data.array;
+      const elapsed = wavePausedElapsed;
+      const x_front = -SL_LENGTH / 2 + SL_WAVE_V * elapsed;
+      const cosR = Math.cos(slinkyRotAngle);
+      const sinR = Math.sin(slinkyRotAngle);
+      for (let i = 0; i < SL_N_BALLS; i++) {
+        const x0 = (i / (SL_N_BALLS - 1)) * SL_LENGTH - SL_LENGTH / 2;
+        const dx = elapsed > 0 ? slinkyWaveDx(x0, x_front) : 0;
+        arr[i * 6 + 0] = x0;              arr[i * 6 + 1] = 0.9; arr[i * 6 + 2] = slinkyDispZOffset;
+        arr[i * 6 + 3] = x0 + dx * cosR;  arr[i * 6 + 4] = 0.9; arr[i * 6 + 5] = slinkyDispZOffset - dx * sinR;
+      }
+      slinkyDispLines.geometry.attributes.instanceStart.needsUpdate = true;
+      slinkyDispLines.geometry.attributes.instanceEnd.needsUpdate = true;
+      updateSlinkyWaveLine(elapsed, x_front);
+    }
+    function updateSlinkySlide(t) {
+      if (slinkySlideStartT < 0) return;
+      const frac = Math.min((t - slinkySlideStartT) / 1.0, 1.0);
+      const ease = frac < 0.5 ? 2*frac*frac : -1 + (4 - 2*frac)*frac;
+      slinkyDispZOffset = slinkySlideFrom + (slinkySlideTarget - slinkySlideFrom) * ease;
+      if (frac >= 1.0) {
+        slinkyDispZOffset = slinkySlideTarget;
+        slinkySlideStartT = -1;
+      }
+      if (!waveActive) refreshSlinkyDispLines();
+    }
+    function updateSlinkyRot(t) {
+      if (slinkyRotStartT < 0) return;
+      const frac = Math.min((t - slinkyRotStartT) / 1.0, 1.0);
+      const ease = frac < 0.5 ? 2*frac*frac : -1 + (4 - 2*frac)*frac;
+      slinkyRotAngle = slinkyRotFrom + (slinkyRotTarget - slinkyRotFrom) * ease;
+      if (frac >= 1.0) {
+        slinkyRotAngle = slinkyRotTarget;
+        slinkyRotStartT = -1;
+      }
+      if (!waveActive) refreshSlinkyDispLines();
+    }
+    document.getElementById('btnSlinkySlide').addEventListener('click', () => {
+      if (!slinkyDispLines) return;
+      slinkySlideFrom   = slinkyDispZOffset;
+      slinkySlideTarget = (slinkySlideTarget === -7) ? 0 : -7;
+      slinkySlideStartT = nowSec();
+      const sliding = slinkySlideTarget === -7;
+      document.getElementById('btnSlinkySlide').classList.toggle('active', sliding);
+      document.getElementById('slinkyRotRow').style.display = sliding ? '' : 'none';
+      if (!sliding) {
+        slinkyRotAngle = 0; slinkyRotFrom = 0; slinkyRotTarget = 0; slinkyRotStartT = -1;
+        document.getElementById('ckSlinkyRot').textContent = '□';
+        resetSlinkyGraph();
+        if (!waveActive) refreshSlinkyDispLines();
+      }
+    });
+    function _setSlinkyGraphAlpha(a) {
+      if (!slinkyGraphAxes) return;
+      slinkyGraphAxes.traverse(obj => {
+        if (obj.material) { obj.material.transparent = true; obj.material.opacity = a; obj.material.needsUpdate = true; }
+      });
+    }
+    function _setSlinkyWaveLineAlpha(a) {
+      if (slinkyWaveLine) slinkyWaveLine.material.opacity = a;
+      if (slinkyWaveFill) slinkyWaveFill.material.opacity = 0.18 * a;
+    }
+    function makeSlinkyAxisLabel(text) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, 256, 64);
+      ctx.fillStyle = '#334466';
+      ctx.font = 'bold 40px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 128, 32);
+      const tex = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(2.0, 0.5, 1);
+      return sprite;
+    }
+    function buildSlinkyGraphAxes() {
+      if (slinkyGraphAxes) return;
+      slinkyGraphAxes = new THREE.Group();
+      const z0  = slinkyDispZOffset;
+      const xL  = -SL_LENGTH / 2;
+      const xR  =  SL_LENGTH / 2;
+      const amp = SL_WAVE_A * 1.6;
+      const y   = 0.9;
+      const vx  = xL;            // 縦軸X = 1番目のグリッド線
+      const vy  = y - 0.005;    // 縦軸Y = 横軸より少し下（赤い線との重なり回避）
+      const ax2 = xR + 1.2;
+      const az1 = z0 + amp + 0.3, az2 = z0 - amp - 0.8;
+      const pts = [
+        // 横軸 (位置X) — 縦軸より少し手前から
+        vx - 0.5, y, z0,   ax2, y, z0,
+        // 矢印 (+X)
+        ax2, y, z0,   ax2 - 0.45, y, z0 - 0.18,
+        ax2, y, z0,   ax2 - 0.45, y, z0 + 0.18,
+        // 縦軸 (変位) — Y方向に0.05下げて赤い線の下に描画
+        vx, vy, az1,   vx, vy, az2,
+        // 矢印 (-Z = 正変位)
+        vx, vy, az2,   vx - 0.18, vy, az2 + 0.45,
+        vx, vy, az2,   vx + 0.18, vy, az2 + 0.45,
+        // 原点マーク
+        vx - 0.08, vy, z0,   vx + 0.08, vy, z0,
+      ];
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x334466, transparent: true });
+      slinkyGraphAxes.add(new THREE.LineSegments(geo, lineMat));
+      const lblX = makeSlinkyAxisLabel('位置X');
+      lblX.position.set(ax2 + 1.2, y, z0);
+      slinkyGraphAxes.add(lblX);
+      const lblY = makeSlinkyAxisLabel('変位Y');
+      lblY.position.set(vx, y, az2 - 0.8);
+      slinkyGraphAxes.add(lblY);
+      transverseGroup.add(slinkyGraphAxes);
+    }
+    function removeSlinkyGraphAxes() {
+      if (!slinkyGraphAxes) return;
+      transverseGroup.remove(slinkyGraphAxes);
+      slinkyGraphAxes.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (obj.material.map) obj.material.map.dispose();
+          obj.material.dispose();
+        }
+      });
+      slinkyGraphAxes = null;
+    }
+    function resetSlinkyWaveLineMode() {
+      slinkyWaveLineMode       = false;
+      slinkyWaveLineFadeDir    = 0;
+      slinkyWaveLineAlpha      = 1;
+      document.getElementById('ckSlinkyWaveLine').textContent = '□';
+      document.getElementById('slinkyWaveLineRow').style.display = 'none';
+      removeSlinkyWaveLine();
+    }
+    function resetSlinkyGraph() {
+      resetSlinkyWaveLineMode();
+      slinkyGraphMode    = false;
+      slinkyGraphFadeDir = 0;
+      slinkyGraphAlpha   = 1;
+      document.getElementById('ckSlinkyGraph').textContent = '□';
+      document.getElementById('slinkyGraphRow').style.display = 'none';
+      removeSlinkyGraphAxes();
+    }
+    document.getElementById('ckSlinkyRot').addEventListener('click', () => {
+      const toRot = slinkyRotTarget !== Math.PI / 2;
+      slinkyRotFrom   = slinkyRotAngle;
+      slinkyRotTarget = toRot ? Math.PI / 2 : 0;
+      slinkyRotStartT = nowSec();
+      document.getElementById('ckSlinkyRot').textContent = toRot ? '☑' : '□';
+      document.getElementById('slinkyGraphRow').style.display = toRot ? '' : 'none';
+      if (!toRot) resetSlinkyGraph();
+    });
+    document.getElementById('ckSlinkyGraph').addEventListener('click', () => {
+      slinkyGraphMode = !slinkyGraphMode;
+      document.getElementById('ckSlinkyGraph').textContent = slinkyGraphMode ? '☑' : '□';
+      if (slinkyGraphMode) {
+        buildSlinkyGraphAxes();
+        _setSlinkyGraphAlpha(0);
+        slinkyGraphAlpha      = 0;
+        slinkyGraphFadeDir    = 1;
+        slinkyGraphFadeStartT = nowSec();
+        document.getElementById('slinkyWaveLineRow').style.display = '';
+      } else {
+        // 曲線も同時にフェードアウト
+        if (slinkyWaveLineMode) {
+          slinkyWaveLineMode = false;
+          document.getElementById('ckSlinkyWaveLine').textContent = '□';
+          slinkyWaveLineAlpha      = 1;
+          slinkyWaveLineFadeDir    = -1;
+          slinkyWaveLineFadeStartT = nowSec();
+        }
+        document.getElementById('slinkyWaveLineRow').style.display = 'none';
+        slinkyGraphAlpha      = 1;
+        slinkyGraphFadeDir    = -1;
+        slinkyGraphFadeStartT = nowSec();
+      }
+    });
+    document.getElementById('ckSlinkyWaveLine').addEventListener('click', () => {
+      slinkyWaveLineMode = !slinkyWaveLineMode;
+      document.getElementById('ckSlinkyWaveLine').textContent = slinkyWaveLineMode ? '☑' : '□';
+      if (slinkyWaveLineMode) {
+        buildSlinkyWaveLine();
+        refreshSlinkyDispLines();
+        _setSlinkyWaveLineAlpha(0);
+        slinkyWaveLineAlpha      = 0;
+        slinkyWaveLineFadeDir    = 1;
+        slinkyWaveLineFadeStartT = nowSec();
+      } else {
+        slinkyWaveLineAlpha      = 1;
+        slinkyWaveLineFadeDir    = -1;
+        slinkyWaveLineFadeStartT = nowSec();
+      }
+    });
+    document.getElementById('ckSlinkyModeCont').addEventListener('click', () => {
+      if (slinkyWaveMode === 'continuous') return;
+      slinkyWaveMode = 'continuous';
+      document.getElementById('ckSlinkyModeCont').textContent   = '☑';
+      document.getElementById('ckSlinkyModeSingle').textContent = '□';
+    });
+    document.getElementById('ckSlinkyModeSingle').addEventListener('click', () => {
+      if (slinkyWaveMode === 'single') return;
+      slinkyWaveMode = 'single';
+      document.getElementById('ckSlinkyModeSingle').textContent = '☑';
+      document.getElementById('ckSlinkyModeCont').textContent   = '□';
+      if (waveActive) pauseSlinkyWave();
+    });
+    document.getElementById('btnSlinkyStart').addEventListener('click', () => {
+      if (waveActive) pauseSlinkyWave(); else startSlinkyWave();
+    });
+    document.getElementById('btnSlinkyReset').addEventListener('click', resetSlinkyWave);
+
+    // ===== 真上視点（横波と縦波タブ） =====
+    function snapToTopDown() {
+      // camera.up は (0,1,0) のまま変更しない（ジンバルロック回避のため Z に微小オフセット）
+      viewTween = {
+        startPos:    camera.position.clone(),
+        endPos:      new THREE.Vector3(-2, 17, -3.99),
+        startTarget: controls.target.clone(),
+        endTarget:   new THREE.Vector3(-2, 0, -4),
+        startTime:   nowSec(),
+        dur:         0.5,
+      };
+    }
+    document.getElementById('btnViewTopDown').addEventListener('click', snapToTopDown);
+
+    function tick(){
+      requestAnimationFrame(tick);
+      controls.update();
+      const t = nowSec();
+      updateViewSnap(t);
+      for (const obj of placedGroup.children){
+        updateCircular(obj, t);
+      }
+      if (placedSphere) updateCircular(placedSphere, t);
+
+      // 軌跡（半径変化時のみ再構築）・中心線（毎フレーム更新）
+      if (trajectoryLine && placedSphere) {
+        const r = sharedCirc.r;
+        if (r !== lastOrbitR) {
+          trajectoryLine.geometry.setFromPoints(buildOrbitCirclePoints(r));
+          if (sphereHitbox) {
+            sphereHitbox.geometry.dispose();
+            sphereHitbox.geometry = new THREE.CircleGeometry(r, 64);
+          }
+          lastOrbitR = r;
+        }
+        if (centerLineMesh) {
+          centerLineMesh.geometry.setFromPoints([ORBIT_CENTER, placedSphere.position]);
+        }
+      }
+
+      updateGraphTick(t);
+      updateGraphTick2(t);
+      updateSlinkyRot(t);
+      updateSlinkySlide(t);
+      updateSlinkyWave(t);
+
+      // □グラフ フェード
+      if (slinkyGraphFadeDir !== 0) {
+        const frac = Math.min(1, t - slinkyGraphFadeStartT);
+        slinkyGraphAlpha = slinkyGraphFadeDir === 1 ? frac : 1 - frac;
+        _setSlinkyGraphAlpha(slinkyGraphAlpha);
+        if (frac >= 1) {
+          slinkyGraphFadeDir = 0;
+          if (slinkyGraphAlpha <= 0) removeSlinkyGraphAxes();
+        }
+      }
+      // □曲線 フェード
+      if (slinkyWaveLineFadeDir !== 0) {
+        const frac = Math.min(1, t - slinkyWaveLineFadeStartT);
+        slinkyWaveLineAlpha = slinkyWaveLineFadeDir === 1 ? frac : 1 - frac;
+        _setSlinkyWaveLineAlpha(slinkyWaveLineAlpha);
+        if (frac >= 1) {
+          slinkyWaveLineFadeDir = 0;
+          if (slinkyWaveLineAlpha <= 0) removeSlinkyWaveLine();
+        }
+      }
+
+      // 球とばねの更新（円運動の Y 成分に連動した単振動）
+      if (springBall && springMesh) {
+        const circ = sharedCirc;
+        if (circ.active) {
+          const elapsed = circ.frozenElapsed + (t - circ.startTime);
+          const dy = circ.r * Math.sin(circ.startTheta + (Math.PI * 2 / circ.T) * elapsed);
+          springBall.position.y = 5 + dy;
+          const baseLen = 3.6; // springTopY(8.6) - springBotY(5)
+          const s = Math.max(0.01, (baseLen - dy) / baseLen);
+          springMesh.scale.y = s;
+          springMesh.position.y = 8.6 * (1 - s);
+        }
+      }
+
+      // ロープと手の更新（単振動が右へ伝播する横波）
+      if (ropeLine) {
+        const circ = sharedCirc;
+        if (circ.active) {
+          const RX0 = 0, RX1 = ROPE_LEN, RY = 5, RZ = 0;
+          const elapsed = circ.frozenElapsed + (t - circ.startTime);
+          const omega   = Math.PI * 2 / circ.T;
+          const wavelen = RX1 - RX0;
+          const pos = ropeLine.userData.posArr;
+          const n   = ropeLine.userData.segs;
+
+          for (let i = 0; i < n; i++) {
+            const x     = RX0 + (RX1 - RX0) * i / (n - 1);
+            const delay = (x - RX0) * GRAPH_TIME_WINDOW / wavelen;
+            const y     = elapsed >= delay
+              ? RY + circ.r * Math.sin(circ.startTheta + omega * (elapsed - delay))
+              : RY;
+            pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = RZ;
+          }
+          updateRopeInstances(ropeLine);
+
+          // ノード球の位置を更新
+          if (ropeNodes) {
+            const _nd = new THREE.Object3D();
+            for (let i = 0; i < n; i++) {
+              _nd.position.set(pos[i*3], pos[i*3+1], pos[i*3+2]);
+              _nd.updateMatrix();
+              ropeNodes.setMatrixAt(i, _nd.matrix);
+            }
+            ropeNodes.instanceMatrix.needsUpdate = true;
+          }
+
+          // 中央マーカーをロープ中央セグメントに追従
+          if (ropeCenterMarker) {
+            const _ci = Math.floor((n - 1) / 2);
+            const _ax = pos[_ci*3],     _ay = pos[_ci*3+1],     _az = pos[_ci*3+2];
+            const _bx = pos[(_ci+1)*3], _by = pos[(_ci+1)*3+1], _bz = pos[(_ci+1)*3+2];
+            ropeCenterMarker.position.set((_ax+_bx)/2, (_ay+_by)/2, (_az+_bz)/2);
+            const _dir = new THREE.Vector3(_bx-_ax, _by-_ay, _bz-_az).normalize();
+            ropeCenterMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), _dir);
+          }
+
+          // 手（P0 と同じ変位）
+          if (ropeHandGroup) {
+            ropeHandGroup.position.y = RY + circ.r * Math.sin(circ.startTheta + omega * elapsed);
+          }
+        }
+      }
+
+      // テクスチャ更新（pointermoveのたびではなく1フレーム1回）
+      if (inkDirty)    { if (inkBoardTexture) inkBoardTexture.needsUpdate = true; inkDirty    = false; }
+      if (graphDirty)  { if (graphTexture)   graphTexture.needsUpdate    = true; graphDirty  = false; }
+      if (graphDirty2) { if (graphTexture2)  graphTexture2.needsUpdate   = true; graphDirty2 = false; }
+      renderer.render(scene, camera);
+    }
+    tick();
+  </script>
+</body>
+</html>

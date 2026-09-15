@@ -1,0 +1,2315 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>物質と電場（授業用）｜3Dボード</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:rgba(240,243,252,0.95);
+      --border:rgba(70,90,160,0.30);
+      --text:#1a2040;
+      --muted:#5566aa;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    #app{position:fixed;inset:0;overflow:hidden}
+
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+    .topbar{
+      position:absolute;left:0;top:0;right:0;z-index:5;
+      display:flex;gap:8px;align-items:center;
+      padding:10px 12px;
+      background:linear-gradient(to bottom, rgba(255,255,255,.80), rgba(255,255,255,0));
+      pointer-events:none;
+    }
+    .topbar a, .topbar button, .topbar .pill{pointer-events:auto}
+    .btn, .pill{
+      border:1px solid var(--border);
+      background:var(--panel);
+      color:var(--text);
+      border-radius:12px;
+      padding:8px 10px;
+      font-size:12px;
+      cursor:pointer;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .btn:hover{opacity:.9}
+    .pill{cursor:default;color:var(--muted)}
+    .btn.active{ outline:2px solid rgba(120,170,255,.6); }
+
+    .sidebar{
+      position:absolute;left:10px;top:56px;bottom:10px;z-index:6;
+      width:280px;max-width:85vw;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:12px;
+      overflow:auto;
+      backdrop-filter: blur(6px);
+    }
+    .h{font-weight:800;font-size:13px;margin:0 0 8px}
+    .group{margin:10px 0 12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .row .btn{flex:1;justify-content:center}
+
+    #toolboxPanel{
+      position: fixed;
+      left: 16px;
+      top: 72px;
+      z-index: 1000;
+      transition: transform 180ms ease;
+      transform: translateX(0);
+    }
+    #toolboxPanel.is-collapsed{
+      transform: translateX(calc(-100% + 36px));
+    }
+    #toolboxToggle.toolboxToggle{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      border: 1px solid rgba(70,90,160,0.25);
+      background: rgba(240,243,252,0.90);
+      color: #1a2040;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      line-height: 1;
+    }
+    #toolboxPanel.is-collapsed #toolboxToggle{
+      right: 4px;
+    }
+    #toolboxPanel{
+      overflow: hidden auto;              /* 中身が画面より長いときは縦にスクロール（横は出さない） */
+      overscroll-behavior: contain;
+    }
+    #toolboxPanel.is-collapsed > :not(#toolboxToggle){
+      display: none !important;
+    }
+
+    .help{
+      position:absolute;right:10px;bottom:10px;z-index:6;
+      background:rgba(240,243,252,0.92);
+      border:1px solid rgba(70,90,160,0.20);
+      border-radius:14px;
+      padding:10px 12px;
+      font-size:12px;
+      color:var(--muted);
+      max-width:420px;
+    }
+    .help b{color:var(--text)}
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="c"></canvas>
+
+    <div id="particleContextMenu" style="display:none;position:fixed;z-index:600;background:rgba(240,243,252,0.97);border:1px solid rgba(70,90,160,0.30);border-radius:10px;box-shadow:0 4px 14px rgba(20,30,60,0.18);padding:4px;">
+      <button id="particleDeleteBtn" type="button" style="display:flex;align-items:center;gap:7px;border:none;background:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;color:#1a2040;white-space:nowrap">
+        🗑️ 削除
+      </button>
+    </div>
+
+    <!-- 上バー -->
+    <div class="topbar">
+      <a class="btn" href="../em-electric-field.html">← 電場へ</a>
+    </div>
+
+    <!-- 左サイドバー：道具箱 -->
+    <aside class="sidebar" id="toolboxPanel">
+      <button id="toolboxToggle" class="toolboxToggle" type="button" aria-expanded="true">＜</button>
+
+        <p class="h">道具箱</p>
+        <div class="group">
+          <div class="row" style="align-items:center;gap:8px">
+            <span style="font-size:13px;font-weight:700;white-space:nowrap">電源電圧</span>
+            <input id="ufVolt" type="range" min="0" max="5" step="1" value="0" style="flex:1;min-width:0">
+            <span id="ufVoltVal" style="font-size:13px;min-width:2.8em;text-align:right">0 V</span>
+          </div>
+        </div>
+        <div class="group">
+          <div class="row">
+            <button id="btnUfConductor" class="btn" type="button" style="flex:1;justify-content:center;gap:7px">
+              <span style="display:inline-block;width:20px;height:13px;border-radius:2px;flex-shrink:0;
+                background:linear-gradient(180deg,#b6bfca 0%,#8899aa 55%,#6b7787 100%);
+                border:1px solid rgba(70,90,160,0.35)"></span>
+              導体
+            </button>
+          </div>
+          <div class="row" style="margin-top:4px">
+            <button id="btnUfInsulator" class="btn" type="button" style="flex:1;justify-content:center;gap:7px">
+              <span style="display:inline-block;width:20px;height:13px;border-radius:2px;flex-shrink:0;
+                background:linear-gradient(180deg,#f0dcc0 0%,#dcc09a 55%,#c4a67e 100%);
+                border:1px solid rgba(140,110,70,0.45)"></span>
+              不導体
+            </button>
+          </div>
+        </div>
+
+        <p class="h" style="margin-top:12px">表示</p>
+        <div class="group" style="margin-top:0">
+          <div class="row">
+            <button id="btnUfCharges" class="btn" type="button" style="flex:1;justify-content:center">正・負</button>
+          </div>
+          <div class="row" style="margin-top:4px">
+            <button id="btnUfFieldLines" class="btn" type="button" style="flex:1;justify-content:center">電気力線</button>
+          </div>
+        </div>
+
+        <p class="h" style="margin-top:12px">グラフ</p>
+        <div class="group" style="margin-top:0">
+          <div class="row">
+            <button id="btnUfGraphE" class="btn" type="button" style="flex:1;justify-content:center">E-dグラフ</button>
+          </div>
+          <div class="row" style="margin-top:4px">
+            <button id="btnUfGraphV" class="btn" type="button" style="flex:1;justify-content:center">V-dグラフ</button>
+          </div>
+        </div>
+
+
+      <!-- 図形は両タブ共通（描画ボードはカメラ直下なのでタブをまたいで残る） -->
+      <p class="h" style="margin-top:12px">図形</p>
+      <div class="group" style="margin-top:0">
+        <div class="row">
+          <button class="btn" id="toolPen" type="button">ペン</button>
+          <button class="btn" id="toolEraser" type="button">消しゴム</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="inkClear" type="button">ペンを全消し</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="toolArrow" type="button">矢印</button>
+          <button class="btn" id="shapeClear" type="button">矢印を全消し</button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="help">
+      <b>操作</b>：ドラッグ＝平行移動／ホイール＝ズーム
+    </div>
+  </div>
+
+  <div id="chargeMenu" style="display:none;position:fixed;z-index:700;background:rgba(240,243,252,0.97);border:1px solid rgba(70,90,160,0.30);border-radius:10px;box-shadow:0 4px 14px rgba(20,30,60,0.18);padding:4px;min-width:90px;"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ===== 基本セットアップ =====
+    const canvas = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    // このシミュレーションは真上からの平行投影に固定する
+    const camera = new THREE.OrthographicCamera(-38, 38, 38, -38, 0.1, 1000);
+    camera.position.set(0, 100, 0);
+    camera.up.set(0, 0, -1);
+    camera.lookAt(0, 0, 0);
+    scene.add(camera); // カメラ子要素（描画ボード）をシーングラフに含めるために必要
+
+    let _ufGraphShown = false;  // グラフ表示中はその分だけ横に広く映す
+
+    // 端末のアスペクト比によらず対象が収まるよう平行投影の枠を決める
+    function updateOrthoFrustum() {
+      const aspect = window.innerWidth / window.innerHeight;
+      let halfH = Math.max(38, 38 / aspect);
+      if (_ufGraphShown) halfH = Math.max(halfH, 60 / aspect);
+      camera.left   = -halfH * aspect;
+      camera.right  =  halfH * aspect;
+      camera.top    =  halfH;
+      camera.bottom = -halfH;
+      camera.updateProjectionMatrix();
+    }
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+    controls.zoomToCursor = true;
+    controls.enableRotate = false;   // 真上固定なので回転させない
+    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.update();
+
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.70);
+    dirLight.position.set(6, 10, 6);
+    scene.add(dirLight);
+
+    // 一様な電場のオブジェクトはこのグループにまとめる
+    const uniformGroup = new THREE.Group();
+    scene.add(uniformGroup);
+    const currentTab = 'uniform';
+
+    // ===== リサイズ =====
+    function resize() {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      updateOrthoFrustum();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ===== 道具箱 開閉 =====
+    const toolboxPanel  = document.getElementById('toolboxPanel');
+    const toolboxToggle = document.getElementById('toolboxToggle');
+    toolboxToggle.addEventListener('click', () => {
+      const collapsed = toolboxPanel.classList.toggle('is-collapsed');
+      toolboxToggle.textContent = collapsed ? '＞' : '＜';
+      toolboxToggle.setAttribute('aria-expanded', String(!collapsed));
+    });
+    // ===== 道具箱ドラッグ：状態 =====
+    let tbDrag = { pending: false, active: false, type: null, mesh: null, sprite: null,
+                   charge: 3, pendingX: 0, pendingY: 0, isPickedParticle: false,
+                   pickStartCX: 0, pickStartCY: 0, lastCX: 0, lastCY: 0 };
+    const placedParticles = [];
+    window._placedParticles = placedParticles;
+    // 電荷はタブごとに属する。電位側の計算に一様な電場側の電荷を混ぜないための絞り込み
+    const potParticles = () => placedParticles;
+    // 現在のタブの入れ物。一様な電場側は uniformGroup に入れることで
+    // タブ切り替え時の表示制御が親子関係だけで完結する
+    const tabRoot = () => scene;
+    const _crossDir = new THREE.Vector3();
+    function updateCrossSprite(mesh, sprite) {
+      const radius = mesh.geometry.parameters.radius * mesh.scale.x;
+      // 平行投影は投影の光線が全て平行なので、カメラ位置へ向けると
+      // 原点から離れた球ほど画面上で記号がずれる。視線方向を使う
+      if (camera.isOrthographicCamera) {
+        camera.getWorldDirection(_crossDir).negate();
+      } else {
+        _crossDir.copy(camera.position).sub(mesh.position).normalize();
+      }
+      sprite.position.copy(mesh.position).addScaledVector(_crossDir, radius * 1.08);
+      const size = radius * 1.6;
+      sprite.scale.set(size, size, 1);
+    }
+
+    // ===== ホバー =====
+    let hoveredParticle = null;
+    function setHoveredParticle(p) {
+      if (hoveredParticle === p) return;
+      if (hoveredParticle) {
+        const m = hoveredParticle.mesh.material;
+        hoveredParticle.mesh.scale.setScalar(1);
+        if (m.uniforms && m.uniforms.baseColor) {
+          if (m.userData.baseColor) m.uniforms.baseColor.value.copy(m.userData.baseColor);
+        }
+      }
+      hoveredParticle = p;
+      if (hoveredParticle) {
+        const m = hoveredParticle.mesh.material;
+        if (m.uniforms && m.uniforms.baseColor) {
+          if (!m.userData.baseColor) m.userData.baseColor = m.uniforms.baseColor.value.clone();
+          m.uniforms.baseColor.value.copy(m.userData.baseColor).lerp(new THREE.Color(0xffffff), 0.25);
+        }
+      }
+    }
+
+    // ===== グロー =====
+    const glowMat  = new THREE.MeshBasicMaterial({ color: 0xffff88, transparent: true, opacity: 0.45 });
+    const glowMesh = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 8), glowMat);
+    glowMesh.visible = false;
+    scene.add(glowMesh);
+
+    // ===== レイキャスト =====
+    const _tbPlane     = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Y=0（XZ平面）
+    const _tbPlaneXY   = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // Z=0（XY平面）
+    const _tbRaycaster = new THREE.Raycaster();
+    const _tbNDC       = new THREE.Vector2();
+    const _tbHit       = new THREE.Vector3();
+    const _tbPickPos   = new THREE.Vector3();
+
+    function _tbProject(cx, cy) {
+      _tbNDC.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
+      _tbRaycaster.setFromCamera(_tbNDC, camera);
+      return _tbRaycaster.ray.intersectPlane(_tbPlane, _tbHit) ? _tbHit.clone() : null;
+    }
+    // 導体・不導体はどちらも板状で、掴み方も吸着も同じ扱いにする
+    const _isSlabType = t => t === 'conductor' || t === 'insulator';
+
+    function checkHoverPlacedParticle(cx, cy) {
+      if (window._getDrawingToolActive?.()) return null;
+      if (!placedParticles.length) return null;
+      _tbNDC.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
+      _tbRaycaster.setFromCamera(_tbNDC, camera);
+      let best = null, bestDist = Infinity;
+      // 電荷（球）は光線との距離、導体（板）は面との交差で判定する。
+      // 板の上に置かれた電荷を優先して掴めるよう、電荷を先に見る
+      for (const p of placedParticles) {
+        if (_isSlabType(p.type)) continue;
+        p.mesh.getWorldPosition(_tbPickPos);
+        const d = _tbRaycaster.ray.distanceToPoint(_tbPickPos);
+        if (d < 1.0 && d < bestDist) { bestDist = d; best = p; }
+      }
+      if (best) return best;
+      for (const p of placedParticles) {
+        if (!_isSlabType(p.type)) continue;
+        const hits = _tbRaycaster.intersectObject(p.mesh, false);
+        if (hits.length && hits[0].distance < bestDist) { bestDist = hits[0].distance; best = p; }
+      }
+      return best;
+    }
+    function tryPickPlacedParticle(cx, cy) {
+      const best = checkHoverPlacedParticle(cx, cy);
+      if (!best) return false;
+      const idx = placedParticles.indexOf(best);
+      if (idx !== -1) placedParticles.splice(idx, 1);
+      tbDrag.active = true; tbDrag.pending = false;
+      tbDrag.type = best.type; tbDrag.mesh = best.mesh; tbDrag.sprite = best.sprite;
+      tbDrag.charge = best.charge ?? 3;
+      tbDrag.isPickedParticle = true;
+      tbDrag.tab = best.tab ?? 'potential';
+      // 板は面積が広いので、掴んだ点との位置関係を保ったまま動かす
+      tbDrag.grabOffX = 0; tbDrag.grabOffZ = 0;
+      if (_isSlabType(best.type)) {
+        const hit = _tbProject(cx, cy);
+        if (hit) {
+          tbDrag.grabOffX = best.mesh.position.x - hit.x;
+          tbDrag.grabOffZ = best.mesh.position.z - hit.z;
+        }
+      }
+      tbDrag.pickStartCX = cx; tbDrag.pickStartCY = cy;
+      tbDrag.lastCX = cx; tbDrag.lastCY = cy;
+      scene.add(glowMesh);
+      glowMesh.position.copy(best.mesh.position);
+      glowMesh.visible = !_isSlabType(best.type);
+      glowMat.color.set(best.type === 'proton' ? 0xff8888 : 0x3399ff);
+      controls.enabled = false;
+      renderer.domElement.style.cursor = 'grabbing';
+      return true;
+    }
+
+    // ===== スプライトテクスチャ =====
+    function makeCrossTexture() {
+      const s = 256;
+      const cv = document.createElement('canvas'); cv.width = cv.height = s;
+      const ctx = cv.getContext('2d');
+      const cx = s/2, cy = s/2, armH = s*0.46, armV = s*0.403, wH = s*0.08, wV = s*0.095;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - armH, cy - wH/2, armH*2, wH);
+      ctx.fillRect(cx - wV/2, cy - armV, wV, armV*2);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+    const _crossTex = makeCrossTexture();
+    function makeCrossSprite() {
+      const mat = new THREE.SpriteMaterial({ map: _crossTex, transparent: true, depthTest: false, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      scene.add(sprite);
+      return sprite;
+    }
+    function makeMinusTexture() {
+      const s = 256;
+      const cv = document.createElement('canvas'); cv.width = cv.height = s;
+      const ctx = cv.getContext('2d');
+      const cx = s/2, cy = s/2, armH = s*0.46, wH = s*0.08;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - armH, cy - wH/2, armH*2, wH);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+    const _minusTex = makeMinusTexture();
+    function makeMinusSprite() {
+      const mat = new THREE.SpriteMaterial({ map: _minusTex, transparent: true, depthTest: false, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      scene.add(sprite);
+      return sprite;
+    }
+    function make1CTexture() {
+      const s = 256;
+      const cv = document.createElement('canvas'); cv.width = cv.height = s;
+      const ctx = cv.getContext('2d');
+      let fontSize = s;
+      do {
+        fontSize--;
+        ctx.font = `bold ${fontSize}px sans-serif`;
+      } while (ctx.measureText('+1C').width > s * 0.90 && fontSize > 10);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('+1C', s / 2, s / 2);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+    const _1CTex = make1CTexture();
+    function make1CSprite() {
+      const mat = new THREE.SpriteMaterial({ map: _1CTex, transparent: true, depthTest: false, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      scene.add(sprite);
+      return sprite;
+    }
+
+    // ===== 球マテリアル =====
+    function makeShadedSphereMaterial(hexColor) {
+      return new THREE.ShaderMaterial({
+        uniforms: { baseColor: { value: new THREE.Color(hexColor) } },
+        vertexShader: `
+          varying vec3 vNormalView;
+          void main() {
+            vNormalView = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 baseColor;
+          varying vec3 vNormalView;
+          void main() {
+            vec3 N = normalize(vNormalView);
+            vec3 V = vec3(0.0, 0.0, 1.0);
+            float ndotv = max(dot(N, V), 0.0);
+            float shade = pow(ndotv, 0.55);
+            vec3 dark   = baseColor * 0.85;
+            vec3 bright = mix(baseColor, vec3(1.0), 0.12);
+            vec3 color  = mix(dark, bright, shade);
+            vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+            vec3 H = normalize(L + V);
+            float spec = pow(max(dot(N, H), 0.0), 32.0);
+            color += vec3(1.0) * spec * 0.85;
+            float fresnel = pow(1.0 - ndotv, 3.0);
+            color += baseColor * fresnel * 0.3;
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `,
+      });
+    }
+
+    // 矢じり（「く」の字）を1枚の多角形として作る。
+    // 羽根2本を別々の矩形で描くと先端に切れ目が出るため、
+    // 先端を留め継ぎ（miter）して繋いだ形状にしている。
+    //   x, zt : 先端の座標 ／ a : 羽根の半幅 ／ hb : 羽根が伸びるZ方向の量
+    //   w     : 線の太さ   ／ y : 高さ
+    function makeChevronGeometry(x, zt, a, hb, w, y) {
+      const m = Math.hypot(a, hb);
+      const sgn = Math.sign(hb) || 1;
+      const miter = (w / 2) * m / a;          // 先端が伸びる量
+      const onx =  Math.abs(hb) / m * (w / 2);
+      const onz = -sgn * a / m * (w / 2);
+      const apexOut = [x, zt - sgn * miter];
+      const apexIn  = [x, zt + sgn * miter];
+      const rx = x + a, lx = x - a, ez = zt + hb;
+      const rOut = [rx + onx, ez + onz], rIn = [rx - onx, ez - onz];
+      const lOut = [lx - onx, ez + onz], lIn = [lx + onx, ez - onz];
+      const P = [];
+      const push = (p) => P.push(p[0], y, p[1]);
+      // 左の羽根
+      push(apexOut); push(lOut); push(lIn);
+      push(apexOut); push(lIn);  push(apexIn);
+      // 右の羽根
+      push(apexOut); push(apexIn); push(rIn);
+      push(apexOut); push(rIn);   push(rOut);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      return g;
+    }
+
+    // ===== 導体（「静電気力」シミュから移植）=====
+    // 写真の向きに合わせて横長（X=8, Z=6）にしてある
+    const COND_W = 20.2, COND_D = 6, COND_T = 0.3;   // 横幅は極板と同じ（UF_PR - UF_PL）
+    const COND_CHARGE_R = 0.35;
+    const COND_EL_R     = COND_CHARGE_R * 0.5;
+    const _cMinPE = COND_CHARGE_R * 1.5;   // 陽子＋電子の最接近距離
+    const _cMinEE = COND_CHARGE_R;         // 電子どうしの最接近距離
+    // 電子が動ける範囲＝板の縁から電子の半径だけ内側（縁まで届く）
+    const COND_BX = COND_W / 2 - COND_EL_R;
+    const COND_BZ = COND_D / 2 - COND_EL_R;
+    // 陽子の格子。間隔2ユニットのまま板の横幅いっぱいに並べる（縦は3行）
+    const COND_ZS = [-2, 0, 2];
+    const COND_XS = [];
+    for (let x = -(COND_W / 2 - 1.1); x <= COND_W / 2 - 1.1; x += 2) COND_XS.push(x);
+    const _condProtonPos = [];
+    for (const x of COND_XS) for (const z of COND_ZS) _condProtonPos.push({ x, z });
+
+    // 金属板の質感。極板と同じくグラデーションのテクスチャで光沢を出すが、
+    // 極板と区別できるよう一段暗いスチール調にしてある
+    const conductorMat = (function () {
+      const c = document.createElement('canvas');
+      c.width = 8; c.height = 64;
+      const g = c.getContext('2d');
+      const grad = g.createLinearGradient(0, 0, 0, 64);
+      grad.addColorStop(0.00, '#5b636f');
+      grad.addColorStop(0.15, '#b7bfca');
+      grad.addColorStop(0.44, '#8a929e');
+      grad.addColorStop(0.60, '#7a828e');
+      grad.addColorStop(0.85, '#a6aeb9');
+      grad.addColorStop(1.00, '#565e69');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 8, 64);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return new THREE.MeshBasicMaterial({ map: t });
+    })();
+
+    // 球の表面に直接記号を描くシェーダー（別メッシュにすると浮いて見えるため）
+    function _condMarkMaterial(hexColor, halfLen, halfWid, withVertical) {
+      const AL = halfLen.toFixed(6), AW = halfWid.toFixed(6);
+      return new THREE.ShaderMaterial({
+        uniforms: { baseColor: { value: new THREE.Color(hexColor) } },
+        vertexShader: `
+          varying vec3 vNormalView;
+          varying vec3 vLocalPos;
+          void main() {
+            vNormalView = normalize(normalMatrix * normal);
+            vLocalPos   = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 baseColor;
+          varying vec3 vNormalView;
+          varying vec3 vLocalPos;
+          void main() {
+            vec3 N = normalize(vNormalView);
+            vec3 V = vec3(0.0, 0.0, 1.0);
+            float ndotv = max(dot(N, V), 0.0);
+            float shade = pow(ndotv, 0.55);
+            vec3 dark   = baseColor * 0.85;
+            vec3 bright = mix(baseColor, vec3(1.0), 0.12);
+            vec3 color  = mix(dark, bright, shade);
+            vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+            vec3 H = normalize(L + V);
+            float spec = pow(max(dot(N, H), 0.0), 32.0);
+            color += vec3(1.0) * spec * 0.85;
+            float fresnel = pow(1.0 - ndotv, 3.0);
+            color += baseColor * fresnel * 0.3;
+            if (vLocalPos.y > 0.0) {
+              float al = ${AL};
+              float aw = ${AW};
+              bool mark = (abs(vLocalPos.x) < al && abs(vLocalPos.z) < aw)
+                ${withVertical ? '|| (abs(vLocalPos.z) < al && abs(vLocalPos.x) < aw)' : ''};
+              if (mark) color = vec3(1.0);
+            }
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `,
+      });
+    }
+    const _condPlusMat  = _condMarkMaterial(0xff5500, COND_CHARGE_R * 0.88, COND_CHARGE_R * 0.10, true);
+    const _condMinusMat = _condMarkMaterial(0x0066ff, COND_EL_R * 0.88,     COND_EL_R * 0.10,     false);
+    const _condProtonGeo   = new THREE.SphereGeometry(COND_CHARGE_R, 32, 24);
+    const _condElectronGeo = new THREE.SphereGeometry(COND_EL_R, 24, 18);
+
+    // 置かれている導体すべての自由電子を毎フレーム動かすため一覧で持つ
+    // 置かれている導体の一覧。電子の座標は板ローカルなので、
+    // 斥力や衝突の計算は必ず同じ板の中だけで行う
+    const conductors = [];   // { mesh, electrons: [{ mesh, vel, targetVel, retargetTimer }] }
+
+    function makeConductorMesh() {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(COND_W, COND_T, COND_D), conductorMat);
+      const chargeY = 0.15;
+      for (const pp of _condProtonPos) {
+        const m = new THREE.Mesh(_condProtonGeo, _condPlusMat);
+        m.position.set(pp.x, chargeY, pp.z);
+        mesh.add(m);
+      }
+      // 陽子の格子と互い違いになる位置から始める
+      const own = [];
+      for (const x of COND_XS.map(v => v - 0.5)) {
+        for (const z of COND_ZS) {
+          const e = new THREE.Mesh(_condElectronGeo, _condMinusMat);
+          e.position.set(x, chargeY, z);
+          mesh.add(e);
+          const fe = {
+            mesh: e,
+            vel:       new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2),
+            targetVel: new THREE.Vector3(),
+            retargetTimer: Math.random() * 0.8,
+          };
+          own.push(fe);
+        }
+      }
+      const entry = { mesh, electrons: own };
+      conductors.push(entry);
+      mesh.userData.condEntry = entry;   // 削除時に一覧から外すため
+      return mesh;
+    }
+
+    // 導体が極板間にすっぽり入っているか（横は極板と重なり、縦はギャップ内）
+    function _condInGap(mesh) {
+      const x = mesh.position.x, z = mesh.position.z;
+      return (z - COND_D / 2) > UF_GAP_TOP && (z + COND_D / 2) < UF_GAP_BOT
+          && (x + COND_W / 2) > UF_PL && (x - COND_W / 2) < UF_PR;
+    }
+    // 電場中で自由電子が受けるドリフト速度（3Vのときの基準値）
+    const COND_DRIFT = 0.9;
+    const UF_VMAX = 5;        // つまみの最大値
+
+    // 上面に集まった電子が作る逆向きの電場が、外部の電場を打ち消していく。
+    // 釣り合う枚数（＝電圧に比例）に達すると正味の力が0になり移動が止まる。
+    // 少なすぎれば上へ、多すぎれば下へ戻る向きに働くので自動で釣り合う
+    function _condDriftFactor(cond) {
+      const total = cond.electrons.length;
+      if (!total) return 0;
+      const target = total * (ufVoltage / UF_VMAX);   // 釣り合う表面電子数
+      const net = (target - _condElectronsAtTop(cond)) / total;
+      return THREE.MathUtils.clamp(net * 6, -1, 1);
+    }
+
+    // 自由電子のランダムウォーク＋衝突（導体ローカルのXZ平面内）
+    function updateConductorElectrons(dt) {
+      const edt = Math.min(dt, 0.05);
+      for (const cond of conductors) _updateOneConductor(cond, edt);
+    }
+
+    function _updateOneConductor(cond, edt) {
+      const conductorElectrons = cond.electrons;
+      const repR = 2.0, repStr = 0.4;
+
+      // 極板間にあるときだけ、電場から受ける力で正極板側（−Z）へ寄る。
+      // 電場 E = V/d なので、ドリフトの速さは電源電圧に比例する
+      // 速さは電場の強さ（∝電圧）、向きと停止は打ち消しの釣り合いで決まる
+      const drift = _condInGap(cond.mesh)
+        ? COND_DRIFT * (ufVoltage / UF_V0) * _condDriftFactor(cond) : 0;
+
+      // 弱い斥力（集中しすぎを穏やかに防ぐ）
+      for (let i = 0; i < conductorElectrons.length; i++) {
+        const pi = conductorElectrons[i].mesh.position;
+        for (let j = i + 1; j < conductorElectrons.length; j++) {
+          const pj = conductorElectrons[j].mesh.position;
+          const dx = pi.x - pj.x, dz = pi.z - pj.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < repR * repR && d2 > 0.001) {
+            const d = Math.sqrt(d2);
+            const f = repStr * (1 - d / repR) * edt;
+            const nx = dx / d, nz = dz / d;
+            conductorElectrons[i].vel.x += nx * f; conductorElectrons[i].vel.z += nz * f;
+            conductorElectrons[j].vel.x -= nx * f; conductorElectrons[j].vel.z -= nz * f;
+          }
+        }
+      }
+
+      for (const fe of conductorElectrons) {
+        fe.retargetTimer -= edt;
+        if (fe.retargetTimer <= 0) {
+          const spd = 0.4 + Math.random() * 0.8;
+          const ang = Math.random() * Math.PI * 2;
+          fe.targetVel.set(Math.cos(ang) * spd, 0, Math.sin(ang) * spd);
+          fe.retargetTimer = 0.5 + Math.random() * 1.0;
+        }
+        fe.vel.lerp(fe.targetVel, 3.0 * edt);
+        const s = Math.hypot(fe.vel.x, fe.vel.z);
+        if (s > 1.5) { fe.vel.x *= 1.5 / s; fe.vel.z *= 1.5 / s; }
+        const p = fe.mesh.position;
+        p.x += fe.vel.x * edt;
+        // ドリフトは速度系とは別に加える。こうすると壁で跳ね返されても
+        // 押し戻され続け、正極板側の面に集まった状態が保たれる
+        p.z += (fe.vel.z - drift) * edt;
+        // 陽子との貫通防止
+        for (const pp of _condProtonPos) {
+          const dx = p.x - pp.x, dz = p.z - pp.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < _cMinPE * _cMinPE && d2 > 0.0001) {
+            const d = Math.sqrt(d2), nx = dx / d, nz = dz / d;
+            p.x = pp.x + nx * _cMinPE;
+            p.z = pp.z + nz * _cMinPE;
+            const vn = fe.vel.x * nx + fe.vel.z * nz;
+            if (vn < 0) { fe.vel.x -= 2 * vn * nx; fe.vel.z -= 2 * vn * nz; }
+          }
+        }
+        if (p.x < -COND_BX) { p.x = -COND_BX; fe.vel.x =  Math.abs(fe.vel.x); fe.targetVel.x =  Math.abs(fe.targetVel.x); }
+        if (p.x >  COND_BX) { p.x =  COND_BX; fe.vel.x = -Math.abs(fe.vel.x); fe.targetVel.x = -Math.abs(fe.targetVel.x); }
+        if (p.z < -COND_BZ) { p.z = -COND_BZ; fe.vel.z =  Math.abs(fe.vel.z); fe.targetVel.z =  Math.abs(fe.targetVel.z); }
+        if (p.z >  COND_BZ) { p.z =  COND_BZ; fe.vel.z = -Math.abs(fe.vel.z); fe.targetVel.z = -Math.abs(fe.targetVel.z); }
+      }
+
+      // 電子どうしの貫通防止（弾性衝突）
+      for (let i = 0; i < conductorElectrons.length; i++) {
+        const a = conductorElectrons[i], pa = a.mesh.position;
+        for (let j = i + 1; j < conductorElectrons.length; j++) {
+          const b = conductorElectrons[j], pb = b.mesh.position;
+          const dx = pa.x - pb.x, dz = pa.z - pb.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < _cMinEE * _cMinEE && d2 > 0.0001) {
+            const d = Math.sqrt(d2), nx = dx / d, nz = dz / d;
+            const sep = (_cMinEE - d) * 0.5;
+            pa.x += nx * sep; pa.z += nz * sep;
+            pb.x -= nx * sep; pb.z -= nz * sep;
+            const dvn = (a.vel.x - b.vel.x) * nx + (a.vel.z - b.vel.z) * nz;
+            if (dvn < 0) {
+              a.vel.x -= dvn * nx; a.vel.z -= dvn * nz;
+              b.vel.x += dvn * nx; b.vel.z += dvn * nz;
+            }
+          }
+        }
+      }
+    }
+
+    // ===== 不導体（誘電体）=====
+    // 電子は構成粒子から離れられないので、粒子ごとに電子の位置がずれる＝誘電分極。
+    // 内部にできる逆向きの電場は外部を完全には打ち消せず、E は 0 にならない
+    const INS_MOL_R   = 0.35;     // 構成粒子の大きさ
+    const INS_E_RATIO = 0.4;      // 内部に残る電場 E' の割合（E' = 0.4E）
+
+    const insulatorMat = (function () {
+      const c = document.createElement('canvas');
+      c.width = 8; c.height = 64;
+      const g = c.getContext('2d');
+      const grad = g.createLinearGradient(0, 0, 0, 64);
+      grad.addColorStop(0.00, '#cdb994');
+      grad.addColorStop(0.16, '#f2e6d2');
+      grad.addColorStop(0.50, '#e2d2b8');
+      grad.addColorStop(0.86, '#efe2ce');
+      grad.addColorStop(1.00, '#c9b48e');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 8, 64);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return new THREE.MeshBasicMaterial({ map: t });
+    })();
+
+    // 構成粒子は常に ＋ と − を持つ双極子。ローカル−Z側が −、+Z側が ＋。
+    // 電場の中では − が正極板側（−Z）へ、＋ が負極板側（+Z）へ引かれるので、
+    // 粒子をY軸まわりに回すだけで「向きの偏り」を表せる
+    const _insMolMat = (function () {
+      const AL = (INS_MOL_R * 0.34).toFixed(6);   // 記号の腕の半長
+      const AW = (INS_MOL_R * 0.10).toFixed(6);   // 記号の腕の半幅
+      const CZ = (INS_MOL_R * 0.46).toFixed(6);   // ＋/− を置くZオフセット
+      return new THREE.ShaderMaterial({
+        vertexShader: `
+          varying vec3 vNormalView;
+          varying vec3 vLocalPos;
+          void main() {
+            vNormalView = normalize(normalMatrix * normal);
+            vLocalPos   = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vNormalView;
+          varying vec3 vLocalPos;
+          void main() {
+            vec3 negCol = vec3(0.36, 0.56, 0.85);   // −側
+            vec3 posCol = vec3(0.91, 0.54, 0.24);   // ＋側
+            // ローカルZで塗り分ける（※ half は GLSL の予約語なので使わない）
+            float zSide = smoothstep(-0.12, 0.12, vLocalPos.z / ${INS_MOL_R.toFixed(3)});
+            vec3 baseColor = mix(negCol, posCol, zSide);
+
+            vec3 N = normalize(vNormalView);
+            vec3 V = vec3(0.0, 0.0, 1.0);
+            float ndotv = max(dot(N, V), 0.0);
+            float shade = pow(ndotv, 0.55);
+            vec3 dark   = baseColor * 0.85;
+            vec3 bright = mix(baseColor, vec3(1.0), 0.12);
+            vec3 color  = mix(dark, bright, shade);
+            vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+            vec3 H = normalize(L + V);
+            float spec = pow(max(dot(N, H), 0.0), 32.0);
+            color += vec3(1.0) * spec * 0.85;
+            float fresnel = pow(1.0 - ndotv, 3.0);
+            color += baseColor * fresnel * 0.3;
+
+            if (vLocalPos.y > 0.0) {
+              float al = ${AL}, aw = ${AW}, cz = ${CZ};
+              bool minusMark = abs(vLocalPos.x) < al && abs(vLocalPos.z + cz) < aw;
+              bool plusMark  = (abs(vLocalPos.x) < al && abs(vLocalPos.z - cz) < aw)
+                            || (abs(vLocalPos.z - cz) < al && abs(vLocalPos.x) < aw);
+              if (minusMark || plusMark) color = vec3(1.0);
+            }
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `,
+      });
+    })();
+
+    const _insMolGeo = new THREE.SphereGeometry(INS_MOL_R, 24, 18);
+    const insulators = [];   // { mesh, mols }
+
+    function makeInsulatorMesh() {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(COND_W, COND_T, COND_D), insulatorMat);
+      const mols = [];
+      for (const x of COND_XS) {
+        for (const z of COND_ZS) {
+          const m = new THREE.Mesh(_insMolGeo, _insMolMat);
+          m.position.set(x, 0.15, z);
+          m.scale.set(1, 1, 1.3);                 // 双極子らしく軸方向へ少し伸ばす
+          m.userData.baseAngle = (Math.random() * 2 - 1) * Math.PI;  // ばらばらの向き
+          m.rotation.y = m.userData.baseAngle;
+          mesh.add(m);
+          mols.push(m);
+        }
+      }
+      const entry = { mesh, mols };
+      insulators.push(entry);
+      mesh.userData.insEntry = entry;
+      return mesh;
+    }
+
+    // 極板の外では向きがばらばら。極板間に入ると − が正極板側へ、＋ が負極板側へ
+    // 引かれて向きが揃っていく。揃い方（偏りの強さ）は電圧に比例する
+    function updateInsulators(dt) {
+      const k = Math.min(1, 3.0 * dt);            // 向きを変える速さ
+      for (const ins of insulators) {
+        const inGap = _condInGap(ins.mesh);
+        const align = inGap ? ufVoltage / UF_VMAX : 0;
+        // 分極電荷の表示は「正・負がON かつ 極板間で電場がある」ときだけ
+        const polarized = ufCharges.visible && inGap && ufVoltage > 0;
+        if (!!(ins.marks && ins.marks.visible) !== polarized) _insSetPolarized(ins, polarized);
+        for (const m of ins.mols) {
+          const target = m.userData.baseAngle * (1 - align);
+          m.rotation.y += (target - m.rotation.y) * k;
+        }
+        _insSyncInnerLines(ins, inGap);
+      }
+    }
+
+    // 不導体の中に描く線は「分極電荷がつくる逆向きの電場」であって、
+    // 残っている電場 E' ではない。外部 E のうち (1 - INS_E_RATIO) だけを打ち消すので、
+    // 本数は N × (1 - INS_E_RATIO)。残るのが E' = INS_E_RATIO × E になり、E-d グラフと合う。
+    // （導体は全部を打ち消すので本数が N。これが「残っている電場ではない」ことの証拠）
+    // ※ 2026-09-14 に「0.4 と 0.625 が食いちがっている」と報告したが、**これは私の読み違い**。
+    //    いったん 0.4 に変えてしまい、絵を撮って気づいて戻した
+    function _insInnerLineCount() {
+      return Math.round(ufLineCount() * (1 - INS_E_RATIO));
+    }
+
+    // 内部の線は外部の線と本数が違うため、x がたまたま一致して重なることがある。
+    // 近すぎるものは外部の半間隔だけずらして谷間へ逃がす
+    function _avoidExternalLines(xs) {
+      const N = ufLineCount();
+      if (!N) return xs;
+      const s  = (UF_PR - UF_PL) / N;
+      const cx = (UF_PL + UF_PR) / 2;
+      const ext = [];
+      for (let i = 0; i < N; i++) ext.push(UF_PL + s * (i + 0.5) - cx);
+      const lim = COND_W / 2 - 1.0;
+      return xs.map(x => {
+        let near = ext[0];
+        for (const p of ext) if (Math.abs(p - x) < Math.abs(near - x)) near = p;
+        if (Math.abs(near - x) >= 0.5) return x;
+        return THREE.MathUtils.clamp(x >= near ? near + s / 2 : near - s / 2, -lim, lim);
+      });
+    }
+
+    function _insInnerLineXs() {
+      const n  = _insInnerLineCount();
+      const cx = (UF_PL + UF_PR) / 2;
+      const s  = (UF_PR - UF_PL) / (n || 1);
+      const xs = [];
+      for (let i = 0; i < n; i++) xs.push(UF_PL + s * (i + 0.5) - cx);
+      return _avoidExternalLines(xs);
+    }
+
+    function _insBuildInnerLines(ins) {
+      if (ins.innerLines) {
+        for (const m of ins.innerLines.children) m.geometry.dispose();
+        ins.mesh.remove(ins.innerLines);
+        ins.innerLines = null;
+      }
+      const grp = new THREE.Group();
+      const LW = 0.18, y = 0.55;      // 外部の電気力線と同じ高さ
+      const AW = 0.40, AH = 0.80;
+      const mat = _ufMatLine;
+      // ＋/− マークに食い込まないよう導体と同じ余白を取る
+      const zStart = (COND_D / 2 - 0.9) - 0.7;    // ＋マークの内側から
+      const zEnd   = (-COND_D / 2 + 0.9) + 0.5;   // −マークの手前まで
+
+      for (const x of _insInnerLineXs()) {
+        const nx = LW / 2;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute([
+          x - nx, y, zStart,  x + nx, y, zStart,  x + nx, y, zEnd,
+          x - nx, y, zStart,  x + nx, y, zEnd,    x - nx, y, zEnd,
+        ], 3));
+        grp.add(new THREE.Mesh(g, mat));
+        grp.add(new THREE.Mesh(makeChevronGeometry(x, zEnd, AW, AH, LW, y), mat));
+      }
+      ins.mesh.add(grp);
+      ins.innerLines = grp;
+      ins.innerLineKey = _insInnerLineXs().join(',');
+    }
+
+    // 分極電荷のマーク（上面が−、下面が＋）。
+    // 内部の線は 下面の＋ から 上面の− へ向かう「分極電荷がつくる電場」なので、
+    // マークは線の根元と先端に置く ＝ 本数も位置も内部の線と同じでよい
+    function _insMarkXs() {
+      return _insInnerLineXs();
+    }
+
+    function _insBuildMarks(ins) {
+      if (ins.marks) {
+        for (const m of ins.marks.children) m.geometry.dispose();
+        ins.mesh.remove(ins.marks);
+        ins.marks = null;
+      }
+      const grp = new THREE.Group();
+      const BAR = COND_MARK_BAR, LEN = COND_MARK_LEN, y = 0.2;
+      const zTop = -COND_D / 2 + 0.9, zBot = COND_D / 2 - 0.9;
+      function bar(x, z, w, d, mat) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+        m.rotation.x = -Math.PI / 2;
+        m.position.set(x, y, z);
+        grp.add(m);
+      }
+      for (const x of _insMarkXs()) {
+        bar(x, zTop, LEN, BAR, _ufMatNeg);   // −（正極板に近い面）
+        bar(x, zBot, LEN, BAR, _ufMatPos);   // ＋の横棒
+        bar(x, zBot, BAR, LEN, _ufMatPos);   // ＋の縦棒
+      }
+      grp.visible = false;
+      ins.mesh.add(grp);
+      ins.marks = grp;
+      ins.markKey = _insMarkXs().join(',');
+    }
+
+    // 分極電荷の表示に切り替える／構成粒子の表示に戻す
+    function _insSetPolarized(ins, on) {
+      if (!ins.marks || ins.markKey !== _insMarkXs().join(',')) _insBuildMarks(ins);
+      ins.marks.visible = on;
+      for (const m of ins.mols) m.visible = !on;
+    }
+
+    function _insSyncInnerLines(ins, inGap) {
+      const want = inGap && ufFieldLines.visible && _insInnerLineCount() > 0;
+      if (want && ins.innerLineKey !== _insInnerLineXs().join(',')) _insBuildInnerLines(ins);
+      if (ins.innerLines) ins.innerLines.visible = want;
+    }
+
+    // ===== 導体の誘導電荷表示 =====
+    // 自由電子が上辺に十分集まった＝静電誘導が完了した状態とみなし、
+    // 個々の電荷ではなく上面が−・下面が＋という誘導電荷の表示に切り替える
+    // 「上辺に接している」だと低電圧で判定が厳しすぎるため、
+    // 上側のこの帯に入っていれば表面へ移った電子として数える。
+    // 一番上の陽子列（z=-2）より外側がおおよそこの範囲にあたる
+    const COND_TOP_BAND = 0.9;
+    // 集まる枚数は電圧に比例するので、固定数ではなく
+    // 「釣り合う枚数の8割以上まで集まったか」で静電誘導の完了を判定する
+    // on には「いま誘導電荷の表示になっているか」を渡す。
+    // 同じしきい値だと、上面の電子数が境目で揺れるたびに表示が切りかわってしまうので、
+    // いったん切りかわったら少し粘らせる（0.8 で入り、0.6 で戻る）
+    function _condIsPolarizable(cond, on) {
+      const total = cond.electrons.length;
+      const target = total * (ufVoltage / UF_VMAX);
+      if (target < 1) return false;
+      const ratio = _condElectronsAtTop(cond) / target;
+      return on ? ratio >= 0.6 : ratio >= 0.8;
+    }
+
+    // 「正・負」を出したまま電圧を上げても、電子が集まりきった時点で
+    // 誘導電荷の表示に切りかわるように、毎コマ見直す。
+    // （不導体は最初からこうなっていて、導体だけボタンを押し直す必要があった）
+    function syncConductorPolarized() {
+      for (const cond of conductors) {
+        const now  = !!(cond.marks && cond.marks.visible);
+        const want = ufCharges.visible && _condIsPolarizable(cond, now);
+        if (now !== want) _condSetPolarized(cond, want);
+      }
+    }
+
+    function _condElectronsAtTop(cond) {
+      let n = 0;
+      for (const fe of cond.electrons) {
+        if (fe.mesh.position.z <= -COND_BZ + COND_TOP_BAND) n++;
+      }
+      return n;
+    }
+
+    // マークを置くX（導体ローカル）。
+    // 本数は電気力線と同じにして1対1に対応させつつ、線の真上だと重なるので
+    // 各線のすぐ右へ寄せる。ずらし幅は隣の線に触れない範囲に収めてある
+    const COND_MARK_DX  = 0.72;
+    const COND_MARK_LEN = 0.8, COND_MARK_BAR = 0.20;
+    function _condMarkXs() {
+      const N  = ufLineCount();
+      const s  = (UF_PR - UF_PL) / N;
+      const cx = (UF_PL + UF_PR) / 2;             // 極板＝吸着した導体の中心
+      const lim = COND_W / 2 - COND_MARK_LEN / 2 - 0.15;   // 板からはみ出さない範囲
+      const xs = [];
+      for (let i = 0; i < N; i++) {
+        xs.push(Math.min(UF_PL + s * (i + 0.5) - cx + COND_MARK_DX, lim));
+      }
+      return xs;
+    }
+
+    function _condBuildMarks(cond) {
+      if (cond.marks) {                            // 電圧が変わると位置も変わるので作り直す
+        for (const m of cond.marks.children) m.geometry.dispose();
+        cond.mesh.remove(cond.marks);
+        cond.marks = null;
+      }
+      const grp = new THREE.Group();
+      // 線の隣に収まるよう極板のマークより小さめにする
+      const BAR = COND_MARK_BAR, LEN = COND_MARK_LEN, y = 0.2;
+      const zTop = -COND_D / 2 + 0.9, zBot = COND_D / 2 - 0.9;
+      function bar(x, z, w, d, mat) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+        m.rotation.x = -Math.PI / 2;
+        m.position.set(x, y, z);
+        grp.add(m);
+      }
+      for (const x of _condMarkXs()) {
+        bar(x, zTop, LEN, BAR, _ufMatNeg);   // −（電子が集まった上面）
+        bar(x, zBot, LEN, BAR, _ufMatPos);   // ＋の横棒（下面）
+        bar(x, zBot, BAR, LEN, _ufMatPos);   // ＋の縦棒
+      }
+      grp.visible = false;
+      cond.mesh.add(grp);
+      cond.marks = grp;
+
+      _condBuildInnerLines(cond, zTop, zBot);
+    }
+
+    // 誘導電荷がつくる導体内部の電気力線。
+    // 下面の＋から上面の−へ向かうので、外部の電場とはちょうど逆向きになり、
+    // 本数が同じことで「内部の電場は打ち消されて0」を表す
+    function _condBuildInnerLines(cond, zTop, zBot) {
+      if (cond.innerLines) {
+        for (const m of cond.innerLines.children) m.geometry.dispose();
+        cond.mesh.remove(cond.innerLines);
+        cond.innerLines = null;
+      }
+      const grp = new THREE.Group();
+      // 短い矢印なので、外部の線より細く・矢じりも小さめにして形を整える
+      const LW = 0.18, y = 0.55;      // 高さは外部の電気力線と同じ
+      const AW = 0.40, AH = 0.80;     // 矢じりの半幅・長さ
+      const mat = _ufMatLine;
+      const zStart = zBot - 0.7;      // ＋マークの内側から
+      const zEnd   = zTop + 0.5;      // −マークの手前まで
+
+      function seg(x1, z1, x2, z2, w) {
+        const dx = x2 - x1, dz = z2 - z1, L = Math.hypot(dx, dz) || 1;
+        const nx = -dz / L * w / 2, nz = dx / L * w / 2;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute([
+          x1+nx, y, z1+nz,  x1-nx, y, z1-nz,  x2-nx, y, z2-nz,
+          x1+nx, y, z1+nz,  x2-nx, y, z2-nz,  x2+nx, y, z2+nz,
+        ], 3));
+        grp.add(new THREE.Mesh(g, mat));
+      }
+
+      for (const x of _condMarkXs()) {
+        seg(x, zStart, x, zEnd, LW);                 // 本体（＋→−）
+        grp.add(new THREE.Mesh(makeChevronGeometry(x, zEnd, AW, AH, LW, y), mat));
+      }
+      grp.visible = false;
+      cond.mesh.add(grp);
+      cond.innerLines = grp;
+    }
+
+    // 誘導電荷を表示していて、かつ電気力線がONのときだけ内部の線を出す
+    function _condSyncInnerLines(cond) {
+      if (!cond.innerLines) return;
+      cond.innerLines.visible = !!(cond.marks && cond.marks.visible) && ufFieldLines.visible;
+    }
+
+    function _condSetPolarized(cond, on) {
+      _condBuildMarks(cond);
+      cond.marks.visible = on;
+      // 陽子と自由電子はまとめて表示を入れ替える
+      for (const child of cond.mesh.children) {
+        if (child !== cond.marks && child !== cond.innerLines) child.visible = !on;
+      }
+      _condSyncInnerLines(cond);
+    }
+
+    // ===== ドラッグ操作 =====
+    function beginToolboxDrag(type, cx, cy) {
+      const isSlab = type === 'conductor' || type === 'insulator';
+      const isConductor = isSlab;   // 板状のものはグローを出さない等、扱いを揃える
+      const isProton = type === 'proton' || type === 'proton1C';
+      const mesh = type === 'conductor' ? makeConductorMesh()
+        : type === 'insulator' ? makeInsulatorMesh()
+        : new THREE.Mesh(new THREE.SphereGeometry(0.96, 24, 18),
+                         makeShadedSphereMaterial(isProton ? 0xff5500 : 0x0066ff));
+      const initPos = _tbProject(cx, cy) || new THREE.Vector3();
+      mesh.position.copy(initPos);
+      scene.add(mesh);
+      const sprite = isConductor ? null
+        : type === 'proton1C' ? make1CSprite() : isProton ? makeCrossSprite() : makeMinusSprite();
+      if (sprite) updateCrossSprite(mesh, sprite);
+      tbDrag.active = true; tbDrag.pending = false;
+      tbDrag.type = type; tbDrag.mesh = mesh; tbDrag.sprite = sprite;
+      tbDrag.charge = 3;
+      tbDrag.isPickedParticle = false;
+      tbDrag.pickStartCX = cx; tbDrag.pickStartCY = cy;
+      tbDrag.lastCX = cx; tbDrag.lastCY = cy;
+      tbDrag.tab = currentTab;
+      tbDrag.grabOffX = 0; tbDrag.grabOffZ = 0;   // 出したては中心をカーソルに合わせる
+      scene.add(glowMesh);
+      glowMesh.position.copy(initPos);
+      glowMesh.visible = !isConductor;   // 板状の導体にグローは付けない
+      glowMat.color.set(isProton ? 0xff8800 : 0x3399ff);
+      controls.enabled = false;
+      renderer.domElement.style.cursor = 'grabbing';
+    }
+    function _snapToXZGrid(pos) {
+      const STEP = 3, SNAP_R = 1.2;
+      const sx = Math.round(pos.x / STEP) * STEP;
+      const sz = Math.round(pos.z / STEP) * STEP;
+      const dx = pos.x - sx, dz = pos.z - sz;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < SNAP_R) {
+        const t = 1 - d / SNAP_R;
+        const blend = t * t * (3 - 2 * t);
+        pos.x += (sx - pos.x) * blend;
+        pos.z += (sz - pos.z) * blend;
+      }
+    }
+    // 導体の中心が極板領域の中心に近づいたら、ぴったり重なるよう吸着させる。
+    // 導体の横幅は極板と同じなので、中心が一致すれば両端のラインも揃う
+    // 外側の縁では効かず、近づくほど滑らかに引き寄せ、内側では完全に一致させる
+    const COND_SNAP_R = 1.2, COND_SNAP_RIN = 0.45;
+    function _snapConductorToPlates(pos) {
+      const cx = (UF_PL + UF_PR) / 2;
+      const cz = (UF_GAP_TOP + UF_GAP_BOT) / 2;
+      const d = Math.hypot(pos.x - cx, pos.z - cz);
+      if (d >= COND_SNAP_R) return false;
+      const t = d <= COND_SNAP_RIN
+        ? 1
+        : 1 - (d - COND_SNAP_RIN) / (COND_SNAP_R - COND_SNAP_RIN);
+      const blend = t * t * (3 - 2 * t);   // smoothstep
+      pos.x += (cx - pos.x) * blend;
+      pos.z += (cz - pos.z) * blend;
+      return true;
+    }
+
+    function moveToolboxDrag(cx, cy) {
+      if (!tbDrag.active) return;
+      tbDrag.lastCX = cx; tbDrag.lastCY = cy;
+      const pos = _tbProject(cx, cy);
+      if (!pos) return;
+      pos.x += tbDrag.grabOffX ?? 0;
+      pos.z += tbDrag.grabOffZ ?? 0;
+      if (_isSlabType(tbDrag.type)) {
+        if (!_snapConductorToPlates(pos)) _snapToXZGrid(pos);
+      } else {
+        _snapToXZGrid(pos);
+      }
+      tbDrag.mesh.position.copy(pos);
+      glowMesh.position.copy(pos);
+      if (tbDrag.sprite) updateCrossSprite(tbDrag.mesh, tbDrag.sprite);
+    }
+    function endToolboxDrag() {
+      if (tbDrag.pending) { tbDrag.pending = false; controls.enabled = true; return; }
+      if (!tbDrag.active) return;
+      const dx = tbDrag.lastCX - tbDrag.pickStartCX;
+      const dy = tbDrag.lastCY - tbDrag.pickStartCY;
+      const isShortClick = tbDrag.isPickedParticle && (dx * dx + dy * dy) < 25;
+      const menuCX = tbDrag.lastCX, menuCY = tbDrag.lastCY;
+      let restoredParticle = null;
+      if (tbDrag.mesh) {
+        const p = { mesh: tbDrag.mesh, type: tbDrag.type, sprite: tbDrag.sprite,
+                    charge: tbDrag.charge ?? 3, tab: tbDrag.tab ?? 'potential' };
+        placedParticles.push(p);
+        // 電気量メニューは点電荷にだけ出す
+        if (isShortClick && (tbDrag.type === 'proton' || tbDrag.type === 'electron')) restoredParticle = p;
+      }
+      tbDrag.active = false; tbDrag.mesh = null; tbDrag.type = null; tbDrag.sprite = null;
+      tbDrag.isPickedParticle = false;
+      glowMesh.visible = false;
+      controls.enabled = true;
+      renderer.domElement.style.cursor = '';
+      if (restoredParticle) showChargeMenu(restoredParticle, menuCX, menuCY);
+    }
+
+    // ===== 右クリック削除メニュー =====
+    const _ctxMenuEl    = document.getElementById('particleContextMenu');
+    const _ctxDeleteBtn = document.getElementById('particleDeleteBtn');
+    let ctxMenuTarget = null;   // 電荷
+    let ctxArrowTarget = -1;    // 矢印のインデックス
+    function hideParticleContextMenu() {
+      _ctxMenuEl.style.display = 'none';
+      ctxMenuTarget = null; ctxArrowTarget = -1;
+    }
+    function _showCtxMenuAt(cx, cy) {
+      _ctxMenuEl.style.left = cx + 'px';
+      _ctxMenuEl.style.top  = cy + 'px';
+      _ctxMenuEl.style.display = 'block';
+    }
+    function showParticleContextMenu(p, cx, cy) {
+      ctxMenuTarget = p; ctxArrowTarget = -1;
+      _showCtxMenuAt(cx, cy);
+    }
+    function showArrowContextMenu(i, cx, cy) {
+      ctxMenuTarget = null; ctxArrowTarget = i;
+      _showCtxMenuAt(cx, cy);
+    }
+    function deletePlacedParticle(p) {
+      if (hoveredParticle === p) setHoveredParticle(null);
+      // 導体・不導体を消すときは一覧からも外す
+      if (p.mesh.userData.condEntry) {
+        const i = conductors.indexOf(p.mesh.userData.condEntry);
+        if (i !== -1) conductors.splice(i, 1);
+      }
+      if (p.mesh.userData.insEntry) {
+        const i = insulators.indexOf(p.mesh.userData.insEntry);
+        if (i !== -1) insulators.splice(i, 1);
+      }
+      p.mesh.removeFromParent();
+      if (p.sprite) p.sprite.removeFromParent();
+      // 板が自前で持っている形（箱・誘導電荷のマーク・内部の線）は捨てる。
+      // 中の陽子・電子・粒子は形も材質も全部の板で使い回しているので触らない
+      const ce = p.mesh.userData.condEntry, ie = p.mesh.userData.insEntry;
+      for (const grp of [ce && ce.marks, ce && ce.innerLines, ie && ie.marks, ie && ie.innerLines]) {
+        if (!grp) continue;
+        for (const m of grp.children) { try { m.geometry.dispose(); } catch (e) {} }
+      }
+      try { p.mesh.geometry.dispose(); } catch (e) {}
+      // 板の材質（conductorMat / insulatorMat）は使い回しなので捨てない
+      if (!_isSlabType(p.type)) { try { p.mesh.material.dispose(); } catch (e) {} }
+      try { if (p.sprite) p.sprite.material.dispose(); } catch (e) {}
+      const idx = placedParticles.indexOf(p);
+      if (idx !== -1) placedParticles.splice(idx, 1);
+    }
+    renderer.domElement.addEventListener('contextmenu', e => {
+      const p = checkHoverPlacedParticle(e.clientX, e.clientY);
+      if (p) { e.preventDefault(); showParticleContextMenu(p, e.clientX, e.clientY); return; }
+      const ai = window._hitArrowAt?.(e.clientX, e.clientY) ?? -1;
+      if (ai >= 0) { e.preventDefault(); showArrowContextMenu(ai, e.clientX, e.clientY); return; }
+      hideParticleContextMenu();
+    });
+    _ctxDeleteBtn.addEventListener('click', () => {
+      if (ctxMenuTarget) deletePlacedParticle(ctxMenuTarget);
+      else if (ctxArrowTarget >= 0) window._deleteArrowAt?.(ctxArrowTarget);
+      hideParticleContextMenu();
+    });
+    window.addEventListener('pointerdown', e => {
+      if (_ctxMenuEl.style.display !== 'none' && !_ctxMenuEl.contains(e.target)) hideParticleContextMenu();
+    });
+
+    // ===== ポインターイベント =====
+    window.addEventListener('pointermove', e => {
+      if (tbDrag.active) { moveToolboxDrag(e.clientX, e.clientY); return; }
+      if (tbDrag.pending) {
+        const dx = e.clientX - tbDrag.pendingX, dy = e.clientY - tbDrag.pendingY;
+        if (dx*dx + dy*dy > 25) {
+          // カーソルが地平線より上だと光線がXZ平面と交わらない。
+          // その場合は pending のまま待ち、地面に乗るまで電荷を出さない
+          if (!_tbProject(e.clientX, e.clientY)) return;
+          beginToolboxDrag(tbDrag.type, e.clientX, e.clientY);
+          moveToolboxDrag(e.clientX, e.clientY);
+        }
+        return;
+      }
+      const placedHover = checkHoverPlacedParticle(e.clientX, e.clientY);
+      if (placedHover) {
+        renderer.domElement.style.cursor = 'grab';
+        setHoveredParticle(placedHover);
+      } else {
+        setHoveredParticle(null);
+        renderer.domElement.style.cursor = '';
+      }
+    });
+    renderer.domElement.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      if (tryPickPlacedParticle(e.clientX, e.clientY)) { e.stopImmediatePropagation(); return; }
+    });
+    function releaseAll() {
+      endToolboxDrag();
+    }
+    window.addEventListener('pointerup',     releaseAll);
+    window.addEventListener('pointercancel', releaseAll);
+
+    // ===== 電気量メニュー =====
+    const _chargeMenuEl = document.getElementById('chargeMenu');
+    let chargeMenuTarget = null;
+
+    (function buildChargeMenu() {
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'padding:5px 14px 3px;font-size:11px;color:#5566aa;font-weight:700;text-align:center;white-space:nowrap;';
+      hdr.textContent = '電気量';
+      _chargeMenuEl.appendChild(hdr);
+      for (let c = 1; c <= 5; c++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.c = String(c);
+        btn.textContent = c + 'C';
+        btn.style.cssText = 'display:block;width:100%;border:none;background:none;padding:7px 20px;border-radius:7px;cursor:pointer;font-size:13px;color:#1a2040;text-align:center;white-space:nowrap;font-weight:400;';
+        btn.addEventListener('mouseover', () => { btn.style.background = 'rgba(70,90,160,0.10)'; });
+        btn.addEventListener('mouseout',  () => { _applyChargeHighlight(btn, c); });
+        btn.addEventListener('click', () => {
+          if (chargeMenuTarget) { chargeMenuTarget.charge = c; _refreshChargeHighlights(); }
+          hideChargeMenu();
+        });
+        _chargeMenuEl.appendChild(btn);
+      }
+    })();
+
+    function _applyChargeHighlight(btn, c) {
+      const active = chargeMenuTarget && chargeMenuTarget.charge === c;
+      btn.style.background = active ? 'rgba(70,90,160,0.12)' : 'none';
+      btn.style.fontWeight  = active ? '800' : '400';
+    }
+    function _refreshChargeHighlights() {
+      _chargeMenuEl.querySelectorAll('[data-c]').forEach(btn => {
+        _applyChargeHighlight(btn, parseInt(btn.dataset.c));
+      });
+    }
+    function showChargeMenu(particle, cx, cy) {
+      chargeMenuTarget = particle;
+      _chargeMenuEl.style.left    = cx + 'px';
+      _chargeMenuEl.style.top     = cy + 'px';
+      _chargeMenuEl.style.display = 'block';
+      _refreshChargeHighlights();
+    }
+    function hideChargeMenu() {
+      _chargeMenuEl.style.display = 'none';
+      chargeMenuTarget = null;
+    }
+    window.addEventListener('pointerdown', e => {
+      if (_chargeMenuEl.style.display !== 'none' && !_chargeMenuEl.contains(e.target)) hideChargeMenu();
+    });
+
+    // ===== 一様な電場シミュレーション =====
+    // --- 回路図（XZ平面上に配置）---
+    // 真上から見たとき 画面右 = +X、画面下 = +Z になる向きで描く
+    // 極板の配置（回路図・電気力線・目盛りで共有）
+    // 左端に基準軸を置くため、回路全体を元の位置から +5 だけ右へ寄せてある
+    const UF_WIRE = 0.32;                          // 導線の太さ
+    const UF_Y    = 0.05;                          // グリッド(y=0)とのZファイティング回避
+    const UF_PL = -18.6, UF_PR = 1.6;              // 極板の左端・右端
+    const UF_PLATE_T = 2.5;                        // 極板の厚み
+    const UF_PT = -11.25, UF_PB = 4.55;            // 上極板・下極板の中心Z
+    const UF_GAP_TOP = UF_PT + UF_PLATE_T / 2;     // 上極板の下面（= -10.0）
+    const UF_GAP_BOT = UF_PB - UF_PLATE_T / 2;     // 下極板の上面（=   3.3）
+    const UF_TOP_Z = -18.5, UF_BOT_Z = 11.3;       // 上・下の横導線のZ
+
+    (function buildUniformCircuit() {
+      const WIRE    = UF_WIRE;
+      const Y       = UF_Y;
+
+      const PL = UF_PL, PR = UF_PR, PLATE_T = UF_PLATE_T;
+      const PT = UF_PT, PB = UF_PB;
+      const WX = -8.4;                        // 極板から出る導線のX
+      const RX =  23.6;                       // 右側の縦導線のX
+      const TOP = UF_TOP_Z, BOT = UF_BOT_Z;   // 上・下の横導線のZ
+      const BAT_P = -5.3, BAT_N = -2.4;       // 電池の長線(+)・短線(−)のZ
+
+      const mat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+
+      // 金属板の質感：厚み方向に沿ったハイライトのグラデーション
+      // PlaneGeometry を -90° 倒すと UV.v の 1 側が世界の -Z（画面上側）に対応する
+      const plateMat = (function () {
+        const c = document.createElement('canvas');
+        c.width = 8; c.height = 64;
+        const g = c.getContext('2d');
+        const grad = g.createLinearGradient(0, 0, 0, 64);
+        grad.addColorStop(0.00, '#79808a');
+        grad.addColorStop(0.16, '#dbe0e7');
+        grad.addColorStop(0.46, '#aab1ba');
+        grad.addColorStop(0.62, '#98a0aa');
+        grad.addColorStop(0.86, '#ccd2d9');
+        grad.addColorStop(1.00, '#737a84');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 8, 64);
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        return new THREE.MeshBasicMaterial({ map: t, side: THREE.DoubleSide });
+      })();
+
+      // 対角2点で塗りつぶし長方形を置く
+      function rect(x1, z1, x2, z2, material = mat) {
+        const m = new THREE.Mesh(
+          new THREE.PlaneGeometry(Math.abs(x2-x1), Math.abs(z2-z1)), material);
+        m.rotation.x = -Math.PI / 2;
+        m.position.set((x1+x2)/2, Y, (z1+z2)/2);
+        uniformGroup.add(m);
+      }
+      // 軸平行の線。両端を太さの半分だけ伸ばし、角で隙間なく繋げる
+      function wire(x1, z1, x2, z2) {
+        const h = WIRE / 2;
+        rect(Math.min(x1,x2)-h, Math.min(z1,z2)-h,
+             Math.max(x1,x2)+h, Math.max(z1,z2)+h);
+      }
+
+      // 極板（金属板）
+      rect(PL, PT - PLATE_T/2, PR, PT + PLATE_T/2, plateMat);
+      rect(PL, PB - PLATE_T/2, PR, PB + PLATE_T/2, plateMat);
+
+      // 上極板 → 上 → 右 → 電池(+)
+      wire(WX, TOP, WX, PT - PLATE_T/2);
+      wire(WX, TOP, RX, TOP);
+      wire(RX, TOP, RX, BAT_P);
+
+      // 電池（長線 = +、短線 = −）
+      wire(18.8, BAT_P, 28.6, BAT_P);
+      wire(20.6, BAT_N, 27.4, BAT_N);
+
+      // 電池(−) → 下 → 左 → 下極板
+      wire(RX, BAT_N, RX, BOT);
+      wire(WX, BOT, RX, BOT);
+      wire(WX, PB + PLATE_T/2, WX, BOT);
+
+      // 接地（3本バー）
+      wire(RX, BOT, RX, 15.7);
+      wire(20.6, 15.7, 27.4, 15.7);
+      wire(21.6, 17.3, 26.4, 17.3);
+      wire(22.4, 18.5, 25.2, 18.5);
+    })();
+
+    // --- 基準軸・原点0・極板間隔d の記入 ---
+    (function buildUniformAnnotations() {
+      const AX   = UF_PL - 8.6;                        // 縦軸のX（極板の左端より左）
+      const Z0   = UF_GAP_BOT;                         // 原点＝下極板の上面（接地side）
+      const ZMID = (UF_GAP_TOP + UF_GAP_BOT) / 2;      // 極板間の中央
+      const W    = UF_WIRE, Y = UF_Y;
+      const mat  = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+
+      function rect(x1, z1, x2, z2) {
+        const m = new THREE.Mesh(
+          new THREE.PlaneGeometry(Math.abs(x2-x1), Math.abs(z2-z1)), mat);
+        m.rotation.x = -Math.PI / 2;
+        m.position.set((x1+x2)/2, Y, (z1+z2)/2);
+        uniformGroup.add(m);
+      }
+      function line(x1, z1, x2, z2) {
+        const h = W / 2;
+        rect(Math.min(x1,x2)-h, Math.min(z1,z2)-h, Math.max(x1,x2)+h, Math.max(z1,z2)+h);
+      }
+      // 折れ線を太さWの帯にする（曲線用）
+      function ribbon(pts) {
+        const pos = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const [x1,z1] = pts[i], [x2,z2] = pts[i+1];
+          const dx = x2-x1, dz = z2-z1, L = Math.hypot(dx,dz) || 1;
+          const nx = -dz/L*W/2, nz = dx/L*W/2;
+          pos.push(x1+nx,Y,z1+nz,  x1-nx,Y,z1-nz,  x2-nx,Y,z2-nz,
+                   x1+nx,Y,z1+nz,  x2-nx,Y,z2-nz,  x2+nx,Y,z2+nz);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        uniformGroup.add(new THREE.Mesh(g, mat));
+      }
+      // 文字（黒・常に手前）
+      function label(text, x, z, worldH, italic) {
+        const S = 128;
+        const c = document.createElement('canvas');
+        c.width = c.height = S;
+        const g = c.getContext('2d');
+        g.fillStyle = '#000';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.font = `${italic ? 'italic ' : ''}${Math.round(S * 0.66)}px "Times New Roman", serif`;
+        g.fillText(text, S/2, S/2);
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false }));
+        sp.scale.set(worldH, worldH, 1);
+        sp.position.set(x, Y + 0.1, z);
+        uniformGroup.add(sp);
+      }
+
+      // 縦軸（上向き＝−Z）
+      line(AX, UF_BOT_Z - 0.8, AX, UF_TOP_Z + 2.2);
+      const AH = 2.2, AHW = 1.0;   // 矢じりの長さ・半幅
+      const gTip = new THREE.BufferGeometry();
+      gTip.setAttribute('position', new THREE.Float32BufferAttribute([
+        AX,       Y, UF_TOP_Z,
+        AX - AHW, Y, UF_TOP_Z + AH,
+        AX + AHW, Y, UF_TOP_Z + AH,
+      ], 3));
+      uniformGroup.add(new THREE.Mesh(gTip, mat));
+
+      // 原点の目盛りと「0」
+      line(AX - 0.9, Z0, AX + 0.9, Z0);
+      label('0', AX - 3.4, Z0, 3.0, false);
+
+      // 軸から下極板へ伸びる破線
+      const DASH = 1.5, GAP = 1.1;
+      for (let x = AX + 1.2; x < UF_PL - 0.2; x += DASH + GAP) {
+        rect(x, Z0 - W/2, Math.min(x + DASH, UF_PL - 0.2), Z0 + W/2);
+      }
+
+      // 極板間隔 d の引き出し線（極板の右端から外へ逃げる四分円）
+      const R = 1.5, SEG = 12;
+      function hook(z0, sign) {   // sign=+1: 下へ回る / -1: 上へ回る
+        const cz = z0 + sign * R, pts = [];
+        for (let i = 0; i <= SEG; i++) {
+          const th = (-sign * Math.PI / 2) * (1 - i / SEG);   // −90°(or +90°) → 0°
+          pts.push([UF_PR + R * Math.cos(th), cz + R * Math.sin(th)]);
+        }
+        ribbon(pts);
+      }
+      hook(UF_GAP_TOP,  1);   // 上極板の下面から下へ
+      hook(UF_GAP_BOT, -1);   // 下極板の上面から上へ
+      label('d', UF_PR + 2.9, ZMID, 3.2, true);
+    })();
+
+    // --- 電気力線（極板間は一様なので等間隔の平行線）---
+    const ufFieldLines = new THREE.Group();
+    ufFieldLines.visible = false;
+    uniformGroup.add(ufFieldLines);
+
+    // 電源電圧。E = V/d なので、電気力線の密度・静電気力・グラフの目盛りが
+    // すべてこの値に比例して変わる。既定の3Vを基準にしている
+    const UF_V0 = 3;
+    let ufVoltage = 0;   // 既定は0V（電場なし）
+    // 0Vなら電場が無いので線もマークも0本になる
+    const ufLineCount = () => Math.round(5 * ufVoltage / UF_V0);
+
+    function _ufClear(grp) {
+      for (const o of grp.children) {
+        // Sprite のジオメトリは three.js が全インスタンスで共有しているため触らない。
+        // 破棄すると他のスプライト（電荷の＋/−など）まで壊れる
+        if (o.isSprite) {
+          // map は _ufLabelTex で使い回すので破棄しない
+          o.material.dispose();
+        } else if (o.geometry) {
+          o.geometry.dispose();
+        }
+      }
+      grp.clear();
+    }
+
+    // 電圧変更のたびに作り直すので、マテリアルは使い回して漏らさない
+    const _ufMatLine = new THREE.MeshBasicMaterial({ color: 0xf0a060, side: THREE.DoubleSide });
+    const _ufMatPos  = new THREE.MeshBasicMaterial({ color: 0xff5500, side: THREE.DoubleSide });
+    const _ufMatNeg  = new THREE.MeshBasicMaterial({ color: 0x0066ff, side: THREE.DoubleSide });
+
+    function buildUniformFieldLines() {
+      _ufClear(ufFieldLines);
+      const N  = ufLineCount();   // 本数は電場の強さ（∝電圧）に比例
+      const LW = 0.22;   // 線の太さ
+      // 導体（板の上面 0.15＋陽子スフィアの上端 0.45）より上に置き、
+      // 教科書の図のように電気力線が導体に隠れないようにする
+      const Y  = 0.55;
+      const AW = 0.80, AH = 1.6;  // 矢じりの半幅・長さ
+      const mat = _ufMatLine;
+
+      // 2点を結ぶ太さwの線分（矢じりの羽根用）
+      function seg(x1, z1, x2, z2, w) {
+        const dx = x2 - x1, dz = z2 - z1, L = Math.hypot(dx, dz) || 1;
+        const nx = -dz / L * w / 2, nz = dx / L * w / 2;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute([
+          x1+nx, Y, z1+nz,  x1-nx, Y, z1-nz,  x2-nx, Y, z2-nz,
+          x1+nx, Y, z1+nz,  x2-nx, Y, z2-nz,  x2+nx, Y, z2+nz,
+        ], 3));
+        ufFieldLines.add(new THREE.Mesh(g, mat));
+      }
+      const span = UF_GAP_BOT - UF_GAP_TOP;
+      const zMid = (UF_GAP_TOP + UF_GAP_BOT) / 2;
+      // 矢の先端が下の極板（負極板）の表面にちょうど届く位置に置く
+      const arrowZ = [UF_GAP_BOT - AH / 2];
+
+      for (let i = 0; i < N; i++) {
+        // 極板幅を N 等分し、その中央に引く（両端の余白も等しくなる）
+        const x = UF_PL + (UF_PR - UF_PL) * (i + 0.5) / N;
+
+        const line = new THREE.Mesh(new THREE.PlaneGeometry(LW, span), mat);
+        line.rotation.x = -Math.PI / 2;
+        line.position.set(x, Y, zMid);
+        ufFieldLines.add(line);
+
+        // 矢じり（正極板→負極板 ＝ +Z ＝ 画面で上から下）
+        // 先端を留め継ぎした「く」の字1枚で作り、切れ目が出ないようにする
+        for (const az of arrowZ) {
+          const tipZ = az + AH / 2;
+          ufFieldLines.add(new THREE.Mesh(
+            makeChevronGeometry(x, tipZ, AW, -AH, LW, Y), mat));
+        }
+      }
+    }
+    buildUniformFieldLines();
+
+    document.getElementById('btnUfFieldLines').addEventListener('click', () => {
+      ufFieldLines.visible = !ufFieldLines.visible;
+      document.getElementById('btnUfFieldLines').classList.toggle('active', ufFieldLines.visible);
+      for (const cond of conductors) _condSyncInnerLines(cond);
+    });
+
+    // --- 極板の帯電（上＝＋オレンジ / 下＝−青）---
+    const ufCharges = new THREE.Group();
+    ufCharges.visible = false;
+    uniformGroup.add(ufCharges);
+
+    function buildUniformCharges() {
+      _ufClear(ufCharges);
+      const N   = ufLineCount();   // 極板の電荷 Q = CV も電圧に比例
+      const Y   = 0.07;   // 極板(0.05)・電気力線(0.06)より上に重ねる
+      const BAR = 0.30;   // 記号の線の太さ
+      const LEN = 1.5;    // 記号の長さ（極板の厚み2.5に収まる大きさ）
+      const posMat = _ufMatPos, negMat = _ufMatNeg;
+
+      function bar(x, z, w, d, mat) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+        m.rotation.x = -Math.PI / 2;
+        m.position.set(x, Y, z);
+        ufCharges.add(m);
+      }
+
+      for (let i = 0; i < N; i++) {
+        // 電気力線と同じ刻みなので、各力線の根元に＋が並ぶ
+        const x = UF_PL + (UF_PR - UF_PL) * (i + 0.5) / N;
+        bar(x, UF_PT, LEN, BAR, posMat);   // ＋の横棒
+        bar(x, UF_PT, BAR, LEN, posMat);   // ＋の縦棒
+        bar(x, UF_PB, LEN, BAR, negMat);   // −
+      }
+    }
+    buildUniformCharges();
+
+    document.getElementById('btnUfCharges').addEventListener('click', () => {
+      ufCharges.visible = !ufCharges.visible;
+      document.getElementById('btnUfCharges').classList.toggle('active', ufCharges.visible);
+      // 静電誘導が終わっている導体は、個々の電荷ではなく誘導電荷の±で表す
+      // （このあとは毎コマ syncConductorPolarized() が見直す）
+      syncConductorPolarized();
+      // 不導体は極板間にあって電場がかかっていれば分極電荷を表示する
+      for (const ins of insulators) {
+        _insSetPolarized(ins,
+          ufCharges.visible && _condInGap(ins.mesh) && ufVoltage > 0);
+      }
+    });
+
+    // 極板間にある導体が、グラフ横軸（基準点からの距離 0〜d）の
+    // どの範囲を占めるかを 0〜1 で返す。無ければ null
+    // 戻り値の r は内部に残る電場の割合（導体は 0、不導体は E'/E）
+    function _condGraphSpan() {
+      const span = (mesh, r) => {
+        const z = mesh.position.z;
+        const d = UF_GAP_BOT - UF_GAP_TOP;
+        // 基準点は下（接地側）の極板なので 距離 = UF_GAP_BOT - Z
+        return { a: (UF_GAP_BOT - (z + COND_D / 2)) / d,
+                 b: (UF_GAP_BOT - (z - COND_D / 2)) / d, r };
+      };
+      for (const cond of conductors) {
+        if (_condInGap(cond.mesh)) return span(cond.mesh, 0);
+      }
+      for (const ins of insulators) {
+        if (_condInGap(ins.mesh)) return span(ins.mesh, INS_E_RATIO);
+      }
+      return null;
+    }
+
+    // --- E-d / V-d グラフ（グリッドの右の空きスペースに配置）---
+    const ufGraphE = new THREE.Group();
+    const ufGraphV = new THREE.Group();
+    ufGraphE.visible = ufGraphV.visible = false;
+    uniformGroup.add(ufGraphE, ufGraphV);
+
+    const _ufLabelTex = new Map();   // グラフの文字テクスチャ（内容ごとに使い回す）
+
+    // グラフも電圧変更のたびに作り直すので、マテリアルは使い回す
+    const _ufGMat = {
+      axis:   new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide }),
+      orange: new THREE.MeshBasicMaterial({ color: 0xe8961e, side: THREE.DoubleSide }),
+      fill:   new THREE.MeshBasicMaterial({ color: 0xfae3c0, side: THREE.DoubleSide }),
+      green:  new THREE.MeshBasicMaterial({ color: 0x00b473, side: THREE.DoubleSide }),
+      dash:   new THREE.MeshBasicMaterial({ color: 0x777777, side: THREE.DoubleSide }),
+      hit:    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }),
+      handle: new THREE.MeshBasicMaterial({ color: 0x4499ff, side: THREE.DoubleSide }),
+    };
+
+    function buildUniformGraphs() {
+      _ufClear(ufGraphE); _ufClear(ufGraphV);
+      // グラフの中身は「左下の原点O」を (0,0) とするローカル座標で組み、
+      // グループ自体を動かす。こうすると移動も拡大縮小もグループの操作だけで済む
+      const GW = 20, GH = 17;               // 幅 / 高さ
+      const GX = 0;                         // ローカル原点
+      const EZ = 0, VZ = 0;
+      const DX = GW * 0.70;                 // 距離d の位置
+      const LV = GH * 0.17 * ufVoltage;     // E値 / V値 の高さ（電圧に比例）
+      const AXW = 0.26, LNW = 0.42;         // 軸の太さ / データ線の太さ
+      const Y = 0.05;
+
+      const matAxis   = _ufGMat.axis;
+      const matOrange = _ufGMat.orange;
+      const matFill   = _ufGMat.fill;
+      const matGreen  = _ufGMat.green;
+      const matDash   = _ufGMat.dash;
+
+      function rect(grp, x1, z1, x2, z2, m, y = Y) {
+        const o = new THREE.Mesh(
+          new THREE.PlaneGeometry(Math.abs(x2-x1), Math.abs(z2-z1)), m);
+        o.rotation.x = -Math.PI / 2;
+        o.position.set((x1+x2)/2, y, (z1+z2)/2);
+        grp.add(o);
+      }
+      function seg(grp, x1, z1, x2, z2, w, m) {   // 軸平行の線
+        const h = w / 2;
+        rect(grp, Math.min(x1,x2)-h, Math.min(z1,z2)-h, Math.max(x1,x2)+h, Math.max(z1,z2)+h, m);
+      }
+      function dash(grp, x1, z1, x2, z2) {        // 軸平行の破線
+        const D = 1.0, G = 0.7;
+        const L = Math.hypot(x2-x1, z2-z1);
+        if (L < 1e-6) return;                     // 0Vのとき長さ0になるのを避ける
+        const ux = (x2-x1)/L, uz = (z2-z1)/L;
+        for (let t = 0; t < L; t += D + G) {
+          const e = Math.min(t + D, L);
+          seg(grp, x1+ux*t, z1+uz*t, x1+ux*e, z1+uz*e, 0.20, matDash);
+        }
+      }
+      function tri(grp, ax, az, bx, bz, cx, cz, m) {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(
+          [ax,Y,az, bx,Y,bz, cx,Y,cz], 3));
+        grp.add(new THREE.Mesh(g, m));
+      }
+      // 傾いた線（V-d用）
+      function slope(grp, x1, z1, x2, z2, w, m) {
+        const dx = x2-x1, dz = z2-z1, L = Math.hypot(dx,dz);
+        const nx = -dz/L*w/2, nz = dx/L*w/2;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute([
+          x1+nx,Y,z1+nz, x1-nx,Y,z1-nz, x2-nx,Y,z2-nz,
+          x1+nx,Y,z1+nz, x2-nx,Y,z2-nz, x2+nx,Y,z2+nz,
+        ], 3));
+        grp.add(new THREE.Mesh(g, m));
+      }
+      // 板をドラッグするとグラフが毎フレーム作り直されるため、
+      // 文字のテクスチャは内容ごとにキャッシュして使い回す（canvas生成が重い）
+      function label(grp, text, x, z, h, opt = {}) {
+        const { color = '#000', italic = false, bold = false, bg = null,
+                family = '"Times New Roman", serif' } = opt;
+        const key = `${text}|${color}|${italic}|${bold}|${bg}|${family}`;
+        let cached = _ufLabelTex.get(key);
+        if (!cached) {
+          const size = 64;
+          const font = `${italic?'italic ':''}${bold?'bold ':''}${size}px ${family}`;
+          const meas = document.createElement('canvas').getContext('2d');
+          meas.font = font;
+          const pad = Math.round(size * (bg ? 0.5 : 0.25));
+          const c = document.createElement('canvas');
+          c.width  = Math.ceil(meas.measureText(text).width) + pad * 2;
+          c.height = Math.round(size * (bg ? 1.7 : 1.45));
+          const g = c.getContext('2d');
+          if (bg) {
+            g.fillStyle = bg;
+            g.beginPath();
+            g.roundRect(0, 0, c.width, c.height, c.height * 0.26);
+            g.fill();
+          }
+          g.font = font; g.fillStyle = color;
+          g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillText(text, c.width / 2, c.height / 2);
+          const t = new THREE.CanvasTexture(c);
+          t.colorSpace = THREE.SRGBColorSpace;
+          cached = { tex: t, aspect: c.width / c.height };
+          _ufLabelTex.set(key, cached);
+        }
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: cached.tex, transparent: true, depthTest: false }));
+        sp.scale.set(h * cached.aspect, h, 1);
+        sp.position.set(x, Y + 0.1, z);
+        grp.add(sp);
+      }
+
+      // 2本の軸（右向き・上向きの矢じり付き）
+      function axes(grp, oz) {
+        seg(grp, GX, oz, GX + GW, oz, AXW, matAxis);                 // 横軸
+        tri(grp, GX + GW + 1.1, oz, GX + GW - 0.5, oz - 0.75, GX + GW - 0.5, oz + 0.75, matAxis);
+        seg(grp, GX, oz, GX, oz - GH, AXW, matAxis);                 // 縦軸
+        tri(grp, GX, oz - GH - 1.1, GX - 0.75, oz - GH + 0.5, GX + 0.75, oz - GH + 0.5, matAxis);
+        label(grp, 'O', GX - 1.8, oz + 1.7, 2.4);
+        label(grp, 'd', GX + DX, oz + 1.9, 2.4, { italic: true });
+        label(grp, '基準点からの距離', GX + GW * 0.5, oz + 4.6, 2.3,
+              { family: '"Yu Gothic","Meiryo",sans-serif' });
+      }
+
+      // 極板間に導体があれば、横軸のどの範囲を占めるかを 0〜1 で受け取る
+      const sp = _condGraphSpan();
+
+      // ---- E-d グラフ ----
+      // 導体の外は一定値、導体の内部は E = 0（教科書 図22ⓒ）
+      axes(ufGraphE, EZ);
+      if (!sp) {
+        rect(ufGraphE, GX, EZ, GX + DX, EZ - LV, matFill, Y - 0.01);
+        seg(ufGraphE, GX, EZ - LV, GX + DX, EZ - LV, LNW, matOrange);
+      } else {
+        const xa = GX + DX * sp.a, xb = GX + DX * sp.b;
+        const LI = LV * sp.r;                                      // 内部の E'（導体は0）
+        rect(ufGraphE, GX, EZ, xa, EZ - LV, matFill, Y - 0.01);
+        rect(ufGraphE, xb, EZ, GX + DX, EZ - LV, matFill, Y - 0.01);
+        if (LI > 0) rect(ufGraphE, xa, EZ, xb, EZ - LI, matFill, Y - 0.01);
+        seg(ufGraphE, GX, EZ - LV, xa, EZ - LV, LNW, matOrange);   // 手前の一定部
+        seg(ufGraphE, xa, EZ - LV, xa, EZ - LI, LNW, matOrange);   // E' へ落ちる
+        seg(ufGraphE, xa, EZ - LI, xb, EZ - LI, LNW, matOrange);   // 内部は E'
+        seg(ufGraphE, xb, EZ - LI, xb, EZ - LV, LNW, matOrange);   // 立ち上がり
+        seg(ufGraphE, xb, EZ - LV, GX + DX, EZ - LV, LNW, matOrange);
+        dash(ufGraphE, xa, EZ, xa, EZ - LV);
+        dash(ufGraphE, xb, EZ, xb, EZ - LV);
+        if (LI > 0) label(ufGraphE, "E'", GX - 2.2, EZ - LI, 2.2, { italic: true });
+      }
+      dash(ufGraphE, GX + DX, EZ, GX + DX, EZ - LV);                 // d の破線
+      label(ufGraphE, 'E', GX - 1.9, EZ - LV, 2.4, { italic: true });
+      label(ufGraphE, '電場の強さ', GX, EZ - GH - 3.2, 2.3,
+            { family: '"Yu Gothic","Meiryo",sans-serif' });
+
+      // ---- V-d グラフ ----
+      // 導体の外は距離に比例、導体内は等電位なので平ら（教科書 図22ⓓ）
+      axes(ufGraphV, VZ);
+      if (!sp) {
+        dash(ufGraphV, GX, VZ - LV, GX + DX, VZ - LV);               // V の破線
+        slope(ufGraphV, GX, VZ, GX + DX, VZ - LV, LNW, matGreen);
+        label(ufGraphV, 'V', GX - 1.9, VZ - LV, 2.4, { italic: true });
+      } else {
+        const xa = GX + DX * sp.a, xb = GX + DX * sp.b;
+        const va   = LV * sp.a;                                  // 板に達するまでの上昇
+        const vb   = va + LV * sp.r * (sp.b - sp.a);             // 内部での上昇（導体は0）
+        const vEnd = vb + LV * (1 - sp.b);                       // 最終値
+        dash(ufGraphV, GX, VZ - vEnd, GX + DX, VZ - vEnd);
+        slope(ufGraphV, GX, VZ, xa, VZ - va, LNW, matGreen);
+        slope(ufGraphV, xa, VZ - va, xb, VZ - vb, LNW, matGreen); // 内部は傾きが緩い
+        slope(ufGraphV, xb, VZ - vb, GX + DX, VZ - vEnd, LNW, matGreen);
+        dash(ufGraphV, xa, VZ, xa, VZ - va);
+        dash(ufGraphV, xb, VZ, xb, VZ - vb);
+        label(ufGraphV, 'V', GX - 1.9, VZ - vEnd, 2.4, { italic: true });
+      }
+      dash(ufGraphV, GX + DX, VZ, GX + DX, VZ - LV);                 // d の破線
+      label(ufGraphV, '電位', GX, VZ - GH - 3.2, 2.3,
+            { family: '"Yu Gothic","Meiryo",sans-serif' });
+
+      // つかむ範囲（透明）と、比率を保ったまま拡大縮小するハンドル
+      const hitMat = _ufGMat.hit, handleMat = _ufGMat.handle;
+      for (const grp of [ufGraphE, ufGraphV]) {
+        const hit = new THREE.Mesh(new THREE.PlaneGeometry(GW + 10, GH + 11), hitMat);
+        hit.rotation.x = -Math.PI / 2;
+        hit.position.set(GW / 2 - 3, Y - 0.02, -(GH + 11) / 2 + 6);
+        grp.add(hit);
+
+        const hd = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.7), handleMat);
+        hd.rotation.x = -Math.PI / 2;
+        hd.position.set(GW + 2.2, Y + 0.05, -(GH + 1.6));
+        grp.add(hd);
+
+        grp.userData.hit = hit;
+        grp.userData.handle = hd;
+      }
+    }
+    buildUniformGraphs();
+
+    ufGraphE.position.set(36, 0, -8);
+    ufGraphV.position.set(36, 0, 22);
+
+    // 導体が極板間に出入りしたらグラフを作り直す（位置が変われば形も変わる）
+    let _ufGraphCondKey = '';
+    function _syncGraphsWithConductor() {
+      const sp = _condGraphSpan();
+      // 細かく刻むとドラッグ中に毎フレーム作り直しになるので粗めに丸める
+      const key = sp ? `${sp.a.toFixed(2)},${sp.b.toFixed(2)},${sp.r}` : '';
+      if (key === _ufGraphCondKey) return;
+      _ufGraphCondKey = key;
+      buildUniformGraphs();
+    }
+
+    // --- 電源電圧のつまみ ---
+    // E = V/d より、電気力線の本数（＝電場の密度）、極板の電荷、
+    // 静電気力の矢印、グラフの目盛りがすべて電圧に連動する
+    document.getElementById('ufVolt').addEventListener('input', e => {
+      ufVoltage = Number(e.target.value);
+      document.getElementById('ufVoltVal').textContent = ufVoltage + ' V';
+      buildUniformFieldLines();
+      buildUniformCharges();
+      buildUniformGraphs();   // グループの position / scale は保持される
+      // 電気力線の本数が変わるので、誘導電荷のマークと内部の線も置き直す
+      for (const cond of conductors) {
+        if (cond.marks && cond.marks.visible) {
+          _condBuildMarks(cond);
+          cond.marks.visible = true;
+          _condSyncInnerLines(cond);
+        }
+      }
+      for (const ins of insulators) {
+        if (ins.marks && ins.marks.visible) _insSetPolarized(ins, true);
+      }
+    });
+
+    // --- グラフの移動 / 拡大縮小 ---
+    const _ufGrab = { grp: null, mode: null, dx: 0, dz: 0, s0: 1, r0: 1 };
+    const _ufRay = new THREE.Raycaster();
+    const _ufNDC = new THREE.Vector2();
+    const _ufGPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const _ufGHit = new THREE.Vector3();
+
+    function _ufSetRay(e) {
+      _ufNDC.set((e.clientX / window.innerWidth) * 2 - 1,
+                 -(e.clientY / window.innerHeight) * 2 + 1);
+      _ufRay.setFromCamera(_ufNDC, camera);
+    }
+    function _ufPointerXZ(e) {
+      _ufSetRay(e);
+      return _ufRay.ray.intersectPlane(_ufGPlane, _ufGHit) ? _ufGHit.clone() : null;
+    }
+
+    renderer.domElement.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || currentTab !== 'uniform') return;
+      if (window._getDrawingToolActive?.()) return;
+      const graphs = [ufGraphE, ufGraphV].filter(g => g.visible);
+      if (!graphs.length) return;
+
+      _ufSetRay(e);
+      // ハンドルを優先して判定し、外れたらグラフ本体
+      let mode = 'scale';
+      let hits = _ufRay.intersectObjects(graphs.map(g => g.userData.handle), false);
+      if (!hits.length) {
+        mode = 'move';
+        hits = _ufRay.intersectObjects(graphs.map(g => g.userData.hit), false);
+      }
+      if (!hits.length) return;
+
+      const p = _ufPointerXZ(e);
+      if (!p) return;
+      const grp = hits[0].object.parent;
+      _ufGrab.grp = grp;
+      _ufGrab.mode = mode;
+      if (mode === 'move') {
+        _ufGrab.dx = grp.position.x - p.x;
+        _ufGrab.dz = grp.position.z - p.z;
+      } else {
+        _ufGrab.s0 = grp.scale.x;
+        _ufGrab.r0 = Math.max(0.001, Math.hypot(p.x - grp.position.x, p.z - grp.position.z));
+      }
+      controls.enabled = false;
+      try { renderer.domElement.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault(); e.stopImmediatePropagation();
+    });
+
+    window.addEventListener('pointermove', e => {
+      if (!_ufGrab.grp) return;
+      const p = _ufPointerXZ(e);
+      if (!p) return;
+      const grp = _ufGrab.grp;
+      if (_ufGrab.mode === 'move') {
+        grp.position.x = p.x + _ufGrab.dx;
+        grp.position.z = p.z + _ufGrab.dz;
+      } else {
+        // 原点Oからの距離の比でそのまま等倍拡大（比率は保たれる）
+        const r = Math.hypot(p.x - grp.position.x, p.z - grp.position.z);
+        grp.scale.setScalar(THREE.MathUtils.clamp(_ufGrab.s0 * r / _ufGrab.r0, 0.25, 4));
+      }
+      e.preventDefault();
+    });
+
+    function _ufEndGrab(e) {
+      if (!_ufGrab.grp) return;
+      _ufGrab.grp = null; _ufGrab.mode = null;
+      controls.enabled = true;
+      try { renderer.domElement.releasePointerCapture(e?.pointerId); } catch (_) {}
+    }
+    window.addEventListener('pointerup', _ufEndGrab);
+    window.addEventListener('pointercancel', _ufEndGrab);
+
+    function _ufSyncGraphFrustum() {
+      _ufGraphShown = ufGraphE.visible || ufGraphV.visible;
+      updateOrthoFrustum();
+    }
+    document.getElementById('btnUfGraphE').addEventListener('click', () => {
+      ufGraphE.visible = !ufGraphE.visible;
+      document.getElementById('btnUfGraphE').classList.toggle('active', ufGraphE.visible);
+      _ufSyncGraphFrustum();
+    });
+    document.getElementById('btnUfGraphV').addEventListener('click', () => {
+      ufGraphV.visible = !ufGraphV.visible;
+      document.getElementById('btnUfGraphV').classList.toggle('active', ufGraphV.visible);
+      _ufSyncGraphFrustum();
+    });
+
+
+    // ===== 道具箱ボタン =====
+    for (const [id, type] of [['btnUfConductor', 'conductor'],
+                              ['btnUfInsulator', 'insulator']]) {
+      document.getElementById(id).addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        tbDrag.pending = true;
+        tbDrag.type = type;
+        tbDrag.pendingX = e.clientX;
+        tbDrag.pendingY = e.clientY;
+        controls.enabled = false;
+      });
+    }
+
+    // ===== メインループ =====
+    let _lastT = performance.now();
+    function tick() {
+      requestAnimationFrame(tick);
+      const now = performance.now();
+      const dt = Math.min((now - _lastT) / 1000, 0.1);
+      _lastT = now;
+      controls.update();
+      updateConductorElectrons(dt);
+      syncConductorPolarized();
+      updateInsulators(dt);
+      _syncGraphsWithConductor();
+      if (hoveredParticle) {
+        // 導体は板なので拡大演出をしない（中の電荷まで一緒に伸びてしまう）
+        if (!_isSlabType(hoveredParticle.type)) {
+          hoveredParticle.mesh.scale.setScalar(1 + 0.18 * Math.abs(Math.sin(Date.now() * 0.003)));
+        }
+      }
+      for (const p of placedParticles) {
+        if (p.sprite) updateCrossSprite(p.mesh, p.sprite);
+      }
+      if (tbDrag.active && tbDrag.sprite) updateCrossSprite(tbDrag.mesh, tbDrag.sprite);
+      if (window._inkDirty   && window._inkBoardTex)   { window._inkBoardTex.needsUpdate   = true; window._inkDirty   = false; }
+      if (window._shapeDirty && window._shapeBoardTex) { window._shapeBoardTex.needsUpdate = true; window._shapeDirty = false; }
+      window._syncDrawingBoards?.(camera);
+      renderer.render(scene, camera);
+    }
+    tick();
+// ===== 図形描画モジュール =====
+(function(){
+  const DB_Z = -8, DB_W = 20, DB_H = 12;
+  const PEN_COLOR = 'rgba(255,40,40,1.0)', PEN_W = 2, ERASER_W = 20;
+  const _dr = new THREE.Raycaster(), _dm = new THREE.Vector2();
+
+  let inkMode = 'none', _inkDrawing = false;
+  let _inkBoardMesh = null, _inkBoardCanvas = null, _inkBoardCtx = null;
+  window._inkBoardTex = null;
+  let _activeCtx = null, _activeMesh = null;
+  let _lastX = 0, _lastY = 0;
+  window._inkDirty = false;
+
+  let shapeMode = 'none', _shapeDrawing = false;
+  let _sx = 0, _sy = 0, _cx = 0, _cy = 0;
+  let _shapeBoardMesh = null, _shapeBoardCanvas = null, _shapeBoardCtx = null;
+  window._shapeBoardTex = null;
+  window._shapeDirty = false;
+  const shapes = [];
+  let selIdx = -1, selDragging = false, selHandle = null, selOrigin = null, selSnap = null;
+
+  window._getDrawingToolActive = () => inkMode !== 'none' || shapeMode !== 'none';
+
+  // 描画ボードは camera の子として画面を覆う。透視／平行の両カメラに対応し、
+  // カメラが切り替わったら付け替え、視界を覆う倍率（縦横比は保持）を毎フレーム合わせる
+  function _fitBoard(mesh, cam) {
+    let vw, vh;
+    if (cam.isOrthographicCamera) {
+      vh = (cam.top - cam.bottom) / cam.zoom;
+      vw = (cam.right - cam.left) / cam.zoom;
+    } else {
+      vh = 2 * Math.abs(DB_Z) * Math.tan(cam.fov * Math.PI / 360);
+      vw = vh * cam.aspect;
+    }
+    const s = Math.max(vw / DB_W, vh / DB_H); // cover：歪ませずに必ず覆う
+    mesh.scale.set(s, s, 1);
+  }
+  window._syncDrawingBoards = (cam) => {
+    if (!cam) return;
+    for (const m of [_inkBoardMesh, _shapeBoardMesh]) {
+      if (!m) continue;
+      if (m.parent !== cam) cam.add(m); // add は自動で元の親から外す
+      _fitBoard(m, cam);
+    }
+  };
+
+  function getNDC(ev) {
+    const r = renderer.domElement.getBoundingClientRect();
+    _dm.set(((ev.clientX-r.left)/r.width)*2-1, -((ev.clientY-r.top)/r.height)*2+1);
+  }
+  function uv2xy(uv, cvs) { return { x: uv.x*cvs.width, y: (1-uv.y)*cvs.height }; }
+
+  function _makeBoard(zOffset, order) {
+    const cvs = document.createElement('canvas');
+    cvs.width = 1024; cvs.height = 614;
+    const ctx = cvs.getContext('2d');
+    ctx.lineCap = ctx.lineJoin = 'round';
+    const tex = new THREE.CanvasTexture(cvs);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent:true, opacity:1, side:THREE.FrontSide, depthWrite:false, depthTest:false });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(DB_W, DB_H), mat);
+    mesh.position.set(0, 0, DB_Z + zOffset);
+    mesh.renderOrder = order;
+    camera.add(mesh);
+    _fitBoard(mesh, camera);
+    return { cvs, ctx, tex, mesh };
+  }
+
+  function ensureInk() {
+    if (_inkBoardMesh) return;
+    const b = _makeBoard(0, 200);
+    _inkBoardCanvas = b.cvs; _inkBoardCtx = b.ctx; window._inkBoardTex = b.tex; _inkBoardMesh = b.mesh;
+  }
+  function ensureShape() {
+    if (_shapeBoardMesh) return;
+    const b = _makeBoard(-0.01, 201);
+    _shapeBoardCanvas = b.cvs; _shapeBoardCtx = b.ctx; window._shapeBoardTex = b.tex; _shapeBoardMesh = b.mesh;
+  }
+
+  function setInkMode(next) {
+    inkMode = inkMode === next ? 'none' : next;
+    if (inkMode !== 'none') { ensureInk(); shapeMode='none'; document.getElementById('toolArrow').classList.remove('active'); selIdx=-1; redrawShapes(); if(_shapeDrawing) endShapeDraw(); }
+    document.getElementById('toolPen').classList.toggle('active', inkMode==='pen');
+    document.getElementById('toolEraser').classList.toggle('active', inkMode==='eraser');
+    if (_inkDrawing) endInk();
+  }
+  function clearInk() {
+    if (_inkBoardCtx && _inkBoardCanvas) { _inkBoardCtx.clearRect(0,0,_inkBoardCanvas.width,_inkBoardCanvas.height); if(window._inkBoardTex) window._inkBoardTex.needsUpdate=true; }
+  }
+
+  function tryStartInk(ev) {
+    if (inkMode==='none') return false;
+    ensureInk();
+    if (!_inkBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h = _dr.intersectObject(_inkBoardMesh, false);
+    if (!h.length || !h[0].uv) return false;
+    const xy = uv2xy(h[0].uv, _inkBoardCanvas);
+    _activeCtx=_inkBoardCtx; _activeMesh=_inkBoardMesh;
+    _lastX=xy.x; _lastY=xy.y; _inkDrawing=true;
+    if (inkMode==='pen') { _activeCtx.globalCompositeOperation='source-over'; _activeCtx.strokeStyle=PEN_COLOR; _activeCtx.lineWidth=PEN_W; }
+    else { _activeCtx.globalCompositeOperation='destination-out'; _activeCtx.strokeStyle='rgba(0,0,0,1)'; _activeCtx.lineWidth=ERASER_W; }
+    _activeCtx.beginPath(); _activeCtx.moveTo(_lastX,_lastY); _activeCtx.lineTo(_lastX+0.01,_lastY+0.01); _activeCtx.stroke();
+    controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){}
+    window._inkDirty=true; ev.preventDefault(); ev.stopPropagation(); return true;
+  }
+  function updateInk(ev) {
+    if (!_inkDrawing || !_activeMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h = _dr.intersectObject(_activeMesh, false);
+    if (!h.length || !h[0].uv) return;
+    const xy = uv2xy(h[0].uv, _inkBoardCanvas);
+    _activeCtx.beginPath(); _activeCtx.moveTo(_lastX,_lastY); _activeCtx.lineTo(xy.x,xy.y); _activeCtx.stroke();
+    _lastX=xy.x; _lastY=xy.y; window._inkDirty=true; ev.preventDefault();
+  }
+  function endInk(ev) {
+    if (!_inkDrawing) return;
+    _inkDrawing=false; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+  }
+
+  function drawArrow(ctx, x1, y1, x2, y2) {
+    const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy);
+    if (len<2) return;
+    const ang=Math.atan2(dy,dx), hw=Math.max(8,Math.min(24,len*0.10)), ha=Math.PI/8;
+    function pass(w,c){ ctx.globalCompositeOperation='source-over'; ctx.strokeStyle=c; ctx.lineWidth=w; ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-hw*Math.cos(ang-ha),y2-hw*Math.sin(ang-ha)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-hw*Math.cos(ang+ha),y2-hw*Math.sin(ang+ha)); ctx.stroke(); }
+    pass(PEN_W+2,'rgba(0,0,0,0.88)'); pass(PEN_W,PEN_COLOR);
+  }
+  function drawHandle(ctx, x, y, isMid=false) {
+    ctx.save(); ctx.fillStyle=isMid?'#88ccff':'#ffffff'; ctx.strokeStyle='#4499ff'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+  function drawShape(ctx, s, sel) {
+    ctx.globalCompositeOperation='source-over';
+    if (s.type==='arrow') { drawArrow(ctx,s.x1,s.y1,s.x2,s.y2);
+      if (sel) { drawHandle(ctx,s.x1,s.y1); drawHandle(ctx,s.x2,s.y2); drawHandle(ctx,(s.x1+s.x2)/2,(s.y1+s.y2)/2,true); } }
+  }
+  function redrawShapes() {
+    if (!_shapeBoardCtx) return;
+    _shapeBoardCtx.clearRect(0,0,_shapeBoardCanvas.width,_shapeBoardCanvas.height);
+    shapes.forEach((s,i)=>drawShape(_shapeBoardCtx,s,i===selIdx));
+    window._shapeDirty=true;
+  }
+
+  function setShapeMode(next) {
+    shapeMode = shapeMode===next?'none':next;
+    if (shapeMode!=='none') { ensureShape(); selIdx=-1; redrawShapes(); inkMode='none'; document.getElementById('toolPen').classList.remove('active'); document.getElementById('toolEraser').classList.remove('active'); if(_inkDrawing)endInk(); }
+    document.getElementById('toolArrow').classList.toggle('active', shapeMode==='arrow');
+  }
+  function tryStartShape(ev) {
+    if (shapeMode==='none') return false;
+    ensureShape(); if(!_shapeBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return false;
+    const xy=uv2xy(h[0].uv,_shapeBoardCanvas);
+    _sx=xy.x; _sy=xy.y; _cx=xy.x; _cy=xy.y; _shapeDrawing=true;
+    controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){}
+    ev.preventDefault(); ev.stopPropagation(); return true;
+  }
+  function updateShape(ev) {
+    if (!_shapeDrawing||!_shapeBoardMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return;
+    const xy=uv2xy(h[0].uv,_shapeBoardCanvas);
+    _cx=xy.x; _cy=xy.y;
+    _shapeBoardCtx.clearRect(0,0,_shapeBoardCanvas.width,_shapeBoardCanvas.height);
+    shapes.forEach((s,i)=>drawShape(_shapeBoardCtx,s,i===selIdx));
+    drawArrow(_shapeBoardCtx,_sx,_sy,_cx,_cy);
+    window._shapeDirty=true; ev.preventDefault();
+  }
+  function endShapeDraw(ev) {
+    if (!_shapeDrawing) return;
+    _shapeDrawing=false; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+    if (Math.hypot(_cx-_sx,_cy-_sy)>=4) shapes.push({type:'arrow',x1:_sx,y1:_sy,x2:_cx,y2:_cy});
+    redrawShapes(); shapeMode='none'; document.getElementById('toolArrow').classList.remove('active');
+  }
+
+  function distSeg(px,py,x1,y1,x2,y2){ const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy; if(!l2) return Math.hypot(px-x1,py-y1); const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/l2)); return Math.hypot(px-(x1+t*dx),py-(y1+t*dy)); }
+  function hitShape(s,cx,cy){ return s.type==='arrow'&&distSeg(cx,cy,s.x1,s.y1,s.x2,s.y2)<12; }
+  function hitHandles(s,cx,cy){ if(s.type==='arrow'){ if(Math.hypot(cx-s.x1,cy-s.y1)<8)return'start'; if(Math.hypot(cx-s.x2,cy-s.y2)<8)return'end'; if(Math.hypot(cx-(s.x1+s.x2)/2,cy-(s.y1+s.y2)/2)<8)return'mid'; } return null; }
+
+  // 右クリックメニュー用：画面座標にある矢印の添字を返す（無ければ -1）
+  window._hitArrowAt = (clientX, clientY) => {
+    if (!_shapeBoardMesh || !shapes.length) return -1;
+    getNDC({ clientX, clientY }); _dr.setFromCamera(_dm, camera);
+    const h = _dr.intersectObject(_shapeBoardMesh, false);
+    if (!h.length || !h[0].uv) return -1;
+    const {x:cx, y:cy} = uv2xy(h[0].uv, _shapeBoardCanvas);
+    for (let i=shapes.length-1; i>=0; i--) if (hitShape(shapes[i],cx,cy)) return i;
+    return -1;
+  };
+  window._deleteArrowAt = (i) => {
+    if (i < 0 || i >= shapes.length) return;
+    shapes.splice(i, 1);
+    if (selIdx === i) selIdx = -1; else if (selIdx > i) selIdx--;
+    redrawShapes();
+  };
+
+  function tryStartSel(ev) {
+    if (shapeMode!=='none'||inkMode!=='none') return false;
+    if (!_shapeBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return false;
+    const {x:cx,y:cy}=uv2xy(h[0].uv,_shapeBoardCanvas);
+    if (selIdx>=0) { const hh=hitHandles(shapes[selIdx],cx,cy); if(hh){ selHandle=hh; selOrigin={x:cx,y:cy}; selSnap={...shapes[selIdx]}; selDragging=true; controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){} ev.preventDefault(); ev.stopPropagation(); return true; } }
+    for (let i=shapes.length-1;i>=0;i--) { if(hitShape(shapes[i],cx,cy)){ selIdx=i; selDragging=false; redrawShapes(); ev.preventDefault(); ev.stopPropagation(); return true; } }
+    if (selIdx>=0) { selIdx=-1; redrawShapes(); }
+    return false;
+  }
+  function updateSel(ev) {
+    if (!selDragging||selIdx<0) return;
+    if (!_shapeBoardMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return;
+    const {x,y}=uv2xy(h[0].uv,_shapeBoardCanvas);
+    const s=shapes[selIdx];
+    if (s.type==='arrow') {
+      if (selHandle==='start'){s.x1=x;s.y1=y;}
+      else if(selHandle==='end'){s.x2=x;s.y2=y;}
+      else if(selHandle==='mid'&&selOrigin&&selSnap){const dx=x-selOrigin.x,dy=y-selOrigin.y;s.x1=selSnap.x1+dx;s.y1=selSnap.y1+dy;s.x2=selSnap.x2+dx;s.y2=selSnap.y2+dy;}
+    }
+    redrawShapes(); ev.preventDefault();
+  }
+  function endSel(ev) {
+    if (!selDragging) return;
+    selDragging=false; selHandle=null; selOrigin=null; selSnap=null; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+  }
+
+  document.getElementById('toolPen').addEventListener('click', ()=>setInkMode('pen'));
+  document.getElementById('toolEraser').addEventListener('click', ()=>setInkMode('eraser'));
+  document.getElementById('inkClear').addEventListener('click', clearInk);
+  document.getElementById('toolArrow').addEventListener('click', ()=>setShapeMode('arrow'));
+  document.getElementById('shapeClear').addEventListener('click', ()=>{ shapes.length=0;selIdx=-1;if(_shapeBoardCtx)redrawShapes(); });
+
+  renderer.domElement.addEventListener('pointerdown', e=>{ if(e.button===0) tryStartShape(e)||tryStartSel(e)||tryStartInk(e); });
+  window.addEventListener('pointermove', e=>{ if(_shapeDrawing){updateShape(e);return;} if(selDragging){updateSel(e);return;} if(_inkDrawing){updateInk(e);return;} });
+  window.addEventListener('pointerup',     e=>{ if(e.button===0){endShapeDraw(e);endSel(e);endInk(e);} });
+  window.addEventListener('pointercancel', e=>{ endShapeDraw(e);endSel(e);endInk(e); });
+  window.addEventListener('keydown', e=>{
+    const tag=document.activeElement?.tagName;
+    if(selIdx>=0&&(e.key==='Delete'||e.key==='Backspace')&&tag!=='INPUT'&&tag!=='TEXTAREA'){
+      shapes.splice(selIdx,1);selIdx=-1;redrawShapes();e.preventDefault();
+    }
+  });
+})();
+  </script>
+</body>
+</html>
