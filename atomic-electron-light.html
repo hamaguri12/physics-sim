@@ -3,30 +3,21 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>波の性質｜波動｜高校物理シミュ集</title>
+  <title>電子と光｜原子｜高校物理シミュ集</title>
   <style>
     body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#ffffff;color:#1a2040}
-    header{
-      padding:18px 20px;border-bottom:1px solid rgba(70,90,160,0.30);
-      display:flex;gap:12px;align-items:center
-    }
-    a.back{
-      color:#1a2040;text-decoration:none;border:1px solid rgba(70,90,160,0.30);
-      padding:8px 10px;border-radius:12px;background:rgba(240,243,252,0.95)
-    }
+    header{padding:18px 20px;border-bottom:1px solid rgba(70,90,160,0.30);display:flex;gap:12px;align-items:center}
+    a.back{color:#1a2040;text-decoration:none;border:1px solid rgba(70,90,160,0.30);padding:8px 10px;border-radius:12px;background:rgba(240,243,252,0.95)}
     a.back:hover{opacity:.9}
     h1{margin:0;font-size:18px}
-
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;padding:16px}
-    a.card{
-      display:block;text-decoration:none;color:inherit;background:rgba(240,243,252,0.95);
+    a.card{display:block;text-decoration:none;color:inherit;background:rgba(240,243,252,0.95);
       border:1px solid rgba(70,90,160,0.30);border-radius:14px;padding:16px;
       transition:border-color .15s, box-shadow .15s, background .15s;
       /* 押すだけのボタンなので、文字を選べないようにし、リンクのドラッグも切る。
          文字を選んでしまうと次のクリックが「選択のドラッグ」になり、
          押したまま数px動かすと「リンクのドラッグ」になって、どちらもクリックが消える */
-      user-select:none;-webkit-user-select:none;-webkit-user-drag:none
-    }
+      user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
     /* マウスを乗せてもカードの位置を動かさない。
        以前は translateY(-2px) で浮かせていたが、カードが 2px 上へ逃げるので
        下の縁にカーソルがあると「当たる→外れる」を繰り返し、クリックが空振りしていた
@@ -58,28 +49,25 @@
 </head>
 <body>
   <header>
-    <a class="back" href="waves.html">← 波動へ</a>
-    <a class="back" href="index.html">ホーム</a>
-    <h1>波の性質</h1>
+    <a class="back" href="atomic.html">← 原子</a>
+    <h1>電子と光</h1>
   </header>
 
   <div class="grid">
-    <a class="card" href="units/wave-medium-motion.html">
-      <div class="title">波と媒質の運動</div>
-      <div class="desc">（3Dボード）教師が物体を配置して説明できる土台</div>
-    </a>
-
-    <a class="card" href="units/sine-wave.html">
-      <div class="title">正弦波の式</div>
-      <div class="desc">y=Asin(… ) と位相・周期・波長の関係</div>
-    </a>
-
-    <!-- 波の伝わり方は準備中にしてある（2026-09-14）。中身は units/wave-propagation.html にそのまま残っている。
-         元に戻すときは、この下の 1 行を
-         <a class="card" href="units/wave-propagation.html">
-         に戻し、desc を「（3Dボード）波の伝わり方を視覚的に確認できる土台」に戻すだけ -->
     <a class="card soon" href="#" onclick="return showSoon(event)">
-      <div class="title">波の伝わり方</div>
+      <div class="title">電子</div>
+      <div class="desc">準備中</div>
+    </a>
+    <a class="card soon" href="#" onclick="return showSoon(event)">
+      <div class="title">光の粒子性</div>
+      <div class="desc">準備中</div>
+    </a>
+    <a class="card soon" href="#" onclick="return showSoon(event)">
+      <div class="title">Ｘ線</div>
+      <div class="desc">準備中</div>
+    </a>
+    <a class="card soon" href="#" onclick="return showSoon(event)">
+      <div class="title">粒子の波動性</div>
       <div class="desc">準備中</div>
     </a>
   </div>

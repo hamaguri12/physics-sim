@@ -61,8 +61,11 @@
     }
     .qr-card img{width:160px;height:160px;display:block}
     .qr-label{font-size:11px;font-weight:700;color:#1a2040;text-align:center;line-height:1.3}
-    .qr-card{cursor:pointer}
-    .qr-card:hover{transform:translateY(-2px);transition:.15s}
+    .qr-card{cursor:pointer;transition:border-color .15s, box-shadow .15s}
+    /* 単元ボタンと同じで、マウスを乗せてもカードの位置は動かさない。
+       以前は translateY(-2px) で浮かせていたが、下の縁にカーソルがあると
+       「当たる→逃げる」を繰り返してクリックが空振りする（2026-09-16 に他と揃えた） */
+    .qr-card:hover{border-color:rgba(70,90,160,0.55);box-shadow:0 4px 12px rgba(70,90,160,0.18)}
 
     /* QR拡大モーダル */
     #qr-modal{
@@ -96,17 +99,17 @@
   <div class="grid">
     <a class="card" href="mechanics.html">
       <div class="title">力学</div>
-      <div class="desc">平面運動・剛体・運動量保存・円運動</div>
+      <div class="desc">運動の表し方・運動の法則・仕事と力学的エネルギー・運動量の保存・円運動と万有引力</div>
     </a>
 
     <a class="card" href="thermal.html">
       <div class="title">熱</div>
-      <div class="desc">気体の法則・気体分子の運動・理想気体の内部エネルギー</div>
+      <div class="desc">熱と物質・気体のエネルギーと状態変化</div>
     </a>
 
     <a class="card" href="waves.html">
       <div class="title">波動</div>
-      <div class="desc">波の伝わり方・音の伝わり方・光</div>
+      <div class="desc">波の性質・音・光</div>
     </a>
 
     <a class="card" href="em.html">
