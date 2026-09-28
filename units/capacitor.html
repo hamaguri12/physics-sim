@@ -491,6 +491,11 @@
       flex:1;height:9px;border-radius:5px;
       background:linear-gradient(to right,#2f6fd0,#a8a8a8,#d83b3b);
     }
+  /* 画面の文字は選ばせない。つまみなどを速く連打すると近くの文字が選ばれ、その選んだ文字の上を
+     押して動かすとブラウザが「文字の引きずり」を始め、禁止のしるし（🚫）が出たまま操作を
+     横取りされる（CLAUDE.md §8-21）。入力欄の中だけは選べるままにしておく */
+  #app{user-select:none}
+  #app input,#app textarea,#app select{user-select:auto}
   </style>
   <script type="importmap">
   {
@@ -8180,5 +8185,8 @@
 
     requestAnimationFrame(tick);
   </script>
+<!-- 文字や絵の引きずりを始めさせない。始まるとブラウザが禁止のしるし（🚫）を出したまま
+     操作を横取りし、つまみや盤面にポインタが届かなくなる（CLAUDE.md §8-21） -->
+<script>window.addEventListener('dragstart', e => e.preventDefault());</script>
 </body>
 </html>

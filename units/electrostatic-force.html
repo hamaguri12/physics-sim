@@ -100,6 +100,11 @@
     .row .btn{flex:1;justify-content:center}
     .lbl{color:var(--muted);font-size:12px;align-self:center}
     .num{width:72px;max-width:90px;background:rgba(240,243,252,0.80);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:6px 8px;font-size:12px}
+  /* 画面の文字は選ばせない。つまみなどを速く連打すると近くの文字が選ばれ、その選んだ文字の上を
+     押して動かすとブラウザが「文字の引きずり」を始め、禁止のしるし（🚫）が出たまま操作を
+     横取りされる（CLAUDE.md §8-21）。入力欄の中だけは選べるままにしておく */
+  #app{user-select:none}
+  #app input,#app textarea,#app select{user-select:auto}
   </style>
   <div id="errOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;padding:24px;overflow:auto;">
     <div style="max-width:720px;margin:0 auto;font-family:monospace">
@@ -1835,5 +1840,8 @@
       });
     }
   </script>
+<!-- 文字や絵の引きずりを始めさせない。始まるとブラウザが禁止のしるし（🚫）を出したまま
+     操作を横取りし、つまみや盤面にポインタが届かなくなる（CLAUDE.md §8-21） -->
+<script>window.addEventListener('dragstart', e => e.preventDefault());</script>
 </body>
 </html>

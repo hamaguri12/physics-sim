@@ -1,0 +1,2116 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>オームの法則｜電流｜電磁気｜高校物理シミュ集</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --panel:rgba(240,243,252,0.95);
+      --border:rgba(70,90,160,0.30);
+      --text:#1a2040;
+      --muted:#5566aa;
+      --accent:#2a6ff0;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    /* 盤面いっぱいに広げる。inset だけでは足りない端末があるので幅・高さも入れる（CLAUDE.md §6） */
+    #app{position:fixed;inset:0;overflow:hidden}
+    canvas#c{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+    /* ===== 上バー ===== */
+    .topbar{
+      position:absolute;left:0;top:0;right:0;z-index:20;
+      display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+      padding:10px 12px;pointer-events:none;
+      user-select:none;                    /* 上と同じ理由（選んだ文字の引きずりを起こさせない） */
+    }
+    .topbar > *{pointer-events:auto}
+    .btn,.pill{
+      display:inline-flex;align-items:center;gap:6px;
+      border:1px solid var(--border);border-radius:12px;
+      background:var(--panel);color:var(--text);
+      font-size:13px;font-weight:700;line-height:1;font-family:inherit;
+      padding:9px 12px;cursor:pointer;text-decoration:none;
+    }
+    .btn:hover{background:rgba(232,238,252,0.98)}
+    .btn.active{ outline:2px solid rgba(120,170,255,.6); outline-offset:-2px }
+    /* 数字は等幅の数字を持つ書体で（詳しい理由は下の `.kv .v` のところ。
+       Windows の system-ui には等幅の数字が無く、tabular-nums だけでは効かない） */
+    .pill{cursor:default;color:var(--muted);font-weight:600;font-family:'Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums}
+    /* 警告（溶ける・現実には起きない状態）は赤で出す。家族のシミュと同じ ⚠ の見せ方 */
+    .pill.warn{color:#d83b3b;font-weight:800;background:rgba(255,236,236,0.97);border-color:rgba(216,59,59,0.45)}
+
+    /* ===== 道具箱（CLAUDE.md §5 の器） ===== */
+    .sidebar{
+      position:absolute;left:10px;top:56px;bottom:10px;z-index:6;
+      width:280px;max-width:85vw;
+      background:var(--panel);border:1px solid var(--border);border-radius:16px;
+      padding:12px;overflow:auto;backdrop-filter: blur(6px);
+      /* 道具箱の文字は選べなくする。つまみを速く連打すると、すぐ上の「温度 t 20 ℃」などが
+         選ばれてしまい、その選んだ文字の上で押して動かすとブラウザが「文字の引きずり」を始める。
+         引きずりが始まると禁止のしるし（🚫）が出て、つまみにポインタが届かなくなる
+         （2026-09-20 に本人から「温度 t のつまみで高速でクリックを繰り返すと…」）。
+         数値パネル（.panel）は元から user-select:none。入力欄の中だけは選べるように戻す */
+      user-select:none;
+    }
+    .sidebar input, .sidebar textarea{user-select:auto}
+    .h{font-weight:800;font-size:13px;margin:0 0 8px}
+    .group{margin:10px 0 12px}
+    .group .h{margin:0 0 6px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .row .btn{flex:1;justify-content:center}
+    #toolboxPanel{
+      position: fixed; left: 16px; top: 72px; z-index: 1000;
+      transition: transform 180ms ease; transform: translateX(0);
+      overflow: hidden auto;              /* 縦だけスクロール。hidden にすると中身が長いとき触れなくなる */
+      overscroll-behavior: contain;
+    }
+    #toolboxPanel.is-collapsed{ transform: translateX(calc(-100% + 36px)); }
+    #toolboxToggle.toolboxToggle{
+      position: absolute; top: 10px; right: 10px; width: 28px; height: 28px;
+      border-radius: 10px; border: 1px solid rgba(70,90,160,0.25);
+      background: rgba(240,243,252,0.90); color: #1a2040; cursor: pointer;
+      display: grid; place-items: center; font-weight: 700; line-height: 1;
+    }
+    #toolboxPanel.is-collapsed #toolboxToggle{ right: 4px; }
+    #toolboxPanel.is-collapsed > :not(#toolboxToggle){ display: none !important; }
+
+    /* 道具箱の中の欄（コンデンサーの設定パネルと同じ見た目） */
+    .fld{margin:8px 0 4px}
+    .fld .lab{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--muted);margin-bottom:2px}
+    /* つまみの値（3.0 V・20 ℃・18 cm（9 メモリ））も同じ。右端ぞろえなので、
+       数字の幅が変わると つまみを動かすたびに文字の左端が伸び縮みする */
+    .fld .lab b{color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums}
+    input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+    .chk{display:flex;align-items:center;gap:6px;font-size:12px;margin:5px 0;cursor:pointer;user-select:none}
+    .chk input{margin:0;accent-color:var(--accent)}
+    .seg{display:flex;gap:4px;margin-top:4px}
+    .seg .btn{flex:1;padding:6px 6px;font-size:12px;justify-content:center}
+    .mat{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+    .mat .btn{flex:1 1 30%;padding:7px 4px;font-size:12px;justify-content:center;flex-direction:column;gap:2px;line-height:1.15}
+    .mat .btn small{font-weight:400;color:var(--muted);font-size:10px}
+    .note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px}
+    /* パネルの中の注は、パネルの幅を広げない。
+       width:0 で「箱の幅を決める投票権」を捨て、min-width:100% で親の幅いっぱいに折り返す。
+       これが無いと、注が長いとき注の 1 行ぶんまでパネルが横に伸び、グラフの右に大きな余白ができる
+       （2026-09-20 に本人から「謎の余白が生まれパネルの大きさが二倍ぐらいになる」） */
+    .panel .note, .panel .kv .sec{width:0;min-width:100%}
+    .sep{border:0;border-top:1px solid var(--border);margin:8px 0}
+
+    /* ===== パネル（数値・グラフ）：つかんで動かせ、左下の角で拡大縮小 ===== */
+    .panel{
+      position:fixed;z-index:30;
+      background:var(--panel);border:1px solid var(--border);border-radius:14px;
+      padding:10px 12px 14px;backdrop-filter:blur(6px);
+      font-size:12px;user-select:none;min-width:200px;
+      transform-origin:right top;
+    }
+    .panel .ph{display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:800;font-size:13px;margin-bottom:6px;cursor:move}
+    .panel .ph button{border:1px solid var(--border);background:rgba(240,243,252,0.9);color:var(--text);border-radius:8px;width:24px;height:24px;cursor:pointer;font-weight:700;line-height:1;font-family:inherit}
+    .panel .grip{position:absolute;left:4px;bottom:2px;width:14px;height:14px;cursor:nesw-resize;opacity:.45;font-size:12px;line-height:14px;text-align:center}
+    .panel .grip:hover{opacity:1}
+    /* 画面の下に置くパネルは右下を固定点にして拡大する。つまみは反対の角（左上）に */
+    .panel.anchor-bottom{transform-origin:right bottom}
+    .panel.anchor-bottom .grip{top:4px;bottom:auto;cursor:nwse-resize;transform:rotate(180deg)}
+    .kv{display:grid;grid-template-columns:auto auto;gap:3px 14px;align-items:baseline}
+    .kv .k{color:var(--muted)}
+    /* 数字は**等幅の数字を持つ書体**で出す。2026-09-22 まで `system-ui` に任せていたが、
+       Windows の system-ui には等幅の数字が無く、`font-variant-numeric:tabular-nums` も
+       `font-feature-settings:'tnum'` も効かなかった（実測：「111111」27.1 px ／「000000」37.4 px）。
+       そのためジュール熱の数字が変わるたびに行の幅が変わり、右端を基準に置いてあるパネルの
+       左端が 1〜2 px ずつ動いて「ぴくぴく」して見えた（本人から 2026-09-22）。
+       Segoe UI（Windows）／system-ui（他）なら tabular-nums が効く。日本語は同じ書体に落ちるので見え方は変わらない */
+    .kv .v{font-family:'Segoe UI',system-ui,sans-serif;font-variant-numeric:tabular-nums;text-align:right;font-weight:700;white-space:nowrap}
+    /* ジュール熱の行は、動かしているあいだ**いちばん幅の変わる行**で、そのまま列の幅＝パネルの幅になる。
+       いちばん長くなる形（「1.20e+3 kJ t ＝ 9999.9 s」＝ **素の幅 120 px**）ぶんを先に取っておき、
+       数字が短くても列が縮まないようにする。この値を小さくすると、またぴくぴく動く（検査 ohmjitter が見張る）。
+       ★ 測るときは offsetWidth で測ること。パネルには拡大の transform が掛かっているので
+       getBoundingClientRect は拡大後の値を返し、実際より小さい値に決めてしまう（2026-09-22 に一度やった） */
+    .kv .v.reserve{min-width:122px}
+    .kv .v small{font-weight:400;color:var(--muted)}
+    .kv .sec{grid-column:1 / -1;color:var(--muted);font-size:11px;margin-top:6px;border-top:1px solid var(--border);padding-top:4px}
+    .panel canvas{display:block;border-radius:8px;background:rgba(255,255,255,0.7)}
+
+    /* 右クリックメニュー（図形の矢印を消す） */
+    #ctxMenu{display:none;position:fixed;z-index:600;background:rgba(240,243,252,0.97);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 14px rgba(20,30,60,0.18);padding:4px}
+    #ctxMenu button{display:flex;align-items:center;gap:7px;border:none;background:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--text);white-space:nowrap;font-family:inherit}
+    #ctxMenu button:hover{background:rgba(70,90,160,0.12)}
+
+    /* 左下ヘルプ */
+    .help{
+      position:absolute;left:310px;bottom:10px;z-index:6;
+      background:rgba(240,243,252,0.92);border:1px solid rgba(70,90,160,0.20);
+      border-radius:14px;padding:10px 12px;font-size:12px;color:var(--muted);max-width:460px;line-height:1.5;
+      user-select:none;                    /* 上と同じ理由 */
+    }
+    .help b{color:var(--text)}
+
+    /* JS のエラーを画面に出す（授業中に黙って止まらないように） */
+    #errOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;padding:24px;overflow:auto}
+    #errOverlay > div{background:#1a0808;border:2px solid #cc3333;border-radius:10px;padding:18px;max-width:820px;margin:auto;color:#ffcccc;font-family:monospace;font-size:12px}
+    #errOverlay pre{white-space:pre-wrap;word-break:break-all;margin:0}
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+  <script data-goatcounter="https://hamaguri12-physics-sim.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
+</head>
+<body>
+  <div id="errOverlay"><div><div style="color:#ff5555;font-size:14px;font-weight:bold;margin-bottom:10px;">⚠ JavaScript Error</div><pre id="errMsg"></pre></div></div>
+  <script>
+  window.addEventListener('error', (e) => {
+    const el = document.getElementById('errOverlay'), msg = document.getElementById('errMsg');
+    if (el && msg) {
+      el.style.display = 'block';
+      msg.textContent += (e.message || 'Unknown error') + '\n' +
+        (e.filename ? '  at ' + e.filename + ':' + e.lineno + ':' + e.colno + '\n' : '') +
+        (e.error?.stack ? e.error.stack : '') + '\n\n';
+    }
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const el = document.getElementById('errOverlay'), msg = document.getElementById('errMsg');
+    if (el && msg) {
+      el.style.display = 'block';
+      msg.textContent += 'Unhandled Promise rejection:\n' + (e.reason?.message || String(e.reason) || 'Unknown') + '\n' + (e.reason?.stack || '') + '\n\n';
+    }
+  });
+  </script>
+
+  <div id="app">
+    <canvas id="c"></canvas>
+
+    <div class="topbar">
+      <a class="btn" href="../em-current.html">← 電流へ</a>
+      <span class="pill">オームの法則</span>
+      <button class="btn" id="btnPlay">⏸ 一時停止</button>
+      <button class="btn" id="btnReset" title="時間・ジュール熱・温度・電子の位置をはじめに戻す（つまみはそのまま）">↺ はじめから</button>
+      <span class="pill" id="pillTime">t = 0.0 s</span>
+      <span class="pill warn" id="pillMelt" style="display:none"></span>
+    </div>
+
+    <aside class="sidebar" id="toolboxPanel">
+      <button id="toolboxToggle" class="toolboxToggle" type="button" aria-expanded="true">＜</button>
+      <p class="h">道具箱</p>
+
+      <div class="group">
+        <p class="h">電源</p>
+        <div class="fld">
+          <div class="lab"><span>電圧 V</span><b id="vV">3.0 V</b></div>
+          <input type="range" id="sV" min="0" max="10" step="0.1" value="3">
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h">導体</p>
+        <div class="fld"><div class="lab"><span>材質（20 ℃ の抵抗率）</span></div></div>
+        <div class="mat" id="matRow"></div>
+        <div class="fld">
+          <div class="lab"><span>長さ l</span><b id="vL">18 cm</b></div>
+          <input type="range" id="sL" min="4" max="16" step="1" value="9">
+        </div>
+        <div class="fld">
+          <div class="lab"><span>断面積 S</span><b id="vS">2.0×10⁻⁷ m²</b></div>
+          <input type="range" id="sS" min="0" max="4" step="1" value="2">
+        </div>
+        <div class="fld">
+          <div class="lab"><span id="lblT">温度 t</span><b id="vT">20 ℃</b></div>
+          <input type="range" id="sT" min="0" max="100" step="1" value="20">
+        </div>
+        <label class="chk"><input type="checkbox" id="ckHeat"> 電流で熱くなる（白熱電球のように）</label>
+        <div class="note" id="heatNote">導体の温度はつまみで決めます。チェックを入れると、ジュール熱で温度が上がり、抵抗が増えます</div>
+        <div class="row"><button class="btn" id="btnDefaults">はじめの設定に</button></div>
+      </div>
+
+      <div class="group">
+        <p class="h">表示</p>
+        <label class="chk"><input type="checkbox" id="ckElec" checked> 自由電子</label>
+        <label class="chk"><input type="checkbox" id="ckIon" checked> 陽イオン</label>
+        <label class="chk"><input type="checkbox" id="ckArrow"> 電場と、電子にはたらく力</label>
+        <label class="chk"><input type="checkbox" id="ckSection"> 断面 A を通る電子を数える</label>
+        <label class="chk"><input type="checkbox" id="ckPot"> 電位を色で表す</label>
+        <div class="note">−極を 0 V として、低いところを青・高いところを赤で塗ります</div>
+        <div class="fld" style="margin-top:8px"><div class="lab"><span>導線の中の流れ</span></div>
+          <div class="seg" id="flowSeg">
+            <button class="btn" type="button" data-flow="none">なし</button>
+            <button class="btn" type="button" data-flow="current">電流</button>
+            <button class="btn active" type="button" data-flow="electron">電子</button>
+          </div>
+          <div class="note" id="flowNote"></div>
+        </div>
+        <hr class="sep">
+        <label class="chk"><input type="checkbox" id="ckInfo" checked> 数値</label>
+        <label class="chk"><input type="checkbox" id="ckVI"> V-I グラフ</label>
+        <label class="chk"><input type="checkbox" id="ckPotGraph"> 電位のグラフ</label>
+      </div>
+
+      <div class="group">
+        <p class="h">視点</p>
+        <div class="row">
+          <button class="btn" id="viewAll">全体</button>
+          <button class="btn" id="viewInside">導体の中</button>
+          <button class="btn" id="viewFront">正面</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="h">図形</p>
+        <div class="row">
+          <button class="btn" id="toolPen">ペン</button>
+          <button class="btn" id="toolEraser">消しゴム</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="inkClear">ペンを全消し</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="toolArrow">矢印</button>
+          <button class="btn" id="shapeClear">矢印を全消し</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 数値パネル：つかんで動かせ、左下の角で拡大縮小 -->
+    <!-- max-width が無いと、下の注が長くなったぶんだけパネルが横に伸びて盤面を覆う（2026-09-20） -->
+    <div class="panel" id="infoPanel" style="right:10px;top:56px;max-width:360px">
+      <div class="ph"><span>数値</span><button id="infoClose" type="button" title="閉じる">✕</button></div>
+      <div class="kv" id="infoBody"></div>
+      <div class="note" id="infoNote">1 メモリ ＝ 2 cm。自由電子の数密度 n は 8.5×10²⁸ /m³（銅の値）で計算しています</div>
+      <!-- つまみは左下の角なので、三角も左下向き（◣）。右下向きの ◢ だと角と向きが食いちがう（2026-09-21）。
+           下の 2 枚（anchor-bottom）はつまみが左上の角で、◢ を 180 度まわして左上向きにしている -->
+      <div class="grip" id="infoGrip" title="ドラッグで拡大縮小">◣</div>
+    </div>
+
+    <div class="panel anchor-bottom" id="graphVI" style="right:10px;bottom:14px;display:none">
+      <div class="ph"><span>V-I グラフ</span><button id="viClose" type="button" title="閉じる">✕</button></div>
+      <canvas id="viCanvas" width="320" height="220"></canvas>
+      <div class="note" id="viNote"></div>
+      <div class="grip" id="viGrip" title="ドラッグで拡大縮小">◢</div>
+    </div>
+
+    <div class="panel anchor-bottom" id="graphPot" style="right:420px;bottom:14px;display:none">
+      <div class="ph"><span>電位のグラフ（回路をひとまわり）</span><button id="potClose" type="button" title="閉じる">✕</button></div>
+      <canvas id="potCanvas" width="340" height="190"></canvas>
+      <div class="note" id="potNote">抵抗（導体）の両端で電位が RI だけ下がる ＝ 電圧降下。導線の中では下がりません。縦軸は 0〜10 V に固定してあるので、電圧を変えると線の高さが変わります</div>
+      <div class="grip" id="potGrip" title="ドラッグで拡大縮小">◢</div>
+    </div>
+
+    <div id="ctxMenu"><button id="ctxDeleteBtn" type="button">🗑️ 削除</button></div>
+
+    <div class="help">
+      <b>操作</b>：ドラッグ＝視点回転／ホイール＝ズーム／右ドラッグ＝平行移動<br>
+      <b>見かた</b>：電池の＋極（左）から −極へ電流が流れ、自由電子（青）は逆向きに、陽イオン（橙）にぶつかりながら進みます
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+    import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+    import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
+    // ===== 基本セットアップ =====
+    const canvas = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    // 3D 空間（電位シミュと同じ、透視投影＋自由に回せる視点）。
+    // 端末のアスペクト比で見え方が変わらないよう、16:9 を基準に水平方向を固定する（CLAUDE.md §6）
+    const BASE_FOV = 50, BASE_ASPECT = 16 / 9;
+    function hPlusFov(aspect) {
+      return aspect >= BASE_ASPECT ? BASE_FOV
+        : 2 * Math.atan(Math.tan(BASE_FOV * Math.PI / 360) * BASE_ASPECT / aspect) * 180 / Math.PI;
+    }
+    const CY = 2.0;                     // 導体の軸の高さ（いちばん太いときの半径 2 が盤面にめり込まないように）
+    const camera = new THREE.PerspectiveCamera(BASE_FOV, 16 / 9, 0.1, 1000);
+    const VIEWS = {   // 視点ボタンの行き先
+      all:    { pos: new THREE.Vector3(0, 11, 17),        target: new THREE.Vector3(0, CY, 0) },   // 20×20 の盤面が四隅まで入る
+      inside: { pos: new THREE.Vector3(0, CY + 3.2, 7.5), target: new THREE.Vector3(0, CY, 0) },
+      front:  { pos: new THREE.Vector3(0, CY + 0.5, 22),  target: new THREE.Vector3(0, CY, 0) },
+    };
+    camera.position.copy(VIEWS.all.pos);
+    camera.lookAt(VIEWS.all.target);
+    scene.add(camera);   // カメラの子（図形の描画ボード）をシーングラフに含めるために必要（CLAUDE.md §5）
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.copy(VIEWS.all.target);
+    controls.zoomToCursor = true;
+    controls.update();
+
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.70);
+    dirLight.position.set(6, 10, 6);
+    scene.add(dirLight);
+
+    // ===== 定数（物理）=====
+    // 教科書：数研「総合物理 2」p.156〜165「オームの法則」。式の番号は教科書のもの
+    const E_CHARGE = 1.602e-19;   // 電気素量 [C]
+    const N_FREE   = 8.5e28;      // 自由電子の数密度 [1/m³]。教科書 問 21 の値（銅）。
+                                  // 教科書はこの値しか出さないので、どの材質もこの値で v ＝ I/(enS) を出す（(33) 式）
+    const MEM_M    = 0.02;        // 縮尺：1 メモリ ＝ 2 cm。長さ 9 メモリ ＝ 0.18 m（問 22 の値）
+    // 材質。抵抗率は教科書の表（20 ℃）。温度係数 α は教科書 表 2（0 ℃と 100 ℃から求めたもの）。
+    // 銀・金の α は教科書の表に無いので理科年表の値を入れてある（表に無いことをパネルに書く）
+    // melt は融点 [℃]（理科年表の値。ニクロムは合金なのでおよその値）。
+    // 「電流で熱くなる」の温度は、ここで止める。融けたものの中を電子が流れる絵は描かない
+    const MATERIALS = [
+      { key: 'ag', name: '銀',         rho20: 1.6e-8, alpha: 3.8e-3,  melt:  962, color: 0xd9dde3, alphaInBook: false },
+      { key: 'cu', name: '銅',         rho20: 1.7e-8, alpha: 4.4e-3,  melt: 1085, color: 0xc98a4e, alphaInBook: true  },
+      { key: 'au', name: '金',         rho20: 2.2e-8, alpha: 3.4e-3,  melt: 1064, color: 0xd9b23a, alphaInBook: false },
+      { key: 'al', name: 'アルミニウム', rho20: 2.7e-8, alpha: 4.2e-3,  melt:  660, color: 0xb9bec7, alphaInBook: true  },
+      { key: 'w',  name: 'タングステン', rho20: 5.3e-8, alpha: 4.9e-3,  melt: 3422, color: 0x7d8189, alphaInBook: true  },
+      { key: 'fe', name: '鉄',         rho20: 9.6e-8, alpha: 6.5e-3,  melt: 1538, color: 0x8e95a3, alphaInBook: true  },
+      { key: 'ni', name: 'ニクロム',    rho20: 1.1e-6, alpha: 0.093e-3, melt: 1400, color: 0x9aa0a6, alphaInBook: true  },
+    ];
+    const MAT_DEFAULT = 6;                                     // ニクロム（問 22・図 41 に出てくる）
+    const S_STEPS = [0.5e-7, 1.0e-7, 2.0e-7, 4.0e-7, 8.0e-7];  // 断面積 [m²]。図 45 の「2 倍にすると」を 1 段で
+    const S_DEFAULT = 2;                                       // 2.0×10⁻⁷ m²（問 22）
+    const L_DEFAULT = 9, L_MIN = 4, L_MAX = 16;                // 長さ [メモリ]。9 メモリ ＝ 0.18 m
+    const V_DEFAULT = 3.0, V_MAX = 10;                         // 電圧 [V]
+    const T_DEFAULT = 20;                                      // 温度 [℃]。抵抗率の表は 20 ℃ の値
+    // 温度の上限は**材質の融点**（上の melt）。見た目の都合で決めた数字ではない。
+    //   2026-09-20 まではどの材質も一律 1200 ℃ で頭打ちにしていた。これは「絵の都合の上限」なのに
+    //   物理量（温度）に掛けていたので、銀（融点 962 ℃）が 1200 ℃ で光ったり、
+    //   V-I グラフの 7 割が「上限に張りついた直線」になったりしていた（CLAUDE.md §8-22）。
+    const HEAT_K_PER_W = 12;    // 電流で熱くなるとき、1 W あたり何 K 上がるか。見せるための値（実物は形や放熱で決まる）
+    const HEAT_TAU = 2.5;       // 温まる・冷めるの時定数 [s]
+
+    // ===== 定数（見た目）=====
+    // 絵は模式図。数値パネルの値は上の物理定数だけから出し、ここの倍率はいっさい使わない
+    const R_DRAW0 = 1.0;        // 断面積 2.0×10⁻⁷ m² のときに描く半径 [メモリ]。半径は √S に比例させる（面積の比が正しく見える）
+    const ION_R = 0.26, EL_R = 0.16;   // 陽イオンと電子の大きさ（ふつうの太さのとき）
+    const PART_COLOR = 0x1a2040;
+    const WIRE_Z = 7.0;         // 手前の導線（電源のある辺）の z
+    const WIRE_R = 0.10;
+    const BAT_GAP = 0.7;        // 電源の 2 枚の板のすきま
+    const EL_PER_MEM = 6;       // 既定の太さのとき、長さ 1 メモリあたりの自由電子の数（絵の上の数。本当の数ではない）
+    const EL_MAX = 320;         // 電子の上限（これ以上は重くなる）
+    const VIS_DRIFT = 3.0;      // 既定（3 V・9 メモリ・ニクロム 20 ℃）での電子の見せる速さ [メモリ/秒]
+    const VIS_DRIFT_MAX = 10;   // これより速いと目で追えない
+    const VIS_JITTER = 0.9;     // 熱運動のふらつき [メモリ/秒]（本当は熱運動のほうがずっと速いが、それでは流れが見えない）
+    const VIS_FLOW = 2.5, VIS_FLOW_MAX = 10;   // 導線の粒の速さ（3 A のとき 2.5 メモリ/秒。√I で縮める）
+    const VIS_E_ARROW = 6.0, VIS_E_MAX = 12;   // 電場の矢印の長さ（既定で 6 メモリ。√(V/l) で縮める）
+    const VIS_F_ARROW = 1.6;                   // 電子にはたらく力の矢印の長さ（既定）
+
+    // ===== 状態 =====
+    const params = { V: V_DEFAULT, mat: MAT_DEFAULT, Lmem: L_DEFAULT, sIdx: S_DEFAULT, Tamb: T_DEFAULT, heat: false };
+    const show = { elec: true, ion: true, arrow: false, section: false, pot: false, flow: 'electron', info: true, vi: false, potGraph: false };
+    // broken：溶けて切れたか。細い線が融点に達すると、表面張力で玉になってちぎれ、回路が開く
+    //   （ヒューズと同じ原理。10 V 以下では切れ目でアークも続かないので、きれいに電流が止まる）。
+    //   溶けた金属そのものは電気を通す（抵抗率はおよそ 2 倍に跳ぶ）が、形を保てないので
+    //   「溶けた ＝ 切れた」で扱う。2026-09-20 に本人と相談して決めた
+    const sim = { running: true, time: 0, Q: 0, Tc: T_DEFAULT, cross: [], crossRate: 0, crossTotal: 0, broken: false };
+    const XA = 0;               // 断面 A の位置（導体の中央）[メモリ、導体の局所座標]
+
+    // ===== 物理の式（教科書の式をそのまま。見せる倍率は入れない）=====
+    const matNow = () => MATERIALS[params.mat];
+    // (38) ρ ＝ ρ₀(1＋αt)。表の値は 20 ℃ のものなので、0 ℃ の ρ₀ に直してから使う
+    function rhoAt(m, t) { const rho0 = m.rho20 / (1 + 20 * m.alpha); return rho0 * (1 + m.alpha * t); }
+    const lengthM = () => params.Lmem * MEM_M;
+    const areaM2  = () => S_STEPS[params.sIdx];
+    function resistanceAt(t) { return rhoAt(matNow(), t) * lengthM() / areaM2(); }   // (37) R ＝ ρl/S
+    const resistance = () => resistanceAt(sim.Tc);
+    const current    = () => sim.broken ? 0 : params.V / resistance();                // (32) I ＝ V/R（切れていたら 0）
+    const driftSpeed = () => current() / (E_CHARGE * N_FREE * areaM2());              // (33) I ＝ envS
+    // E ＝ V/l。切れているときは 0（電流が流れないので、金属の中の電場は消え、
+    // 電位差はぜんぶ切れ目にかかる）
+    const fieldE     = () => sim.broken ? 0 : params.V / lengthM();
+    const power      = () => params.V * current();                                    // (42) P ＝ IV
+    // 「電流で熱くなる」の落ち着き先の温度：t ＝ 周囲 ＋ (1 W あたりの上昇)×P。P は t で変わるので反復で解く
+    function steadyTemp(V) {
+      const mp = meltPoint();
+      let t = params.Tamb;
+      for (let i = 0; i < 60; i++) {
+        const R = rhoAt(matNow(), t) * lengthM() / areaM2();
+        const next = Math.min(mp, params.Tamb + HEAT_K_PER_W * V * V / R);
+        t = 0.5 * t + 0.5 * next;   // 半分ずつ寄せる（タングステンのように α が大きいと振動するため）
+      }
+      return t;
+    }
+    const meltPoint = () => matNow().melt;
+    // 溶けはじめる電圧（この電圧をこえると、落ち着き先が融点に届く）。届かないなら null。
+    // 落ち着き先は V について増える一方なので、二分法で挟める
+    function meltVoltage() {
+      const mp = meltPoint();
+      if (steadyTemp(V_MAX) < mp - 0.5) return null;
+      let lo = 0, hi = V_MAX;
+      for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (steadyTemp(mid) >= mp - 0.5) hi = mid; else lo = mid; }
+      return hi;
+    }
+    // いま融点にいるか（切れた瞬間の温度。切れたあとは電流が止まるので冷えていく）
+    const isMelting = () => params.heat && sim.Tc >= meltPoint() - 0.5;
+
+    // ===== 見せる速さ（模式図の倍率。数値には使わない）=====
+    // 電子の見せる速さ：V と l には比例させる（v ∝ E ＝ V/l、図 44 の要点）。
+    // 材質のちがい（銀とニクロムで 70 倍）は 4 乗根で縮める（そのままだと銀が速すぎて見えない）。
+    // 温度のちがい（同じ材質で最大 6 倍）は比例のまま（温度で電子が進みにくくなるのを見せたい）
+    const RHO_REF = MATERIALS[MAT_DEFAULT].rho20;
+    function driftDisp() {
+      if (sim.broken) return 0;      // 切れたら流れは止まる（熱運動だけが残る）
+      const m = matNow();
+      const matRatio = Math.pow(RHO_REF / m.rho20, 0.25);
+      const tempRatio = m.rho20 / rhoAt(m, sim.Tc);
+      const v = VIS_DRIFT * (params.V / V_DEFAULT) * (L_DEFAULT / params.Lmem) * matRatio * tempRatio;
+      return Math.min(VIS_DRIFT_MAX, v);
+    }
+    const drawRadius = () => R_DRAW0 * Math.sqrt(S_STEPS[params.sIdx] / S_STEPS[S_DEFAULT]);
+
+    // ===== 数値の書式 =====
+    const SUP = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+    const sup = s => String(s).split('').map(ch => SUP[ch] || ch).join('');
+    const OHM = 'Ω';   // オーム記号は U+2126（コンデンサーシミュと同じ）
+    function fmtSci(v, unit, digits = 2) {   // 1.1×10⁻⁶ Ω·m のような指数表記（有効数字 digits 桁）
+      if (!isFinite(v)) return '—';
+      const a = Math.abs(v);
+      if (a < 1e-30) return '0 ' + unit;
+      let e = Math.floor(Math.log10(a));
+      let m = (a / Math.pow(10, e)).toFixed(digits - 1);
+      if (parseFloat(m) >= 10) { m = (1).toFixed(digits - 1); e += 1; }
+      const sgn = v < 0 ? '−' : '';
+      if (e === 0) return sgn + m + ' ' + unit;
+      return sgn + m + '×10' + sup(e) + ' ' + unit;
+    }
+    function fmtV(v) { return v.toFixed(1) + ' V'; }
+    function fmtI(i) {
+      const a = Math.abs(i);
+      if (a < 1e-9) return '0 A';
+      if (a >= 100) return i.toFixed(0) + ' A';
+      if (a >= 10)  return i.toFixed(1) + ' A';
+      if (a >= 1)   return i.toFixed(2) + ' A';
+      if (a >= 1e-3) return (i * 1e3).toPrecision(3) + ' mA';
+      return (i * 1e6).toPrecision(3) + ' μA';
+    }
+    function fmtR(r) {
+      if (r >= 1e3) return (r / 1e3).toPrecision(3) + ' k' + OHM;
+      if (r >= 1)   return r.toPrecision(3) + ' ' + OHM;
+      if (r >= 1e-3) return (r * 1e3).toPrecision(3) + ' m' + OHM;
+      return (r * 1e6).toPrecision(3) + ' μ' + OHM;
+    }
+    function fmtW(p) {
+      if (p < 1e-9) return '0 W';
+      if (p >= 1e3) return (p / 1e3).toPrecision(3) + ' kW';
+      if (p >= 1)   return p.toPrecision(3) + ' W';
+      return (p * 1e3).toPrecision(3) + ' mW';
+    }
+    function fmtJ(q) {
+      if (q < 1e-9) return '0 J';
+      if (q >= 1e3) return (q / 1e3).toPrecision(3) + ' kJ';
+      if (q >= 1)   return q.toPrecision(3) + ' J';
+      return (q * 1e3).toPrecision(3) + ' mJ';
+    }
+    function fmtLen(m) { return (m * 100).toFixed(0) + ' cm'; }
+    function fmtT(t) { return t.toFixed(0) + ' ℃'; }
+    function fmtTime(t) { return t.toFixed(1) + ' s'; }
+
+    // ===== XZ 平面グリッド（20×20）=====
+    // 1 メモリ ＝ 1 ワールド単位。寸法はすべてメモリ数で指定する
+    function makeXZGrid(sizeX = 20, sizeZ = 20, divX = 20, divZ = 20) {
+      const y = 0;
+      const pts = [], colors = [];
+      const cCenter = new THREE.Color(0x9bb0d0), cGrid = new THREE.Color(0xc8d6e8);
+      for (let i = 0; i <= divZ; i++) {
+        const z = -sizeZ/2 + (i/divZ)*sizeZ;
+        pts.push(-sizeX/2, y, z,  sizeX/2, y, z);
+      }
+      for (let i = 0; i <= divX; i++) {
+        const x = -sizeX/2 + (i/divX)*sizeX;
+        pts.push(x, y, -sizeZ/2,  x, y, sizeZ/2);
+      }
+      const total = (divZ+1) + (divX+1);
+      for (let i = 0; i < total; i++) {
+        // 中心線（x=0 と z=0）だけ濃くする
+        const c = (i===Math.floor(divZ/2) || i===(divZ+1)+Math.floor(divX/2)) ? cCenter : cGrid;
+        colors.push(c.r,c.g,c.b, c.r,c.g,c.b);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true }));
+    }
+    scene.add(makeXZGrid());
+
+    // ===== スプライトテクスチャ（静電気シリーズから。＋は白い十字、−は白い横棒）=====
+    function makeCrossTexture() {
+      const s = 256;
+      const cv = document.createElement('canvas'); cv.width = cv.height = s;
+      const ctx = cv.getContext('2d');
+      const cx = s/2, cy = s/2, armH = s*0.46, armV = s*0.403, wH = s*0.08, wV = s*0.095;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - armH, cy - wH/2, armH*2, wH);
+      ctx.fillRect(cx - wV/2, cy - armV, wV, armV*2);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+    function makeMinusTexture() {
+      const s = 256;
+      const cv = document.createElement('canvas'); cv.width = cv.height = s;
+      const ctx = cv.getContext('2d');
+      const cx = s/2, cy = s/2, armH = s*0.46, wH = s*0.08;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - armH, cy - wH/2, armH*2, wH);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+    const _crossTex = makeCrossTexture(), _minusTex = makeMinusTexture();
+    // 印の材質は使い回す（電子が 300 個あっても材質は 1 つ）
+    const crossSpriteMat = new THREE.SpriteMaterial({ map: _crossTex, transparent: true, depthTest: false, depthWrite: false });
+    const minusSpriteMat = new THREE.SpriteMaterial({ map: _minusTex, transparent: true, depthTest: false, depthWrite: false });
+
+    // ===== 球マテリアル（静電気シリーズと同じ。カメラ正面からの光で陰影を付け、回しても明暗が動かない）=====
+    function makeShadedSphereMaterial(hexColor) {
+      return new THREE.ShaderMaterial({
+        uniforms: { baseColor: { value: new THREE.Color(hexColor) } },
+        vertexShader: `
+          varying vec3 vNormalView;
+          void main() {
+            vNormalView = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 baseColor;
+          varying vec3 vNormalView;
+          void main() {
+            vec3 N = normalize(vNormalView);
+            vec3 V = vec3(0.0, 0.0, 1.0);
+            float ndotv = max(dot(N, V), 0.0);
+            float shade = pow(ndotv, 0.5);
+            vec3 dark   = baseColor * 0.45;
+            vec3 bright = mix(baseColor, vec3(1.0), 0.28);
+            vec3 color  = mix(dark, bright, shade);
+            vec3 L = normalize(vec3(-0.55, 0.65, 0.55));
+            vec3 H = normalize(L + V);
+            float spec = pow(max(dot(N, H), 0.0), 52.0);
+            color += vec3(1.0) * spec * 1.1;
+            float fresnel = pow(1.0 - ndotv, 3.0);
+            color += baseColor * fresnel * 0.45;
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `,
+      });
+    }
+
+    // ===== 文字のラベル（コンデンサーシミュの白い縁取りのラベル）=====
+    function makeLabel(scaleX = 4.4, scaleY = 1.1) {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 64;
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+      sp.scale.set(scaleX, scaleY, 1);
+      sp.renderOrder = 6;
+      scene.add(sp);
+      return { c, ctx: c.getContext('2d'), tex, sprite: sp, last: null };
+    }
+    function setLabel(lb, text, color = '#1a2040') {
+      const key = text + '|' + color;
+      if (lb.last === key) return;
+      lb.last = key;
+      const g = lb.ctx;
+      g.clearRect(0, 0, 256, 64);
+      const FS = 34, MAXW = 244;
+      const font = s => 'bold ' + s + 'px system-ui, -apple-system, sans-serif';
+      g.font = font(FS);
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      const tw = g.measureText(text).width;
+      const fs = tw > MAXW ? Math.max(16, Math.floor(FS * MAXW / tw)) : FS;
+      if (fs !== FS) g.font = font(fs);
+      g.lineWidth = Math.max(4, 7 * fs / FS); g.strokeStyle = 'rgba(255,255,255,0.95)';
+      g.strokeText(text, 128, 34);
+      g.fillStyle = color;
+      g.fillText(text, 128, 34);
+      lb.tex.needsUpdate = true;
+    }
+    // Times の斜体の 1 文字（A・V など、教科書の記号の書体。コンデンサーの addText と同じ作り）
+    function makeGlyphSprite(text, size, color) {
+      const S = 256;
+      const c = document.createElement('canvas'); c.width = c.height = S;
+      const g = c.getContext('2d');
+      g.font = `bold italic ${Math.round(S * 0.7)}px "Times New Roman", serif`;
+      g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      const m = g.measureText(text);
+      const asc = m.actualBoundingBoxAscent, desc = m.actualBoundingBoxDescent;
+      const gx = S / 2, gy = S / 2 + (asc - desc) / 2;
+      // 白いふちを付ける。赤い陽イオンや青い電子の上に重なると、濃紺のままでは読めない
+      //（2026-09-22 に本人から「断面 A と円柱の境目がわかりずらい」と言われたときに、A の字も直した）
+      g.lineJoin = 'round'; g.strokeStyle = 'rgba(255,255,255,0.92)'; g.lineWidth = S * 0.06;
+      g.strokeText(text, gx, gy);
+      g.fillStyle = color || '#1a2040';
+      g.fillText(text, gx, gy);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false }));
+      const s = size / ((asc + desc) / S);
+      sp.scale.set(s, s, 1);
+      sp.renderOrder = 6;
+      return sp;
+    }
+
+    // ===== 線の矢印（電位シミュの く の字：白い縁取り＋色の線。太さは px で固定）=====
+    const AR_LINE_WIDTH = 4.5, AR_OUTLINE_WIDTH = AR_LINE_WIDTH + 3;
+    const AR_WING_RATIO = 0.18;                              // 矢じりの長さ ＝ 軸の 18%（2〜3 割の中）
+    const AR_SA = Math.sin(Math.PI / 8), AR_CA = Math.cos(Math.PI / 8);
+    const _lineMats = [];                                    // 窓の大きさが変わったら resolution を入れ直す
+    const _arUp = new THREE.Vector3(0, 1, 0), _arX = new THREE.Vector3(1, 0, 0), _arQuat = new THREE.Quaternion();
+    function makeLineArrow(color, order = 101) {
+      const geo = new LineGeometry();
+      geo.setPositions([0,0,0, 0,1,0,  0,1,0, -AR_SA*0.18, 1-AR_CA*0.18, 0,  0,1,0, AR_SA*0.18, 1-AR_CA*0.18, 0]);
+      const matOutline = new LineMaterial({ color: 0xffffff, linewidth: AR_OUTLINE_WIDTH, depthTest: false, transparent: true });
+      const matMain    = new LineMaterial({ color, linewidth: AR_LINE_WIDTH, depthTest: false, transparent: true });
+      _lineMats.push(matOutline, matMain);
+      const outline = new LineSegments2(geo, matOutline); outline.renderOrder = 100; outline.frustumCulled = false;
+      const main    = new LineSegments2(geo, matMain);    main.renderOrder = order;  main.frustumCulled = false;
+      const group = new THREE.Group();
+      group.add(outline, main);
+      group.userData.geo = geo; group.userData.prevLen = 1.0;
+      group.visible = false;
+      scene.add(group);
+      return group;
+    }
+    function setLineArrow(group, origin, dir, length) {
+      if (Math.abs(length - group.userData.prevLen) > 0.01) {
+        const w = length * AR_WING_RATIO;
+        group.userData.geo.setPositions([0,0,0, 0,length,0,  0,length,0, -AR_SA*w, length-AR_CA*w, 0,  0,length,0, AR_SA*w, length-AR_CA*w, 0]);
+        group.userData.prevLen = length;
+      }
+      group.position.copy(origin);
+      if (Math.abs(dir.dot(_arUp)) > 0.9999) _arQuat.setFromAxisAngle(_arX, dir.y < 0 ? Math.PI : 0);
+      else _arQuat.setFromUnitVectors(_arUp, dir);
+      group.quaternion.copy(_arQuat);
+      group.visible = true;
+    }
+
+    // ===== 電位の色（コンデンサーシミュと同じ：青—灰—赤。0 V は灰）=====
+    const COL_NEG = new THREE.Color(0x2f6fd0), COL_MID = new THREE.Color(0xa8a8a8), COL_POS = new THREE.Color(0xd83b3b);
+    const _tmpCol = new THREE.Color();
+    function potColor(v, lo, hi, out = _tmpCol) {
+      const t = THREE.MathUtils.clamp((v - lo) / Math.max(1e-9, hi - lo), 0, 1) * 2 - 1;
+      return t >= 0 ? out.copy(COL_MID).lerp(COL_POS, t) : out.copy(COL_MID).lerp(COL_NEG, -t);
+    }
+    // 色の範囲：−極を 0 V、＋極を V。V が小さすぎるときは 0.5 V の幅で塗る（0 で割らない）
+    const potHi = () => Math.max(0.5, params.V);
+
+    // ===== 導体（円柱・陽イオン・自由電子）=====
+    // 局所座標：x が軸（電流の向き ＝ ＋x）、y・z が半径方向。導体の中心は (0, CY, 0)
+    const condGroup = new THREE.Group();
+    condGroup.position.set(0, CY, 0);
+    scene.add(condGroup);
+    const condMeshes = [];      // ふだんは 1 本。切れたら「左の棒・右の棒・丸い端 2 つ」の 4 つ
+    // 中の電子が見えるように半透明。表の面だけ描く（裏面も描くと 2 重に重なって濃くなる）
+    const condMat = new THREE.MeshStandardMaterial({
+      vertexColors: true, transparent: true, opacity: 0.24, roughness: 0.35, metalness: 0.15,
+      side: THREE.FrontSide, depthWrite: false });
+    const COND_OPACITY = 0.24;
+    // 切れ目は**真ん中**（両端は導線へ熱を逃がすので、いちばん熱いのは中央。実物のヒューズも真ん中が飛ぶ）。
+    // 幅は、溶けて丸まった端どうしがぶつからない大きさにする
+    function breakGap() { return Math.min(2.6 * drawRadius(), params.Lmem * 0.5); }
+    // 切れたあとの棒の形：まっすぐな軸（半径 r）の先に、溶けて丸まった先端がつく。
+    // **ひとつづきの面**（LatheGeometry で輪郭を回す）で作る。
+    //   2026-09-21 に本人から「パーツとパーツの境目が見えて作り物感がすごい」。
+    //   前は「円柱＋球」の 2 部品で、円柱の平らなふたと球が重なっていた。半透明なので
+    //   重なったところが濃くなり、丸い境目がくっきり出ていた。1 枚の面にすれば重なりが無くなる。
+    const TIP_BULGE = 1.15;    // 先端のふくらみ（軸の何倍か）。溶けて玉になった感じを出す
+    function tipShape() {
+      const r = drawRadius(), seg = params.Lmem / 2 - breakGap() / 2;
+      const a = TIP_BULGE * r;
+      const cos0 = Math.sqrt(Math.max(0, 1 - (r / a) * (r / a)));
+      const h = Math.min(1.5 * r, seg * 0.8 / Math.max(0.05, 1 - cos0));   // 先端の長さ（軸方向の半径）
+      return { r, a, cos0, h, len: h * (1 - cos0) };                       // len ＝ ふくらみ始めから先までの長さ
+    }
+    // 粒を入れてよいのは軸のところまで（この先は溶けて丸まった先端）
+    function gapEdge() { return breakGap() / 2 + tipShape().len; }
+    function rodGeometry(xOuter, xTip) {
+      const t = tipShape(), dir = Math.sign(xTip - xOuter);
+      const xc = xTip - dir * t.h, th0 = Math.asin(Math.min(1, t.r / t.a));
+      const pts = [new THREE.Vector2(0, xOuter), new THREE.Vector2(t.r, xOuter),
+                   new THREE.Vector2(t.r, xTip - dir * t.len)];
+      const N = 14;
+      for (let i = 1; i <= N; i++) {
+        const th = th0 * (1 - i / N);
+        pts.push(new THREE.Vector2(Math.max(1e-4, t.a * Math.sin(th)), xc + dir * t.h * Math.cos(th)));
+      }
+      if (pts[0].y > pts[pts.length - 1].y) pts.reverse();   // 輪郭は下から上へ（面の表裏がひっくり返らないように）
+      const g = new THREE.LatheGeometry(pts, 48);
+      g.rotateZ(-Math.PI / 2);                               // 軸を Y から X へ
+      return g;
+    }
+    function addCondPart(geo, x) {
+      const n = geo.attributes.position.count;
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3));
+      const m = new THREE.Mesh(geo, condMat);
+      m.position.x = x;
+      m.renderOrder = 3;
+      condGroup.add(m);
+      condMeshes.push(m);
+    }
+    function buildConductor() {
+      for (const m of condMeshes) { condGroup.remove(m); m.geometry.dispose(); }
+      condMeshes.length = 0;
+      const r = drawRadius(), L = params.Lmem;
+      const cyl = (len, x) => {
+        const g = new THREE.CylinderGeometry(r, r, len, 48, Math.max(2, Math.round(32 * len / L)), false);
+        g.rotateZ(-Math.PI / 2);                         // 軸を Y から X へ
+        addCondPart(g, x);
+      };
+      if (!sim.broken) cyl(L, 0);
+      else {
+        // 左右の棒。それぞれ「軸＋溶けて丸まった先端」がひとつづきの面になっている
+        const half = breakGap() / 2;
+        addCondPart(rodGeometry(-L / 2, -half), 0);
+        addCondPart(rodGeometry( L / 2,  half), 0);
+      }
+      paintConductor();
+    }
+
+    // ===== 赤熱（温度で光る色）=====
+    // 金属は 500 ℃ あたりから暗い赤に光りはじめ、700 で赤、900 で橙、1100 で黄、1300 以上で白に見える。
+    // 鍛冶屋が鉄の温度を色で見分けるのと同じ尺度で、もとは黒体放射。
+    // これを入れると、数字でしか見えなかった「電流で熱くなる」が目で見えるようになる
+    // 混ぜぐあいは**早く効かせる**（700〜800 ℃ を超えたら、見た目は熱放射の色でほぼ決まる）。
+    //   2026-09-21 に本人から「光っている感がない」。1300 ℃ で満ちる形にしていたので、
+    //   600 ℃ 台ではほとんど色が変わらず、ただの灰色に見えていた。
+    // いちばん熱いところを真っ白にしない（背景が白いので、真っ白だと**消えてしまう**）。
+    //   明るさのちがいは、下の「にじみ（ハロー）」の強さで見せる
+    const GLOW_START = 500, GLOW_FULL = 780, GLOW_MAX_MIX = 0.92;
+    const GLOW_STOPS = [[500, 0x6b0c00], [700, 0xd42a00], [900, 0xff6a00], [1100, 0xffab1a], [1400, 0xffd47a], [2400, 0xffe9b8]];
+    const _glow = new THREE.Color(), _glowB = new THREE.Color(), _mixCol = new THREE.Color(), _auraHue = new THREE.Color();
+    function glowMix() { return THREE.MathUtils.clamp((sim.Tc - GLOW_START) / (GLOW_FULL - GLOW_START), 0, 1) * GLOW_MAX_MIX; }
+    // 熱さのぐあい（0〜1）。にじみの強さと大きさに使う。融点の高い材質ほど上まで伸びる
+    function heatLevel() { return THREE.MathUtils.clamp((sim.Tc - GLOW_START) / 1600, 0, 1); }
+
+    // ===== にじみ（ハロー）=====
+    // 白い紙の上では「白熱した色」そのものは背景と同じ色になって見えなくなる。
+    // まわりに橙のにじみを置くと、中心が白くても「光っている」と読める（絵の描き方と同じ理屈）
+    function makeAuraTexture() {
+      const s = 128, c = document.createElement('canvas'); c.width = c.height = s;
+      const g = c.getContext('2d');
+      const grd = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+      grd.addColorStop(0.00, 'rgba(255,255,255,0.95)');
+      grd.addColorStop(0.30, 'rgba(255,255,255,0.60)');
+      grd.addColorStop(0.65, 'rgba(255,255,255,0.20)');
+      grd.addColorStop(1.00, 'rgba(255,255,255,0)');
+      g.fillStyle = grd; g.fillRect(0, 0, s, s);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    }
+    const auraMat = new THREE.SpriteMaterial({ map: makeAuraTexture(), transparent: true, depthTest: false, depthWrite: false, opacity: 0 });
+    const aura = new THREE.Sprite(auraMat);
+    aura.renderOrder = -1;        // いちばん先に描く ＝ 粒や導体の後ろに見える
+    aura.visible = false;
+    condGroup.add(aura);
+    function glowColor(t, out) {
+      if (t <= GLOW_STOPS[0][0]) return out.set(GLOW_STOPS[0][1]);
+      for (let i = 1; i < GLOW_STOPS.length; i++) {
+        if (t <= GLOW_STOPS[i][0]) {
+          return out.set(GLOW_STOPS[i - 1][1]).lerp(_glowB.set(GLOW_STOPS[i][1]),
+            (t - GLOW_STOPS[i - 1][0]) / (GLOW_STOPS[i][0] - GLOW_STOPS[i - 1][0]));
+        }
+      }
+      return out.set(GLOW_STOPS[GLOW_STOPS.length - 1][1]);
+    }
+
+    // 導体の色。3 つが重なる：
+    //   ①ふだんは材質の色。切れたあとは焼けた色
+    //   ②「電位を色で表す」なら ＋端（左）から −端（右）へ 赤→青 の勾配（電圧降下）。
+    //     **切れているときは電流が流れないので勾配はできない** ── 左半分がまるごと V、右半分がまるごと 0 で、
+    //     電位差はぜんぶ切れ目にかかる（2026-09-20 に、切れ目を描くようにして初めて正しく描けるようになった）
+    //   ③熱いときは赤熱の色を重ね、濃さも上げる（薄いままだと光って見えないため）
+    const _matTint = new THREE.Color();
+    let _paintedTc = -1e9;
+    function paintConductor() {
+      const L = params.Lmem, hi = potHi(), gm = glowMix(), broken = sim.broken;
+      glowColor(sim.Tc, _glow);
+      // 赤熱は「自ら光っている」ので、当たっている光に関係なく明るくなる成分（emissive）で出す。
+      // 頂点の色だけだと、白い背景に半透明で重なって色が薄まり、熱そうに見えない。
+      // ただし強くしすぎると、半透明の筒ごしに見える電子（青）と陽イオン（橙）まで橙に染まって
+      // 区別がつかなくなる。**中の粒の色を守れる範囲**にとどめる（強さはこの 2 つの数だけで決まる）
+      condMat.opacity = COND_OPACITY + 0.26 * (gm / GLOW_MAX_MIX);
+      condMat.emissive.copy(_glow).multiplyScalar(gm * 0.55);
+      // 切れたあとは**材質の色を少し暗く**する（2026-09-21 に本人と相談して決めた）。
+      // 溶けて固まり直しても銅は銅色のままなので、材質によらず灰色にするのは正しくない。
+      // 空気中で熱せられて表面が酸化したぶん、少しくすむ、という程度にとどめる
+      _matTint.set(matNow().color);
+      if (broken) _matTint.multiplyScalar(0.55);
+      // にじみ（光っている感）。切れているときは出さない（切れ目をまたいで光ると、つながって見える）
+      const hl = heatLevel();
+      aura.visible = gm > 0.02 && !broken;
+      if (aura.visible) {
+        auraMat.color.copy(_glow).lerp(_auraHue.set(0xff4200), 0.5);   // にじみは中心より赤い側に寄せる
+        auraMat.opacity = Math.min(0.9, 0.35 + 0.55 * hl);
+        aura.scale.set(params.Lmem * (1.15 + 0.25 * hl), Math.max(3.0, drawRadius() * (4.0 + 2.5 * hl)), 1);
+      }
+      for (const mesh of condMeshes) {
+        const pos = mesh.geometry.attributes.position, col = mesh.geometry.attributes.color;
+        const ox = mesh.position.x;
+        for (let i = 0; i < pos.count; i++) {
+          let c;
+          if (show.pot) {
+            const x = ox + pos.getX(i);
+            const v = broken ? (x < 0 ? params.V : 0) : params.V * (0.5 - x / L);
+            c = potColor(v, 0, hi);
+          } else c = _matTint;
+          if (gm > 0) c = _mixCol.copy(c).lerp(_glow, gm);
+          col.setXYZ(i, c.r, c.g, c.b);
+        }
+        col.needsUpdate = true;
+      }
+      _paintedTc = sim.Tc;
+    }
+
+    // --- 陽イオン：格子に並んで固定。温度で振動が激しくなる（図 48 の説明）---
+    // 細い導体では、陽イオンを**軸から少しずらして**並べる（1 段ごとに向きを変えて、らせんにする）。
+    //   そうしないと陽イオンが管をふさぎ、電子が通れなくなる。
+    //   電子の中心が動ける半径は r − 電子の半径（いちばん細いとき 0.32）、
+    //   陽イオンとぶつかる距離は 陽イオン＋電子 の半径（0.42）。軸の上に並べると前者 ＜ 後者で、
+    //   すり抜けるすき間が無い。その結果、電子はその場で足踏みし（見せる速さの 23 %）、
+    //   時間がたつと端に固まり、真ん中の陽イオンが断面 A をふさいで通過数が 0 のままだった
+    //   （2026-09-21 に本人から。5142 秒動かした画面では電子が左端にすべて溜まっていた）。
+    //   **粒の大きさは変えない** ── 線が細くなっても原子は小さくならないので（本人の指摘）。
+    //   ずらせば反対側にすき間ができる。細い線でも原子の列がまっすぐ 1 列とは限らないので、
+    //   らせんに並べるほうが物理的にも自然
+    function ionOffset() {
+      const r = drawRadius();
+      const rIn = Math.max(0.05, r - EL_R - 0.02);      // 電子の中心が動ける半径
+      const need = (ION_R + EL_R) - rIn + 0.12;         // これだけずらせば、反対側を 0.12 のすき間で通れる
+      const maxOff = Math.max(0, r - ION_R - 0.02);     // 陽イオンが管からはみ出さない範囲
+      return need <= 0 ? 0 : Math.min(need, maxOff);
+    }
+    const ionGeo = new THREE.SphereGeometry(ION_R, 16, 12);
+    const ionMat = makeShadedSphereMaterial(0xff5500);   // 正の電荷の色（静電気シリーズの陽子と同じ）
+    const ions = [];   // { mesh, x0, y0, z0, ph1, ph2, ph3, w, x, y, z }
+    function clearIons() {
+      for (const io of ions) condGroup.remove(io.mesh);
+      ions.length = 0;
+    }
+    function buildIons() {
+      clearIons();
+      const r = drawRadius(), L = params.Lmem, a = 0.62;
+      // 断面の中の並び：0.62 メモリ間隔の格子のうち、円の内側（縁から 0.28 空ける）。
+      // 既定の太さ（半径 1）で 1 つの断面に 5 個（中心と上下左右）、電子がぶつかる相手として十分な数になる
+      const sec = [];
+      const k = Math.ceil(r / a);
+      for (let gy = -k; gy <= k; gy++) for (let gz = -k; gz <= k; gz++) {
+        const y = gy * a, z = gz * a;
+        if (Math.hypot(y, z) <= r - ION_R - 0.02) sec.push([y, z]);
+      }
+      if (!sec.length) sec.push([0, 0]);
+      // 細くて 1 段に 1 個しか置けないときは、軸からずらしてらせんに並べる（上のコメント）。
+      // 回す角は黄金角（約 137.5°）。同じ向きが続かないので、どの向きから見ても列が重ならない
+      const off = (sec.length === 1 && Math.hypot(sec[0][0], sec[0][1]) < 1e-9) ? ionOffset() : 0;
+      let slice = 0;
+      for (let x = -L / 2 + 0.5; x <= L / 2 - 0.5 + 1e-9; x += 1.0, slice++) {
+        const ang = slice * 2.39996;
+        const oy = off * Math.cos(ang), oz = off * Math.sin(ang);
+        for (const [y0, z0] of sec) {
+          const y = y0 + oy, z = z0 + oz;
+          const mesh = new THREE.Mesh(ionGeo, ionMat);
+          mesh.position.set(x, y, z);
+          const sp = new THREE.Sprite(crossSpriteMat);
+          sp.scale.set(0.30, 0.30, 1);
+          sp.renderOrder = 7;
+          mesh.add(sp);
+          condGroup.add(mesh);
+          ions.push({ mesh, x0: x, y0: y, z0: z, x, y, z,
+                      ph1: Math.random() * 6.28, ph2: Math.random() * 6.28, ph3: Math.random() * 6.28,
+                      w: 6 + Math.random() * 4 });
+        }
+      }
+    }
+    // 切れ目の中の粒は見せない（そこは溶けて無くなった場所）。
+    // 電子は消さずに、切れ目の外へ押し出す（数を減らすと「電子が消えた」という別の誤解になる）
+    function refreshParticleVisibility() {
+      const edge = gapEdge() + ION_R;
+      for (const io of ions) io.mesh.visible = show.ion && !(sim.broken && Math.abs(io.x0) < edge);
+      for (const e of electrons) e.mesh.visible = show.elec;
+    }
+    function pushElectronsOutOfGap() {
+      if (!sim.broken) return;
+      const edge = gapEdge() + EL_R;
+      for (const e of electrons) if (Math.abs(e.x) < edge) { e.x = (e.x < 0 ? -1 : 1) * edge; e.vx = 0; e.tvx = 0; }
+    }
+    // 振動の振幅（メモリ）。20 ℃ でもわずかに揺れ、100 ℃ で目に見えて、白熱電球の温度では大きく
+    function ionAmp() {
+      const t = sim.Tc;
+      return 0.02 + 0.10 * Math.min(1, t / 100) + 0.22 * THREE.MathUtils.clamp((t - 100) / 1100, 0, 1);
+    }
+    function updateIons() {
+      const amp = ionAmp(), t = sim.time;
+      for (const io of ions) {
+        io.x = io.x0 + amp * Math.sin(io.w * t + io.ph1);
+        io.y = io.y0 + amp * Math.sin(io.w * 1.3 * t + io.ph2);
+        io.z = io.z0 + amp * Math.sin(io.w * 0.8 * t + io.ph3);
+        io.mesh.position.set(io.x, io.y, io.z);
+      }
+    }
+
+    // --- 自由電子：電場に押されて −x へ流れ、熱運動でふらつき、陽イオンにぶつかって跳ねる（図 44）---
+    const elGeo = new THREE.SphereGeometry(EL_R, 14, 10);
+    const elMat = makeShadedSphereMaterial(0x0066ff);    // 負の電荷の色（静電気シリーズの電子と同じ）
+    const focusMat = new THREE.MeshBasicMaterial({ color: 0xffd400, transparent: true, opacity: 0.38, depthWrite: false });
+    const electrons = [];   // { mesh, x, y, z, vx, vy, vz, tvx, tvy, tvz, tNext }
+    let focusRing = null;   // 「注目している電子」の黄色いふち（図 44 の矢印を付ける電子）
+    function clearElectrons() {
+      for (const e of electrons) condGroup.remove(e.mesh);
+      electrons.length = 0;
+      focusRing = null;
+    }
+    function electronCount() {
+      return Math.min(EL_MAX, Math.round(EL_PER_MEM * params.Lmem * S_STEPS[params.sIdx] / S_STEPS[S_DEFAULT]));
+    }
+    function randomThermal(e, scale) {
+      const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+      const s = scale * (0.5 + Math.random());
+      e.tvx = s * Math.sin(ph) * Math.cos(th); e.tvy = s * Math.sin(ph) * Math.sin(th); e.tvz = s * Math.cos(ph);
+      e.tNext = 0.3 + Math.random() * 0.5;
+    }
+    function seedElectrons() {
+      clearElectrons();
+      const r = drawRadius(), L = params.Lmem, n = electronCount();
+      for (let i = 0; i < n; i++) {
+        const mesh = new THREE.Mesh(elGeo, elMat);
+        const sp = new THREE.Sprite(minusSpriteMat);
+        sp.scale.set(0.20, 0.20, 1);
+        sp.renderOrder = 7;
+        mesh.add(sp);
+        mesh.visible = show.elec;
+        condGroup.add(mesh);
+        const rr = Math.sqrt(Math.random()) * Math.max(0, r - EL_R - 0.05), th = Math.random() * Math.PI * 2;
+        const e = { mesh, x: (Math.random() - 0.5) * L, y: rr * Math.cos(th), z: rr * Math.sin(th),
+                    vx: 0, vy: 0, vz: 0, tvx: 0, tvy: 0, tvz: 0, tNext: 0 };
+        randomThermal(e, VIS_JITTER);
+        mesh.position.set(e.x, e.y, e.z);
+        electrons.push(e);
+      }
+      if (electrons.length) {
+        focusRing = new THREE.Mesh(new THREE.SphereGeometry(EL_R + 0.14, 16, 12), focusMat);
+        focusRing.visible = show.arrow;
+        electrons[0].mesh.add(focusRing);
+      }
+      sim.cross.length = 0; sim.crossRate = 0;
+    }
+    function updateElectrons(dt) {
+      const vd = driftDisp();                        // 見せる速さ（メモリ/秒）。向きは −x（＋極のほう）
+      const r = drawRadius(), L = params.Lmem;
+      const rIn = Math.max(0.05, r - EL_R - 0.02);
+      const jit = VIS_JITTER * (0.7 + 0.3 * Math.min(2, sim.Tc / 100));   // 温度が高いほど熱運動が激しい
+      const hitD = ION_R + EL_R, hitD2 = hitD * hitD;
+      for (const e of electrons) {
+        e.tNext -= dt;
+        if (e.tNext <= 0) randomThermal(e, jit);
+        const k = Math.min(1, 6 * dt);
+        e.vx += (e.tvx - e.vx) * k; e.vy += (e.tvy - e.vy) * k; e.vz += (e.tvz - e.vz) * k;
+        const px = e.x;
+        e.x += (e.vx - vd) * dt; e.y += e.vy * dt; e.z += e.vz * dt;
+        // 陽イオンにぶつかったら、めり込まない位置までよけて、熱運動の向きを取り直す（跳ねる）。
+        // よけ方は**横（y-z 面）へすべらせる**のが基本。まっすぐ押し返すと進む向き（−x）にも
+        // 押し戻してしまい、電場による流れそのものを打ち消してしまう
+        //  （2026-09-21：細い導体で電子が遅く見えたのはこれ。断面積を細くしても
+        //   電子 1 個の速さは変わらない ── v ＝ I/(enS) と I ＝ V/R から S が消える ── のが正しい）
+        for (const io of ions) {
+          const dx = e.x - io.x, dy = e.y - io.y, dz = e.z - io.z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < hitD2) {
+            const dyz = Math.hypot(dy, dz) || 1e-6;
+            const needYZ = Math.sqrt(Math.max(0, hitD2 - dx * dx)) + 0.02;   // その x のまま離れるのに要る横の距離
+            if (needYZ <= rIn) {                                            // 横へよけられる
+              e.y = io.y + dy / dyz * needYZ; e.z = io.z + dz / dyz * needYZ;
+            } else {                                                        // 管が狭くて横へ逃げられない
+              const d = Math.sqrt(d2) || 1e-6, push = (hitD + 0.02) / d;
+              e.x = io.x + dx * push; e.y = io.y + dy * push; e.z = io.z + dz * push;
+            }
+            randomThermal(e, jit * 1.2);
+            e.vx = e.tvx; e.vy = e.tvy; e.vz = e.tvz;
+            break;
+          }
+        }
+        // 円柱の壁：外へ出さない。半径方向の速度を折り返す
+        const rr = Math.hypot(e.y, e.z);
+        if (rr > rIn) {
+          const s = rIn / rr;
+          e.y *= s; e.z *= s;
+          const ny = e.y / rIn, nz = e.z / rIn;
+          const vn = e.vy * ny + e.vz * nz;
+          if (vn > 0) { e.vy -= 2 * vn * ny; e.vz -= 2 * vn * nz; e.tvy = e.vy; e.tvz = e.vz; }
+        }
+        // 端まで来た電子は反対の端から入ってくる（回路をひとまわりして戻ってくる）。
+        // **切れているときは一周できない** ── 端でも切れ目でも跳ね返る
+        let wrapped = false;
+        if (sim.broken) {
+          const hg = gapEdge() + EL_R, hl = L / 2 - EL_R;
+          if (e.x < -hl) { e.x = -hl; e.vx = Math.abs(e.vx); e.tvx = e.vx; }
+          else if (e.x > hl) { e.x = hl; e.vx = -Math.abs(e.vx); e.tvx = e.vx; }
+          if (e.x > -hg && e.x < hg) { const s = px < 0 ? -1 : 1; e.x = s * hg; e.vx = -e.vx; e.tvx = e.vx; }
+        } else if (e.x < -L / 2) { e.x += L; wrapped = true; }
+        else if (e.x > L / 2) { e.x -= L; wrapped = true; }
+        // 断面 A（x ＝ XA）を通った電子を数える。＋極のほう（−x）へ通ったら +1、逆戻りは −1
+        if (!wrapped) {
+          if (px > XA && e.x <= XA) sim.cross.push({ t: sim.time, s: 1 });
+          else if (px < XA && e.x >= XA) sim.cross.push({ t: sim.time, s: -1 });
+        }
+        e.mesh.position.set(e.x, e.y, e.z);
+      }
+      // 直近 1 秒に断面 A を通った数
+      while (sim.cross.length && sim.cross[0].t < sim.time - 1) sim.cross.shift();
+      let n = 0; for (const c of sim.cross) n += c.s;
+      sim.crossRate = n;
+    }
+
+    // ===== 回路（導線・電源・電流計）=====
+    // 回路図の記号を 3D に起こしたもの：導線は細い筒、電源は長い板（＋）と短く厚い板（−）、電流計は輪に A
+    const circuitGroup = new THREE.Group();
+    scene.add(circuitGroup);
+    const wireMatL = new THREE.MeshStandardMaterial({ color: PART_COLOR, roughness: 0.5 });   // ＋極側（左）の導線
+    const wireMatR = new THREE.MeshStandardMaterial({ color: PART_COLOR, roughness: 0.5 });   // −極側（右）の導線
+    const plateMatP = new THREE.MeshStandardMaterial({ color: PART_COLOR, roughness: 0.5 });
+    const plateMatN = new THREE.MeshStandardMaterial({ color: PART_COLOR, roughness: 0.5 });
+    const meterFaceMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const circuit = { pathL: [], pathR: [], meterPos: new THREE.Vector3(), batteryPos: new THREE.Vector3(0, CY, WIRE_Z) };
+    function disposeGroup(g) {
+      g.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+      while (g.children.length) g.remove(g.children[0]);
+    }
+    function makeCylBetween(rad, a, b, mat) {
+      const dir = new THREE.Vector3().subVectors(b, a);
+      const len = dir.length();
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, len, 12), mat);
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+      mesh.position.copy(a).lerp(b, 0.5);
+      return mesh;
+    }
+    const jointGeo = new THREE.SphereGeometry(WIRE_R, 10, 8);
+    function buildWire(path, mat) {
+      for (let i = 0; i + 1 < path.length; i++) circuitGroup.add(makeCylBetween(WIRE_R, path[i], path[i + 1], mat));
+      for (let i = 1; i + 1 < path.length; i++) { const j = new THREE.Mesh(jointGeo, mat); j.position.copy(path[i]); circuitGroup.add(j); }
+    }
+    let labelV = null, labelA = null, labelPlus = null, labelMinus = null, glyphA = null;
+    function buildCircuit() {
+      disposeGroup(circuitGroup);
+      const hx = params.Lmem / 2;
+      const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+      // 電流の向きに並べた道すじ：＋板 → 手前の辺 → 左の辺 → 導体の左端 ／ 導体の右端 → 右の辺（電流計）→ 手前の辺 → −板
+      circuit.pathL = [V3(-BAT_GAP / 2 - 0.08, CY, WIRE_Z), V3(-hx, CY, WIRE_Z), V3(-hx, CY, 0)];
+      circuit.pathR = [V3(hx, CY, 0), V3(hx, CY, WIRE_Z), V3(BAT_GAP / 2 + 0.24, CY, WIRE_Z)];
+      buildWire(circuit.pathL, wireMatL);
+      buildWire(circuit.pathR, wireMatR);
+      // 電源：長い板が＋（左）、短く厚い板が −（右）。教科書の記号のとおり
+      const plus = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.0, 1.4), plateMatP);
+      plus.position.set(-BAT_GAP / 2 - 0.04, CY, WIRE_Z);
+      const minus = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.0, 0.8), plateMatN);
+      minus.position.set(BAT_GAP / 2 + 0.12, CY, WIRE_Z);
+      circuitGroup.add(plus, minus);
+      // 電流計：右の辺の途中に輪と A
+      circuit.meterPos.set(hx, CY, WIRE_Z / 2);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.08, 10, 40), wireMatR);
+      ring.position.copy(circuit.meterPos);
+      const face = new THREE.Mesh(new THREE.CircleGeometry(0.64, 40), meterFaceMat);
+      face.position.copy(circuit.meterPos);
+      face.material.side = THREE.DoubleSide;
+      circuitGroup.add(ring, face);
+      if (!glyphA) { glyphA = makeGlyphSprite('A', 0.9); scene.add(glyphA); }
+      glyphA.position.copy(circuit.meterPos).add(new THREE.Vector3(0, 0, 0.1));
+      // ラベル
+      // ラベルの大きさは世界の単位（メモリ）。近づくと大きく見えるので控えめにしておく
+      if (!labelV) { labelV = makeLabel(3.2, 0.8); labelA = makeLabel(3.2, 0.8); labelPlus = makeLabel(2.6, 1.3); labelMinus = makeLabel(2.6, 1.3); }
+      labelPlus.sprite.position.set(-BAT_GAP / 2 - 0.95, CY + 1.55, WIRE_Z);
+      labelMinus.sprite.position.set(BAT_GAP / 2 + 0.95, CY + 1.15, WIRE_Z);
+      setLabel(labelPlus, '＋', '#d83b3b'); setLabel(labelMinus, '−', '#2f6fd0');
+      labelV.sprite.position.set(0, CY + 1.9, WIRE_Z + 0.4);
+      labelA.sprite.position.copy(circuit.meterPos).add(new THREE.Vector3(0, 1.15, 0));
+      buildFlow();
+      paintCircuit();
+    }
+    // 電位の色を回路の記号にも付ける：＋極側は V、−極側は 0 V
+    function paintCircuit() {
+      if (show.pot) {
+        const hi = potHi();
+        wireMatL.color.copy(potColor(params.V, 0, hi)); plateMatP.color.copy(wireMatL.color);
+        wireMatR.color.copy(potColor(0, 0, hi));        plateMatN.color.copy(wireMatR.color);
+      } else {
+        wireMatL.color.set(PART_COLOR); wireMatR.color.set(PART_COLOR);
+        plateMatP.color.set(PART_COLOR); plateMatN.color.set(PART_COLOR);
+      }
+    }
+
+    // ===== 導線の中の流れ（コンデンサーシミュの粒。白いふちの丸が導線に沿って動く）=====
+    // 「電流」は＋の電荷が動く向き（＋極 → 導体 → −極）、「電子」はその逆。色でも見分ける
+    const FLOW_STYLE = {
+      current:  { color: 0xe2601e, dir:  1 },
+      electron: { color: 0x2f80ed, dir: -1 },
+    };
+    const FLOW_DENSITY = 2.5, FLOW_SPREAD = 0.14, MAX_DOTS = 400;
+    function makeDotTexture() {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff';
+      g.beginPath(); g.arc(32, 32, 30, 0, Math.PI * 2); g.fill();
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    }
+    const dotTex = makeDotTexture();
+    const DOT_SIZE = 8, DOT_RING = 1.5;
+    const flowPos = new Float32Array(MAX_DOTS * 3);
+    const flowGeo = new THREE.BufferGeometry();
+    flowGeo.setAttribute('position', new THREE.BufferAttribute(flowPos, 3));
+    flowGeo.setDrawRange(0, 0);   // 粒を置く前から描かないように（既定は「全部描く」）
+    const flowPoints = new THREE.Points(flowGeo, new THREE.PointsMaterial({
+      color: FLOW_STYLE.electron.color, size: DOT_SIZE, sizeAttenuation: false,
+      map: dotTex, transparent: true, alphaTest: 0.2, depthTest: false }));
+    flowPoints.renderOrder = 5;
+    const flowHalo = new THREE.Points(flowGeo, new THREE.PointsMaterial({
+      color: 0xffffff, size: DOT_SIZE + DOT_RING * 2, sizeAttenuation: false,
+      map: dotTex, transparent: true, alphaTest: 0.2, depthTest: false }));
+    flowHalo.renderOrder = 4;
+    flowPoints.add(flowHalo);
+    scene.add(flowPoints);
+    const flowPaths = [];   // { pts, cum, L, dots: [{ s, ox, oy, oz }] }
+    function buildFlow() {
+      flowPaths.length = 0;
+      for (const path of [circuit.pathL, circuit.pathR]) {
+        const cum = [0];
+        for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + path[i].distanceTo(path[i - 1]));
+        const L = cum[cum.length - 1];
+        const dots = [];
+        const n = Math.round(L * FLOW_DENSITY);
+        for (let i = 0; i < n; i++) {
+          dots.push({ s: Math.random() * L,
+                      ox: (Math.random() * 2 - 1) * FLOW_SPREAD, oy: (Math.random() * 2 - 1) * FLOW_SPREAD, oz: (Math.random() * 2 - 1) * FLOW_SPREAD });
+        }
+        flowPaths.push({ pts: path, cum, L, dots });
+      }
+    }
+    function flowSpeedDisp() {   // 導線の粒の見せる速さ [メモリ/秒]。3 A で 2.5、√I で縮める（銅では 100 A を超えるため）
+      const I = current();
+      if (!(I > 1e-6)) return 0;
+      return Math.min(VIS_FLOW_MAX, VIS_FLOW * Math.sqrt(I / 3));
+    }
+    const _fp = new THREE.Vector3();
+    function flowPoint(P, s, out) {
+      const pts = P.pts, cum = P.cum;
+      s = Math.max(0, Math.min(P.L, s));
+      let seg = 1;
+      while (seg < cum.length - 1 && cum[seg] < s) seg++;
+      const t = (s - cum[seg - 1]) / Math.max(1e-9, cum[seg] - cum[seg - 1]);
+      return out.copy(pts[seg - 1]).lerp(pts[seg], t);
+    }
+    function updateFlow(dt) {
+      const style = FLOW_STYLE[show.flow];
+      const v = flowSpeedDisp();
+      if (!style || v <= 0) { flowPoints.visible = false; return; }
+      flowPoints.material.color.setHex(style.color);
+      let n = 0;
+      for (const P of flowPaths) {
+        for (const d of P.dots) {
+          d.s += style.dir * v * dt;
+          if (d.s > P.L) d.s -= P.L; else if (d.s < 0) d.s += P.L;
+          flowPoint(P, d.s, _fp);
+          if (n < MAX_DOTS) { flowPos[n * 3] = _fp.x + d.ox; flowPos[n * 3 + 1] = _fp.y + d.oy; flowPos[n * 3 + 2] = _fp.z + d.oz; n++; }
+        }
+      }
+      flowGeo.setDrawRange(0, n);
+      flowGeo.attributes.position.needsUpdate = true;
+      flowPoints.visible = n > 0;
+    }
+    const flowNote = document.getElementById('flowNote');
+    function setFlowMode(mode) {
+      if (!FLOW_STYLE[mode]) mode = 'none';
+      show.flow = mode;
+      for (const b of document.querySelectorAll('#flowSeg .btn')) b.classList.toggle('active', b.dataset.flow === mode);
+      if (mode === 'none') flowPoints.visible = false;
+      flowNote.textContent = mode === 'electron'
+        ? '電子（−の電荷）は電流と逆向き ── 導体の中の自由電子と同じ向きに動きます'
+        : mode === 'current' ? '電流の向き（＋の電荷が動く向き）で表します' : '';
+    }
+    for (const b of document.querySelectorAll('#flowSeg .btn')) b.addEventListener('click', () => setFlowMode(b.dataset.flow));
+
+    // ===== 電場と、電子にはたらく力の矢印（図 44）=====
+    // 電場 E ＝ V/l は導体の上に大きく。注目している電子には 静電気力 eV/l（−x 向き）と 抵抗力 kv（＋x 向き）を
+    // 同じ長さで（つりあっている＝一定の速さ）、速さ v を小さく添える
+    const arrowE  = makeLineArrow(0xff8c00, 102);
+    const arrowF  = makeLineArrow(0xff8c00, 101);   // 静電気力（電場と同じ色：電場が押す力）
+    const arrowK  = makeLineArrow(0x8b4513, 101);   // 抵抗力（陽イオンにぶつかる）
+    const arrowV  = makeLineArrow(0x2f80ed, 101);   // 速さ（電子の色）
+    const labelE = makeLabel(3.4, 0.85), labelF = makeLabel(3.0, 0.75), labelK = makeLabel(2.4, 0.6), labelVel = makeLabel(2.0, 0.5);
+    setLabel(labelE, '電場 E ＝ V/l', '#ff8c00'); setLabel(labelF, '静電気力 eV/l', '#ff8c00');
+    setLabel(labelK, '抵抗力 kv', '#8b4513'); setLabel(labelVel, '速さ v', '#2f80ed');
+    const _o = new THREE.Vector3(), _dPlus = new THREE.Vector3(1, 0, 0), _dMinus = new THREE.Vector3(-1, 0, 0);
+    // 矢印の長さは √(V/l) で縮める（静電気シリーズの矢印と同じ。比例のままだと 10 V・4 メモリで 45 メモリになる）
+    function arrowScale() { return Math.sqrt((params.V / V_DEFAULT) * (L_DEFAULT / params.Lmem)); }
+    function updateArrows() {
+      // 切れているときは矢印を出さない（電流が流れないので、金属の中の電場も電子にはたらく力も無い）
+      const on = show.arrow && params.V > 0.05 && !sim.broken;
+      const r = drawRadius(), L = params.Lmem;
+      if (!on) {
+        arrowE.visible = arrowF.visible = arrowK.visible = arrowV.visible = false;
+        labelE.sprite.visible = labelF.sprite.visible = labelK.sprite.visible = labelVel.sprite.visible = false;
+        if (focusRing) focusRing.visible = false;
+        return;
+      }
+      // 電場：導体の上、左端から右へ
+      const lenE = Math.min(VIS_E_MAX, VIS_E_ARROW * arrowScale());
+      _o.set(-L / 2 + 0.4, CY + r + 0.7, 0);
+      setLineArrow(arrowE, _o, _dPlus, lenE);
+      labelE.sprite.visible = true;
+      labelE.sprite.position.set(-L / 2 + 0.4 + lenE / 2, CY + r + 1.35, 0);
+      // 注目している電子
+      if (!electrons.length) { arrowF.visible = arrowK.visible = arrowV.visible = false; return; }
+      const e = electrons[0];
+      if (focusRing) focusRing.visible = true;
+      const w = condGroup.position;
+      const ex = w.x + e.x, ey = w.y + e.y, ez = w.z + e.z;
+      const lenF = Math.max(0.6, VIS_F_ARROW * arrowScale());
+      _o.set(ex - EL_R, ey, ez); setLineArrow(arrowF, _o, _dMinus, lenF);
+      _o.set(ex + EL_R, ey, ez); setLineArrow(arrowK, _o, _dPlus, lenF);
+      const lenV = THREE.MathUtils.clamp(0.4 + 0.25 * driftDisp(), 0.5, 3.0);
+      _o.set(ex, ey - 0.45, ez); setLineArrow(arrowV, _o, _dMinus, lenV);
+      // 文字は矢印の先の外側に置く（矢印が短いとき、電子の上で 2 つの文字が重ならないように）
+      labelF.sprite.visible = labelK.sprite.visible = labelVel.sprite.visible = true;
+      labelF.sprite.position.set(ex - EL_R - lenF - 1.4, ey + 0.30, ez);
+      labelK.sprite.position.set(ex + EL_R + lenF + 1.15, ey + 0.30, ez);
+      labelVel.sprite.position.set(ex - lenV / 2, ey - 0.85, ez);
+    }
+
+    // ===== 断面 A と、1 秒に通る電子（図 43）=====
+    // 断面 A の後ろ、長さ v×1 s の円柱の中にいる電子が、次の 1 秒に A を通る
+    // 2026-09-22：本人から「断面 A と円柱の境目がわかりずらい。視認性をあげてほしい」。
+    //   直す前は **円板も円柱も同じ 0xffc400 で、濃さが 0.35 と 0.14 ちがうだけ**。
+    //   赤い陽イオン・青い電子の上に薄く重なるので、どこまでが断面 A でどこからが円柱か分からなかった。
+    //   ① 断面 A は濃い橙、円柱は淡い黄で**色を分ける**
+    //   ② 断面 A のふちに**濃い輪**を付ける（粒に隠れないよう depthTest を切る＝注釈として常に見せる）
+    // 2026-09-22 の追加の注文：
+    //   ③ 円柱の向こう端に付けた輪は**消す**
+    //   ④ **断面 A も円柱も、導体より太くしない**（「導体より太い範囲なのがなんか違う」）。
+    //      導体は `CylinderGeometry(r, r, …)`（r ＝ drawRadius()）なので、円板も円柱も半径ちょうど r。
+    //      輪は**内側に厚みを取る**（外側が r になるトーラス）ので、導体からはみ出さない。
+    // 2026-09-22 の追加の注文：「輪が太すぎるので細く。色が薄すぎるのでもう少し濃く」。
+    //   輪の太さは下の `tube`（r×0.14 → r×0.06）。円柱の黄色は薄すぎて灰色の導体と見分けが
+    //   つかなかったので、色を濃いめ（#ffd966 → #ffb020）にして濃さも 0.16 → 0.24 に上げた。
+    const secMat     = new THREE.MeshBasicMaterial({ color: 0xff8c1a, transparent: true, opacity: 0.50, side: THREE.DoubleSide, depthWrite: false });
+    const secRingMat = new THREE.MeshBasicMaterial({ color: 0x8a3b00, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, depthTest: false });
+    const vtMat      = new THREE.MeshBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0.24, side: THREE.DoubleSide, depthWrite: false });
+    let secDisc = null, secRing = null, vtCyl = null;
+    let glyphSecA = null;
+    const labelCount = makeLabel(4.0, 1.0), labelVt = makeLabel(2.6, 0.65);
+    function buildSection() {
+      for (const o of [secDisc, secRing, vtCyl]) if (o) { condGroup.remove(o); o.geometry.dispose(); }
+      const r = drawRadius();                    // 導体の半径。断面 A も円柱も**これと同じ**にする
+      secDisc = new THREE.Mesh(new THREE.CircleGeometry(r, 48), secMat);
+      secDisc.rotation.y = Math.PI / 2;
+      secDisc.position.set(XA, 0, 0);
+      secDisc.renderOrder = 2;
+      condGroup.add(secDisc);
+      // 断面 A のふちの輪。**平らな輪ではなく立体の輪（トーラス）**にする。
+      // 理由：「導体の中」の視点はカメラが x ＝ 0 の真上（0, 5.2, 7.5 から (0,2,0) を見る）にあり、
+      //   断面 A は x ＝ 0 にあるので、**平らな円板も平らな輪も真横から見ることになり、画面の幅が 0 画素**になる。
+      //   実測：secDisc の画面の幅 0 px（高さ 225 px）。つまりこの視点では断面 A は見えていなかった。
+      //   立体の輪なら、どの角から見ても導体を巻く帯として見える（2026-09-22）。
+      // 厚みは**内向き**に取る。トーラスの中心半径を r − tube にすると、外側がちょうど r で止まる。
+      // tube は導体の半径に対する割合。2026-09-22 に本人から「太すぎる」と言われ 0.14 → 0.06 に細くした
+      const tube = Math.min(0.09, Math.max(0.025, r * 0.06));
+      secRing = new THREE.Mesh(new THREE.TorusGeometry(Math.max(0.02, r - tube), tube, 10, 48), secRingMat);
+      secRing.rotation.y = Math.PI / 2;
+      secRing.position.set(XA, 0, 0);
+      secRing.renderOrder = 5;
+      condGroup.add(secRing);
+      vtCyl = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 1, 32, 1, true), vtMat);
+      vtCyl.geometry.rotateZ(-Math.PI / 2);
+      vtCyl.renderOrder = 2;
+      condGroup.add(vtCyl);
+      if (!glyphSecA) { glyphSecA = makeGlyphSprite('A', 0.8, '#8a3b00'); scene.add(glyphSecA); }
+    }
+    function updateSection() {
+      const on = show.section && !sim.broken;   // 切れているときは断面 A を通る電子がいない（真ん中は切れ目）
+      for (const o of [secDisc, secRing, vtCyl]) if (o) o.visible = on;
+      if (glyphSecA) glyphSecA.visible = on;
+      labelCount.sprite.visible = on; labelVt.sprite.visible = on;
+      if (!on) return;
+      // 文字は導体の下に並べる（上は電場の矢印が使う）：A の字は断面の左下、v×1 s は円柱の下、数は一段下
+      const r = drawRadius();
+      glyphSecA.position.set(XA - 0.75, CY - r - 0.5, 0.3);
+      const vt = Math.min(driftDisp() * 1.0, params.Lmem / 2 - XA);   // 1 秒ぶん（導体の右端まで）
+      vtCyl.scale.set(Math.max(0.01, vt), 1, 1);
+      vtCyl.position.set(XA + vt / 2, 0, 0);
+      labelVt.sprite.position.set(XA + Math.max(vt / 2, 1.2), CY - r - 0.45, 0);
+      setLabel(labelVt, '長さ v×1 s', '#b58900');
+      // 数え方は教科書と同じ：**断面 A の後方（＋x 側）、長さ v×1 s の円柱の中にいる電子**。
+      //   この電子たちが、これからの 1 秒で A を通る。だから **画面の円柱の中を数えた数と必ず一致する**
+      //   （生徒が数えて確かめられる。一時停止しても正しい数が出る）。
+      //   2026-09-21 まではここに「実際に A を通りぬけた数（直近 1 秒の正味）」を出していた。
+      //   平均は同じだが瞬間どうしは合わず、「円柱に 6 個見えているのに 0 個」が起きていた（本人の指摘）。
+      //   通りぬけた数（sim.crossRate）は画面には出さないが、流れているかを測るために残してある
+      let nCyl = 0;
+      for (const e of electrons) if (e.x >= XA && e.x <= XA + vt) nCyl++;
+      // 1 段ぶん下げる。前は A の字（XA − 0.75）と文字が重なっていた（2026-09-22 の写真で見えた）
+      labelCount.sprite.position.set(XA, CY - r - 1.6, 0);
+      setLabel(labelCount, 'この 1 秒で A を通る電子 ' + nCyl + ' 個', '#b58900');
+    }
+
+    // ===== 道具箱：材質ボタン・つまみ・チェック =====
+    const $ = id => document.getElementById(id);
+    const matRow = $('matRow');
+    MATERIALS.forEach((m, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn'; b.dataset.mat = i;
+      b.innerHTML = m.name + '<small>' + fmtSci(m.rho20, OHM + '·m') + '</small>';
+      b.addEventListener('click', () => { params.mat = i; onParamsChanged('mat'); });
+      matRow.appendChild(b);
+    });
+    function syncMatButtons() {
+      for (const b of matRow.querySelectorAll('.btn')) b.classList.toggle('active', +b.dataset.mat === params.mat);
+    }
+    const sV = $('sV'), sL = $('sL'), sS = $('sS'), sT = $('sT'), ckHeat = $('ckHeat');
+    sV.addEventListener('input', () => { params.V = parseFloat(sV.value); onParamsChanged('V'); });
+    sL.addEventListener('input', () => { params.Lmem = parseInt(sL.value, 10); onParamsChanged('L'); });
+    sS.addEventListener('input', () => { params.sIdx = parseInt(sS.value, 10); onParamsChanged('S'); });
+    sT.addEventListener('input', () => { params.Tamb = parseFloat(sT.value); onParamsChanged('T'); });
+    ckHeat.addEventListener('change', () => { params.heat = ckHeat.checked; onParamsChanged('heat'); });
+    $('btnDefaults').addEventListener('click', () => {
+      Object.assign(params, { V: V_DEFAULT, mat: MAT_DEFAULT, Lmem: L_DEFAULT, sIdx: S_DEFAULT, Tamb: T_DEFAULT, heat: false });
+      syncControls(); onParamsChanged('all');
+    });
+    function syncControls() {
+      sV.value = params.V; sL.value = params.Lmem; sS.value = params.sIdx; sT.value = params.Tamb; ckHeat.checked = params.heat;
+      $('vV').textContent = fmtV(params.V);
+      $('vL').textContent = fmtLen(lengthM()) + '（' + params.Lmem + ' メモリ）';
+      $('vS').textContent = fmtSci(areaM2(), 'm²');
+      $('vT').textContent = fmtT(params.Tamb);
+      $('lblT').textContent = params.heat ? '周囲の温度' : '温度 t';
+      $('heatNote').textContent = params.heat
+        ? 'ジュール熱で温度が上がり、陽イオンの振動が激しくなって抵抗が増えます。融点（' + matNow().name + 'は ' + matNow().melt + ' ℃）に達すると溶けて切れ、電流が止まります（ヒューズと同じ）。実際の電線は被覆の耐熱で 70〜90 ℃ までしか使えません'
+        : '導体の温度はつまみで決めます。チェックを入れると、ジュール熱で温度が上がり、抵抗が増えます';
+      syncMatButtons();
+    }
+    // つまみを動かしたときの組み直し。形が変わるもの（長さ・太さ）だけ作り直し、それ以外は色と数値だけ
+    function onParamsChanged(kind) {
+      syncControls();
+      // 材質・長さ・太さを変えたら「別の導体に取りかえた」ことなので、切れた状態は解ける。
+      // 電圧や温度を変えただけでは直らない（同じ切れた線のまま）
+      const wasBroken = sim.broken;
+      if (kind === 'L' || kind === 'S' || kind === 'mat' || kind === 'all') { sim.broken = false; updateMeltPill(); }
+      if (kind === 'L' || kind === 'S' || kind === 'all') {
+        buildConductor(); buildIons(); seedElectrons(); buildCircuit(); buildSection();
+        refreshParticleVisibility();
+      } else if (kind === 'V' || kind === 'mat') {
+        if (wasBroken && !sim.broken) { buildConductor(); refreshParticleVisibility(); }   // 切れ目をふさぐ
+        paintConductor(); paintCircuit();
+      }
+      if (!params.heat) sim.Tc = params.Tamb;
+    }
+    // 表示のチェック
+    const SHOW_CHK = [['ckElec', 'elec'], ['ckIon', 'ion'], ['ckArrow', 'arrow'], ['ckSection', 'section'], ['ckPot', 'pot'],
+                      ['ckInfo', 'info'], ['ckVI', 'vi'], ['ckPotGraph', 'potGraph']];
+    for (const [id, key] of SHOW_CHK) {
+      $(id).addEventListener('change', e => { show[key] = e.target.checked; onShowChanged(key); });
+    }
+    function onShowChanged(key) {
+      if (key === 'elec' || key === 'ion') refreshParticleVisibility();
+      if (key === 'pot')  { paintConductor(); paintCircuit(); }
+      if (key === 'info') infoPanel.style.display = show.info ? 'block' : 'none';
+      if (key === 'vi')   { graphVI.style.display = show.vi ? 'block' : 'none'; if (show.vi) drawVI(); }
+      if (key === 'potGraph') { graphPot.style.display = show.potGraph ? 'block' : 'none'; if (show.potGraph) drawPotGraph(); }
+    }
+    function closeShow(key, ckId) { show[key] = false; $(ckId).checked = false; onShowChanged(key); }
+
+    // 再生・はじめから
+    const btnPlay = $('btnPlay'), pillTime = $('pillTime'), pillMelt = $('pillMelt');
+    // 切れた・直ったの知らせは**その場で**出す（0.1 秒ごとの書き替えを待たない）
+    function updateMeltPill() {
+      pillMelt.style.display = sim.broken ? '' : 'none';
+      if (sim.broken) pillMelt.textContent = '⚠ ' + matNow().name + 'が約 ' + meltPoint() + ' ℃ で溶けて切れました（「はじめから」で元に戻ります）';
+    }
+    btnPlay.addEventListener('click', () => { sim.running = !sim.running; btnPlay.textContent = sim.running ? '⏸ 一時停止' : '▶ 再生'; });
+    function resetSim() {
+      sim.time = 0; sim.Q = 0; sim.Tc = params.Tamb; sim.cross.length = 0; sim.crossRate = 0;
+      sim.broken = false;            // 新しい導体に取りかえる（切れ目をふさぐ）
+      buildConductor(); refreshParticleVisibility(); updateMeltPill();
+      seedElectrons();
+      for (const P of flowPaths) for (const d of P.dots) d.s = Math.random() * P.L;
+    }
+    $('btnReset').addEventListener('click', resetSim);
+
+    // 道具箱 開閉（はじめは「開いた状態」。CLAUDE.md §6）
+    const toolboxPanel  = $('toolboxPanel');
+    const toolboxToggle = $('toolboxToggle');
+    toolboxToggle.addEventListener('click', () => {
+      const collapsed = toolboxPanel.classList.toggle('is-collapsed');
+      toolboxToggle.textContent = collapsed ? '＞' : '＜';
+      toolboxToggle.setAttribute('aria-expanded', String(!collapsed));
+    });
+
+    // ===== パネル（数値・グラフ）：つかんで動かせ、左下の角で比率を保って拡大縮小（コンデンサーシミュと同じ）=====
+    const infoPanel = $('infoPanel'), graphVI = $('graphVI'), graphPot = $('graphPot');
+    const panelScales = new Map();
+    function setPanelScale(panel, k) {
+      panelScales.set(panel, k);
+      panel.style.transform = Math.abs(k - 1) < 1e-6 ? '' : 'scale(' + k.toFixed(3) + ')';
+    }
+    // ox/oy：拡大の固定点（'right'|'left'、'top'|'bottom'）。見た目の位置から配置上の left/top を出すのに使う
+    //（拡大しているとき、見た目の箱と配置上の箱は固定点以外でずれるため）
+    function makePanelMovable(panel, ox = 'right', oy = 'top') {
+      let moving = false, x0 = 0, y0 = 0, left0 = 0, top0 = 0;
+      panel.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        const t = e.target;
+        if (t.closest && t.closest('input, button, select, textarea, a, label, .grip')) return;
+        const r = panel.getBoundingClientRect();
+        left0 = ox === 'right'  ? r.right  - panel.offsetWidth  : r.left;
+        top0  = oy === 'bottom' ? r.bottom - panel.offsetHeight : r.top;
+        panel.style.left = left0 + 'px'; panel.style.top = top0 + 'px'; panel.style.right = 'auto'; panel.style.bottom = 'auto';
+        x0 = e.clientX; y0 = e.clientY; moving = true;
+        try { panel.setPointerCapture(e.pointerId); } catch (_) {}   // 失敗を受け止める（moving のまま取り残されないように）
+        e.preventDefault();
+      });
+      panel.addEventListener('pointermove', e => {
+        if (!moving) return;
+        panel.style.left = Math.max(-panel.offsetWidth + 60, Math.min(window.innerWidth - 60, left0 + e.clientX - x0)) + 'px';
+        panel.style.top  = Math.max(-panel.offsetHeight + 40, Math.min(window.innerHeight - 40, top0 + e.clientY - y0)) + 'px';
+      });
+      const stop = e => { if (!moving) return; moving = false; try { panel.releasePointerCapture(e.pointerId); } catch (_) {} };
+      panel.addEventListener('pointerup', stop);
+      panel.addEventListener('pointercancel', stop);
+    }
+    let uiK = 1;
+    const panelUserK = new Map();
+    function makePanelScalable(panel, gripId, ox = 'right', oy = 'top') {
+      const grip = $(gripId);
+      let active = false, startScale = 1, startDist = 1, fx = 0, fy = 0;
+      grip.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        const r = panel.getBoundingClientRect();
+        fx = ox === 'right' ? r.right : r.left; fy = oy === 'bottom' ? r.bottom : r.top;   // 固定点
+        startDist = Math.max(20, Math.hypot(e.clientX - fx, e.clientY - fy));
+        startScale = panelScales.get(panel) || 1; active = true;
+        try { grip.setPointerCapture(e.pointerId); } catch (_) {}
+        e.preventDefault(); e.stopPropagation();
+      });
+      grip.addEventListener('pointermove', e => {
+        if (!active) return;
+        const d = Math.hypot(e.clientX - fx, e.clientY - fy);
+        const kv = Math.min(3 * uiK, Math.max(0.5 * uiK, startScale * d / startDist));
+        panelUserK.set(panel, kv / uiK);
+        setPanelScale(panel, kv);
+      });
+      const stop = e => { if (!active) return; active = false; try { grip.releasePointerCapture(e.pointerId); } catch (_) {} };
+      grip.addEventListener('pointerup', stop);
+      grip.addEventListener('pointercancel', stop);
+    }
+    // 画面ぜんたいの倍率：どのモニターでも同じ見え方にする（コンデンサーシミュと同じ基準）。
+    // パネルの初期の大きさはコンデンサーの設定パネルと同じく 1.5 倍前後にしておく（12px の字は映すと小さい）
+    const UI_BASE_W = 2236, UI_BASE_H = 1176, UI_K_MIN = 0.62, UI_K_MAX = 1.15;
+    panelUserK.set(infoPanel, 1.45); panelUserK.set(graphVI, 1.25); panelUserK.set(graphPot, 1.25);
+    const atHome = el => !el.style.left || el.style.left === 'auto';   // 手で動かしていないパネルだけ置き直す
+    function applyUiScale() {
+      uiK = Math.max(UI_K_MIN, Math.min(UI_K_MAX, Math.min(window.innerWidth / UI_BASE_W, window.innerHeight / UI_BASE_H)));
+      for (const p of [infoPanel, graphVI, graphPot]) setPanelScale(p, uiK * (panelUserK.get(p) || 1));
+      // 窓が狭い（縦長など）ときは、グラフ 2 枚を横に並べず縦に積む。横に並べると道具箱の下に潜る
+      if (atHome(graphPot)) {
+        const narrow = window.innerWidth < 1250;
+        graphPot.style.right = narrow ? '10px' : (Math.round(340 * uiK * (panelUserK.get(graphVI) || 1)) + 30) + 'px';
+        graphPot.style.bottom = narrow ? (Math.round(300 * uiK * (panelUserK.get(graphVI) || 1)) + 24) + 'px' : '14px';
+      }
+    }
+    makePanelMovable(infoPanel, 'right', 'top');    makePanelScalable(infoPanel, 'infoGrip', 'right', 'top');
+    makePanelMovable(graphVI, 'right', 'bottom');   makePanelScalable(graphVI, 'viGrip', 'right', 'bottom');
+    makePanelMovable(graphPot, 'right', 'bottom');  makePanelScalable(graphPot, 'potGrip', 'right', 'bottom');
+    $('infoClose').addEventListener('click', () => closeShow('info', 'ckInfo'));
+    $('viClose').addEventListener('click',   () => closeShow('vi', 'ckVI'));
+    $('potClose').addEventListener('click',  () => closeShow('potGraph', 'ckPotGraph'));
+
+    // --- 数値パネル ---
+    const infoBody = $('infoBody');
+    // cls に 'reserve' を渡すと、その行だけ幅を先に取る（動かしているあいだ幅が変わる行に使う）
+    const row = (k, v, cls) => `<span class="k">${k}</span><span class="v${cls ? ' ' + cls : ''}">${v}</span>`;
+    function updateInfo() {
+      const m = matNow();
+      const R = resistance(), I = current(), v = driftSpeed(), E = fieldE(), P = power();
+      let html = '';
+      html += row('電圧 V', fmtV(params.V));
+      // 切れているときに「I ＝ V/R」と書くと、V も R もあるのに I が 0 で食いちがって見える。
+      // 切れ目の抵抗が無限大になっているので、式のほうを外す
+      html += row(sim.broken ? '電流 I' : '電流 I ＝ V/R',
+        sim.broken ? '<span style="color:#d83b3b">0 A　切れています</span>' : fmtI(I));
+      html += row('抵抗 R ＝ ρl/S', fmtR(R));
+      html += `<span class="sec">導体（${m.name}・${fmtT(sim.Tc)}）</span>`;
+      html += row('抵抗率 ρ', fmtSci(rhoAt(m, sim.Tc), OHM + '·m') + (Math.abs(sim.Tc - 20) > 0.5 ? ` <small>20 ℃ では ${fmtSci(m.rho20, OHM + '·m')}</small>` : ''));
+      html += row('長さ l', fmtLen(lengthM()));
+      html += row('断面積 S', fmtSci(areaM2(), 'm²'));
+      html += `<span class="sec">導体の中</span>`;
+      html += row('電場 E ＝ V/l', fmtSci(E, 'V/m'));
+      html += row('電子の平均の速さ v ＝ I/(enS)', fmtSci(v, 'm/s'));
+      html += row('1 秒に断面を通る電子 I/e', fmtSci(I / E_CHARGE, '個'));
+      html += `<span class="sec">電気とエネルギー</span>`;
+      html += row('電力 P ＝ IV', fmtW(P));
+      html += row('ジュール熱 Q ＝ IVt', fmtJ(sim.Q) + ` <small>t ＝ ${fmtTime(sim.time)}</small>`, 'reserve');
+      if (params.heat) {
+        html += row('導体の温度', (sim.broken ? '<span style="color:#d83b3b">' : '') + fmtT(sim.Tc) +
+          (sim.broken ? '　切れました</span>' : ''));
+        if (sim.broken) html += `<span class="sec" style="color:#d83b3b">${m.name}が約 ${m.melt} ℃ に達して溶け、切れました。細い線は溶けると表面張力でちぎれて電流が止まります（ヒューズと同じ）。「はじめから」で元に戻ります</span>`;
+      }
+      infoBody.innerHTML = html;
+      const noteBits = ['1 メモリ ＝ 2 cm。n は 8.5×10²⁸ /m³（銅の値）'];
+      if (!m.alphaInBook) noteBits.push(m.name + 'の温度係数は理科年表の値（' + fmtSci(m.alpha, '/K') + '）');
+      // 割り切りは、効いている場面でだけ画面に出す（いつも出すと読まれなくなる）
+      if (I > 20) noteBits.push('電源は内部抵抗のない理想の電源です。実際の電池では、これほど大きな電流は流れません');
+      if (sim.Tc > 100) noteBits.push('抵抗率の温度変化は直線の式なので、高い温度では目安です');
+      $('infoNote').textContent = noteBits.join('。');
+    }
+
+    // --- V-I グラフ（図 41・48）：いまの導体の V と I の関係。横軸 V、縦軸 I ---
+    const viCanvas = $('viCanvas'), vctx = viCanvas.getContext('2d');
+    const potCanvas = $('potCanvas'), pctx = potCanvas.getContext('2d');
+    // 見た目の大きさ（CSS px）は HTML の width/height 属性の値。ぼやけないように、描く解像度はその dpr 倍にする。
+    // ★ `c.width = …` は width **属性**も書き替えるので、属性を毎回読み直すと dpr 倍ずつ育つ
+    //   （2026-09-17 に本人から「グラフが無限に大きくなる」。dpr 1 のヘッドレスでは出ず、拡大率 125% 以上の画面で出る）。
+    //   見た目の大きさは最初の 1 回だけ読んで dataset に取っておき、以後はそれを使う
+    function prepCanvas(c, ctx) {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (!c.dataset.cssW) { c.dataset.cssW = c.getAttribute('width'); c.dataset.cssH = c.getAttribute('height'); }
+      const w = parseInt(c.dataset.cssW, 10), h = parseInt(c.dataset.cssH, 10);
+      const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+      if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
+      if (c.style.width !== w + 'px') { c.style.width = w + 'px'; c.style.height = h + 'px'; }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { w, h };
+    }
+    function niceStep(range, target) {
+      const raw = Math.max(1e-300, range / Math.max(1, target));
+      const e = Math.pow(10, Math.floor(Math.log10(raw)));
+      const n = raw / e;
+      return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * e;
+    }
+    function currentAtV(V, withHeat) {
+      const t = withHeat ? steadyTemp(V) : params.Tamb;
+      return V / resistanceAt(t);
+    }
+    function drawVI() {
+      const { w, h } = prepCanvas(viCanvas, vctx);
+      const g = vctx;
+      g.clearRect(0, 0, w, h);
+      const L = 52, R = 14, T = 14, B = 30;
+      const pw = w - L - R, ph = h - T - B;
+      const N = 50;
+      // 溶けはじめる電圧。そこから先は「現実には無い状態」なので**曲線を描かない**（CLAUDE.md §8-22）。
+      // 2026-09-20 まではここを地続きの線で描いていたので、一律 1200 ℃ の頭打ちがそのまま
+      // 「まっすぐな線」として見え、教科書の白熱電球の形と食いちがっていた
+      const vMelt = params.heat ? meltVoltage() : null;
+      const vEnd = vMelt === null ? V_MAX : vMelt;
+      const Inow = current();
+      const curve = [], flat = [];
+      let iMax = Inow;                       // いまの点は必ず画面に入るようにする
+      for (let i = 0; i <= N; i++) {
+        const V = vEnd * i / N;
+        const I = currentAtV(V, params.heat);
+        curve.push([V, I]);
+        iMax = Math.max(iMax, I);
+      }
+      for (let i = 0; i <= N; i++) { const V = V_MAX * i / N; flat.push([V, currentAtV(V, false)]); }
+      iMax = Math.max(iMax, 1e-9);
+      // 縦軸は**見せたい曲線**で決める。温度が変わらないときの破線は、はみ出したところで切る。
+      // （前は破線の最大値で決めていたので、曲がり方を見せたい曲線が下の 2 割に潰れていた）
+      const iStep = niceStep(iMax, 4), iTop = Math.ceil(iMax / iStep + 1e-9) * iStep;
+      const X = V => L + V / V_MAX * pw, Y = I => T + ph - I / iTop * ph;
+      // 目盛り
+      g.lineWidth = 1; g.font = '11px system-ui, sans-serif'; g.fillStyle = '#7684aa';
+      g.strokeStyle = 'rgba(70,90,160,0.13)';
+      g.textAlign = 'right'; g.textBaseline = 'middle';
+      for (let I = 0; I <= iTop + 1e-9; I += iStep) { const y = Math.round(Y(I)) + 0.5; g.beginPath(); g.moveTo(L, y); g.lineTo(L + pw, y); g.stroke(); g.fillText(+I.toPrecision(3), L - 6, y); }
+      g.textAlign = 'center'; g.textBaseline = 'top';
+      for (let V = 0; V <= V_MAX + 1e-9; V += 2) { const x = Math.round(X(V)) + 0.5; g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke(); g.fillText(V, x, T + ph + 6); }
+      g.strokeStyle = 'rgba(70,90,160,0.45)';
+      g.beginPath(); g.moveTo(L + 0.5, T); g.lineTo(L + 0.5, T + ph + 0.5); g.lineTo(L + pw, T + ph + 0.5); g.stroke();
+      g.fillStyle = '#5566aa'; g.textAlign = 'left'; g.textBaseline = 'top'; g.fillText('I [A]', 4, 0);
+      g.textAlign = 'right'; g.textBaseline = 'bottom'; g.fillText('V [V]', w - 4, h - 1);
+      // 溶ける側は薄い赤で塗り、境目に縦の破線を引く（ここから先は計算していない、という断り）
+      if (vMelt !== null && vMelt < V_MAX) {
+        g.fillStyle = 'rgba(216,59,59,0.07)';
+        g.fillRect(X(vMelt), T, X(V_MAX) - X(vMelt), ph);
+        g.strokeStyle = 'rgba(216,59,59,0.55)'; g.lineWidth = 1.2; g.setLineDash([4, 3]);
+        g.beginPath(); g.moveTo(Math.round(X(vMelt)) + 0.5, T); g.lineTo(Math.round(X(vMelt)) + 0.5, T + ph); g.stroke(); g.setLineDash([]);
+        g.fillStyle = '#d83b3b'; g.font = 'bold 10px system-ui, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'top';
+        if (X(V_MAX) - X(vMelt) > 52) g.fillText('溶ける', X(vMelt) + 4, T + 4);
+      }
+      // 線は枠の中だけに描く（温度が変わらないときの破線は、枠の上ではみ出して切れる）
+      const line = (pts, color, width, dash) => {
+        g.setLineDash(dash); g.strokeStyle = color; g.lineWidth = width; g.lineJoin = 'round';
+        g.beginPath(); pts.forEach(([V, I], i) => { const x = X(V), y = Y(I); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); g.setLineDash([]);
+      };
+      g.save(); g.beginPath(); g.rect(L, T, pw, ph); g.clip();
+      if (params.heat) line(flat, 'rgba(42,111,240,0.35)', 1.5, [5, 4]);
+      line(curve, '#2a6ff0', 2.4, []);
+      // 曲線の終わり（溶けるところ）に印を打つ
+      if (vMelt !== null && vMelt < V_MAX) {
+        const xe = X(vMelt), ye = Y(currentAtV(vMelt, true));
+        g.strokeStyle = '#d83b3b'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(xe - 4, ye - 4); g.lineTo(xe + 4, ye + 4); g.moveTo(xe + 4, ye - 4); g.lineTo(xe - 4, ye + 4); g.stroke();
+      }
+      // いまの点
+      g.fillStyle = '#d83b3b'; g.beginPath(); g.arc(X(params.V), Y(Inow), 4, 0, Math.PI * 2); g.fill();
+      g.restore();
+      const meltNote = vMelt === null ? ''
+        // ✕ から先は 2 行目に送る（1 行目の途中で折り返すと読みにくい。2026-09-20 に本人から）
+        : `<br><b style="color:#d83b3b">✕</b> 約 ${meltPoint()} ℃ で溶けて切れるので、${vMelt.toFixed(1)} V から先は描いていません`;
+      $('viNote').innerHTML = params.heat
+        ? `<b style="color:#2a6ff0">━</b> ${matNow().name}（電流で熱くなる）　<span style="color:#2a6ff0;opacity:.6">╌╌</span> 温度が ${fmtT(params.Tamb)} のまま　● いま${meltNote}`
+        : `<b style="color:#2a6ff0">━</b> ${matNow().name} ${fmtT(params.Tamb)}（傾き 1/R ＝ ${fmtSci(1 / resistance(), '1/' + OHM)}）　● いま`;
+    }
+
+    // --- 電位のグラフ（図 42）：＋極から回路をひとまわり。導体の両端で RI 下がる ---
+    function drawPotGraph() {
+      const { w, h } = prepCanvas(potCanvas, pctx);
+      const g = pctx;
+      g.clearRect(0, 0, w, h);
+      // 上の余白 T は、軸の名前「電位 [V]」と いちばん上の目盛りの数字を**別の段**に置くための高さ。
+      // 2026-09-21 まで T=12 で、名前（y=0 から）と 10.0 V（y=6〜18）が重なっていた（本人から指摘）
+      const L = 44, R = 14, T = 26, B = 34;
+      const pw = w - L - R, ph = h - T - B;
+      const lenOf = p => { let s = 0; for (let i = 1; i < p.length; i++) s += p[i].distanceTo(p[i - 1]); return s; };
+      const l1 = lenOf(circuit.pathL), lc = params.Lmem, l2 = lenOf(circuit.pathR);
+      const total = l1 + lc + l2;
+      // 縦軸の上は **つまみの上限（V_MAX）で固定**する。
+      // 2026-09-21 まで `Math.max(0.5, params.V)` にしていたので、0.5 V より上ではどの電圧でも
+      // 緑の線が上いっぱいまで来て、**軸の数字だけが変わって絵はずっと同じ**に見えていた
+      // （本人から「1〜10 V は軸の値が変わるだけで、ずっと同じ見た目なのが嫌」）。
+      // 固定にすると V がそのまま線の高さになり、電圧を変えたことが絵で分かる。
+      const vTop = V_MAX;
+      const X = s => L + s / total * pw, Y = v => T + ph - v / vTop * ph;
+      const clampY = y => Math.max(T + 8, Math.min(T + ph - 8, y));
+      // 導体の区間を薄く塗る
+      g.fillStyle = 'rgba(255,196,0,0.18)'; g.fillRect(X(l1), T, X(l1 + lc) - X(l1), ph);
+      // 横の目盛り線と数字（0・2・…・10 V）。軸が固定になったので、高さを読めるように目盛りを入れる
+      const vStep = niceStep(vTop, 5);   // 0・2・…・10 V。V-I グラフの横軸（2 V ごと）とそろえる
+      g.font = '11px system-ui, sans-serif'; g.lineWidth = 1;
+      g.textAlign = 'right'; g.textBaseline = 'middle';
+      for (let v = 0; v <= vTop + 1e-9; v += vStep) {
+        const y = Math.round(Y(v)) + 0.5;
+        g.strokeStyle = 'rgba(70,90,160,0.13)'; g.beginPath(); g.moveTo(L, y); g.lineTo(L + pw, y); g.stroke();
+        g.fillStyle = '#7684aa'; g.fillText(v < 1e-9 ? '0 V' : String(+v.toFixed(2)), L - 6, y);
+      }
+      // 軸
+      g.strokeStyle = 'rgba(70,90,160,0.45)';
+      g.beginPath(); g.moveTo(L + 0.5, T); g.lineTo(L + 0.5, T + ph + 0.5); g.lineTo(L + pw, T + ph + 0.5); g.stroke();
+      g.fillStyle = '#5566aa'; g.textAlign = 'left'; g.textBaseline = 'top'; g.fillText('電位 [V]', 4, 3);
+      // 下の区間名。**隣とぶつかるものは出さない**（導線の区間が短いと ＋極 と重なって読めなくなる）
+      g.font = '11px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'top';
+      const xLabels = [['＋極', X(0) + 12], ['導線', X(l1 / 2)], ['抵抗 R', X(l1 + lc / 2)],
+                       ['導線', X(l1 + lc + l2 / 2)], ['−極', X(total) - 12]];
+      let usedR = -1e9;
+      for (const [t, xc] of xLabels) {
+        const hw = g.measureText(t).width / 2;
+        const cx = Math.min(w - 3 - hw, Math.max(3 + hw, xc));
+        if (cx - hw < usedR + 3) continue;
+        g.fillStyle = '#7684aa'; g.fillText(t, cx, T + ph + 6);
+        usedR = cx + hw;
+      }
+      g.fillStyle = '#5566aa'; g.textAlign = 'center'; g.fillText('位置（回路をたどる）', L + pw / 2, T + ph + 19);
+      // 折れ線：導線は平ら、導体の中で一様に下がる
+      g.strokeStyle = '#2a9d5b'; g.lineWidth = 2.6; g.lineJoin = 'round';
+      g.beginPath(); g.moveTo(X(0), Y(params.V)); g.lineTo(X(l1), Y(params.V)); g.lineTo(X(l1 + lc), Y(0)); g.lineTo(X(total), Y(0)); g.stroke();
+      // 電圧降下 RI の寸法線
+      const RI = params.V;
+      const xd = X(l1 + lc);
+      g.strokeStyle = '#d83b3b'; g.lineWidth = 1.2; g.setLineDash([3, 3]);
+      g.beginPath(); g.moveTo(xd, Y(params.V)); g.lineTo(xd, Y(0)); g.stroke(); g.setLineDash([]);
+      g.fillStyle = '#d83b3b'; g.font = 'bold 11px system-ui, sans-serif'; g.textBaseline = 'middle';
+      // 置き場所は「破線の右・落差の真ん中」がいちばん分かりやすい。ただし導体が長いと破線が右端に寄り、
+      // 2026-09-21 まではそのまま書いて「＝ 10.0 V」の末尾が枠の外で切れていた（本人から指摘）。
+      // 入らないときは **折れ線より上の帯**（ここは必ず空いている）へ、右端に寄せて置く。
+      // 言い方を短くするのは最後の手（「電圧降下」という言葉自体を見せたいので、なるべく残す）。
+      const riLong = '電圧降下 RI ＝ ' + fmtV(RI), riShort = 'RI ＝ ' + fmtV(RI);
+      const wLong = g.measureText(riLong).width, wShort = g.measureText(riShort).width;
+      const rightRoom = (L + pw - 4) - (xd + 5);     // 破線の右の空き
+      const aboveRoom = Y(params.V) - (T + 2);       // 平らな線より上の空き（高さ）
+      const putRight = t => { g.textAlign = 'left';  g.fillText(t, xd + 5, clampY(Y(params.V / 2))); };
+      const putAbove = t => { g.textAlign = 'right'; g.fillText(t, L + pw - 4, clampY(Y(params.V) - 11)); };
+      const putBand  = t => { g.textAlign = 'right'; g.fillText(t, xd - 6, clampY(Y(params.V) + 13)); };
+      if (rightRoom >= wLong) putRight(riLong);
+      else if (aboveRoom >= 17) putAbove(riLong);
+      else if (rightRoom >= wShort) putRight(riShort);
+      else putBand(riShort);
+    }
+
+    // ===== 視点スナップ（静電気シリーズと同じ 0.35 秒の smoothstep）=====
+    let viewTween = null;
+    function snapViewTo(view, dur = 0.5) {
+      viewTween = { startPos: camera.position.clone(), endPos: view.pos.clone(), startTarget: controls.target.clone(), endTarget: view.target.clone(),
+                    startTime: performance.now() / 1000, dur };
+    }
+    function updateViewSnap() {
+      if (!viewTween) return;
+      const u = Math.min(1, (performance.now() / 1000 - viewTween.startTime) / viewTween.dur);
+      const k = u * u * (3 - 2 * u);
+      camera.position.lerpVectors(viewTween.startPos, viewTween.endPos, k);
+      controls.target.lerpVectors(viewTween.startTarget, viewTween.endTarget, k);
+      controls.update();
+      if (u >= 1) viewTween = null;
+    }
+    $('viewAll').addEventListener('click', () => snapViewTo(VIEWS.all));
+    $('viewInside').addEventListener('click', () => snapViewTo(VIEWS.inside));
+    $('viewFront').addEventListener('click', () => snapViewTo(VIEWS.front));
+
+    // ===== 右クリックメニュー（図形の矢印を消す）=====
+    const ctxMenu = $('ctxMenu');
+    let ctxArrowTarget = -1;
+    function hideCtxMenu() { ctxMenu.style.display = 'none'; ctxArrowTarget = -1; }
+    renderer.domElement.addEventListener('contextmenu', e => {
+      const ai = window._hitArrowAt?.(e.clientX, e.clientY) ?? -1;
+      if (ai >= 0) {
+        e.preventDefault();
+        ctxArrowTarget = ai;
+        ctxMenu.style.left = e.clientX + 'px'; ctxMenu.style.top = e.clientY + 'px'; ctxMenu.style.display = 'block';
+        return;
+      }
+      hideCtxMenu();
+    });
+    $('ctxDeleteBtn').addEventListener('click', () => { if (ctxArrowTarget >= 0) window._deleteArrowAt?.(ctxArrowTarget); hideCtxMenu(); });
+    window.addEventListener('pointerdown', e => { if (ctxMenu.style.display !== 'none' && !ctxMenu.contains(e.target)) hideCtxMenu(); });
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') hideCtxMenu(); });
+
+    // ===== リサイズ =====
+    function resize() {
+      const w = window.innerWidth, h = window.innerHeight;       // clientWidth は初回 0 を返すことがある
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.fov = hPlusFov(w / h);
+      camera.updateProjectionMatrix();
+      for (const m of _lineMats) m.resolution.set(w, h);
+      applyUiScale();
+    }
+    window.addEventListener('resize', resize);
+
+    // ===== 組み立て =====
+    syncControls();
+    buildConductor(); buildIons(); seedElectrons(); buildCircuit(); buildSection();
+    refreshParticleVisibility();
+    setFlowMode('electron');
+    resize();
+
+    // ===== メインループ =====
+    const clock = new THREE.Clock();
+    let liveAcc = 1;   // 最初のコマでパネルを描く
+    function tick() {
+      requestAnimationFrame(tick);
+      const dt = Math.min(Math.max(clock.getDelta(), 0), 0.05);   // 裏タブから戻ったとき飛ばない
+      if (sim.running) {
+        sim.time += dt;
+        // 温度：「電流で熱くなる」ならジュール熱で落ち着き先へ寄る。そうでなければつまみの値
+        if (params.heat) {
+          // 落ち着き先で頭打ちにしない（頭打ちは絵の都合の上限になってしまう。§8-22）。
+          // 温度が上がっていって**融点を越えたら、そこで溶けて切れる**
+          const target = params.Tamb + HEAT_K_PER_W * power();
+          sim.Tc += (target - sim.Tc) * Math.min(1, dt / HEAT_TAU);
+          if (!sim.broken && sim.Tc >= meltPoint()) {
+            sim.Tc = meltPoint(); sim.broken = true;
+            buildConductor();                     // 真ん中に切れ目を作り、端を丸い玉にする
+            pushElectronsOutOfGap(); refreshParticleVisibility();
+            paintCircuit();
+            updateMeltPill();                     // 知らせはその場で出す
+          }
+        } else sim.Tc = params.Tamb;
+        sim.Q += power() * dt;              // (39) ジュール熱 Q ＝ IVt を積み上げる
+        updateIons();
+        updateElectrons(dt);
+        updateFlow(dt);
+      }
+      updateArrows();
+      updateSection();
+      setLabel(labelV, fmtV(params.V));
+      setLabel(labelA, fmtI(current()));
+      liveAcc += dt;
+      if (liveAcc > 0.1) {
+        liveAcc = 0;
+        // 赤熱：温度が 2 ℃ 以上動いたら塗り直す（毎コマ塗る必要はない）
+        if (Math.abs(sim.Tc - _paintedTc) > 2) paintConductor();
+        if (show.info) updateInfo();
+        if (show.vi) drawVI();
+        if (show.potGraph) drawPotGraph();
+        pillTime.textContent = 't = ' + fmtTime(sim.time);
+        // 溶ける状態になったら、画面のいちばん上で断る（数値パネルを閉じていても分かるように）
+        updateMeltPill();
+      }
+      updateViewSnap();
+      controls.update();
+      // 図形：描いた内容をテクスチャに反映し、描画ボードをカメラに合わせる（CLAUDE.md §5 の 4 番目）
+      if (window._inkDirty   && window._inkBoardTex)   { window._inkBoardTex.needsUpdate   = true; window._inkDirty   = false; }
+      if (window._shapeDirty && window._shapeBoardTex) { window._shapeBoardTex.needsUpdate = true; window._shapeDirty = false; }
+      window._syncDrawingBoards?.(camera);
+      renderer.render(scene, camera);
+    }
+
+    // ===== 図形描画モジュール（units/electric-potential.html から移植。CLAUDE.md §5）=====
+    // ペン / 消しゴム / ペンを全消し / 矢印 / 矢印を全消し の 5 つ。
+    // 描画ボードはカメラの子なので、盤面を回しても画面に貼りついたまま。カメラは 1 台（透視）
+// ===== 図形描画モジュール =====
+(function(){
+  const DB_Z = -8, DB_W = 20, DB_H = 12;
+  const PEN_COLOR = 'rgba(255,40,40,1.0)', PEN_W = 2, ERASER_W = 20;
+  const _dr = new THREE.Raycaster(), _dm = new THREE.Vector2();
+
+  let inkMode = 'none', _inkDrawing = false;
+  let _inkBoardMesh = null, _inkBoardCanvas = null, _inkBoardCtx = null;
+  window._inkBoardTex = null;
+  let _activeCtx = null, _activeMesh = null;
+  let _lastX = 0, _lastY = 0;
+  window._inkDirty = false;
+
+  let shapeMode = 'none', _shapeDrawing = false;
+  let _sx = 0, _sy = 0, _cx = 0, _cy = 0;
+  let _shapeBoardMesh = null, _shapeBoardCanvas = null, _shapeBoardCtx = null;
+  window._shapeBoardTex = null;
+  window._shapeDirty = false;
+  const shapes = [];
+  let selIdx = -1, selDragging = false, selHandle = null, selOrigin = null, selSnap = null;
+
+  window._getDrawingToolActive = () => inkMode !== 'none' || shapeMode !== 'none';
+
+  // 描画ボードは camera の子として画面を覆う。透視／平行の両カメラに対応し、
+  // 視界を覆う倍率（縦横比は保持）を毎フレーム合わせる
+  function _fitBoard(mesh, cam) {
+    let vw, vh;
+    if (cam.isOrthographicCamera) {
+      vh = (cam.top - cam.bottom) / cam.zoom;
+      vw = (cam.right - cam.left) / cam.zoom;
+    } else {
+      vh = 2 * Math.abs(DB_Z) * Math.tan(cam.fov * Math.PI / 360);
+      vw = vh * cam.aspect;
+    }
+    const s = Math.max(vw / DB_W, vh / DB_H); // cover：歪ませずに必ず覆う
+    mesh.scale.set(s, s, 1);
+  }
+  window._syncDrawingBoards = (cam) => {
+    if (!cam) return;
+    for (const m of [_inkBoardMesh, _shapeBoardMesh]) {
+      if (!m) continue;
+      if (m.parent !== cam) cam.add(m); // add は自動で元の親から外す
+      _fitBoard(m, cam);
+    }
+  };
+
+  function getNDC(ev) {
+    const r = renderer.domElement.getBoundingClientRect();
+    _dm.set(((ev.clientX-r.left)/r.width)*2-1, -((ev.clientY-r.top)/r.height)*2+1);
+  }
+  function uv2xy(uv, cvs) { return { x: uv.x*cvs.width, y: (1-uv.y)*cvs.height }; }
+
+  function _makeBoard(zOffset, order) {
+    const cvs = document.createElement('canvas');
+    cvs.width = 1024; cvs.height = 614;
+    const ctx = cvs.getContext('2d');
+    ctx.lineCap = ctx.lineJoin = 'round';
+    const tex = new THREE.CanvasTexture(cvs);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent:true, opacity:1, side:THREE.FrontSide, depthWrite:false, depthTest:false });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(DB_W, DB_H), mat);
+    mesh.position.set(0, 0, DB_Z + zOffset);
+    mesh.renderOrder = order;
+    camera.add(mesh);
+    _fitBoard(mesh, camera);
+    return { cvs, ctx, tex, mesh };
+  }
+
+  function ensureInk() {
+    if (_inkBoardMesh) return;
+    const b = _makeBoard(0, 200);
+    _inkBoardCanvas = b.cvs; _inkBoardCtx = b.ctx; window._inkBoardTex = b.tex; _inkBoardMesh = b.mesh;
+  }
+  function ensureShape() {
+    if (_shapeBoardMesh) return;
+    const b = _makeBoard(-0.01, 201);
+    _shapeBoardCanvas = b.cvs; _shapeBoardCtx = b.ctx; window._shapeBoardTex = b.tex; _shapeBoardMesh = b.mesh;
+  }
+
+  function setInkMode(next) {
+    inkMode = inkMode === next ? 'none' : next;
+    if (inkMode !== 'none') { ensureInk(); shapeMode='none'; document.getElementById('toolArrow').classList.remove('active'); selIdx=-1; redrawShapes(); if(_shapeDrawing) endShapeDraw(); }
+    document.getElementById('toolPen').classList.toggle('active', inkMode==='pen');
+    document.getElementById('toolEraser').classList.toggle('active', inkMode==='eraser');
+    if (_inkDrawing) endInk();
+  }
+  function clearInk() {
+    if (_inkBoardCtx && _inkBoardCanvas) { _inkBoardCtx.clearRect(0,0,_inkBoardCanvas.width,_inkBoardCanvas.height); if(window._inkBoardTex) window._inkBoardTex.needsUpdate=true; }
+  }
+
+  function tryStartInk(ev) {
+    if (inkMode==='none') return false;
+    ensureInk();
+    if (!_inkBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h = _dr.intersectObject(_inkBoardMesh, false);
+    if (!h.length || !h[0].uv) return false;
+    const xy = uv2xy(h[0].uv, _inkBoardCanvas);
+    _activeCtx=_inkBoardCtx; _activeMesh=_inkBoardMesh;
+    _lastX=xy.x; _lastY=xy.y; _inkDrawing=true;
+    if (inkMode==='pen') { _activeCtx.globalCompositeOperation='source-over'; _activeCtx.strokeStyle=PEN_COLOR; _activeCtx.lineWidth=PEN_W; }
+    else { _activeCtx.globalCompositeOperation='destination-out'; _activeCtx.strokeStyle='rgba(0,0,0,1)'; _activeCtx.lineWidth=ERASER_W; }
+    _activeCtx.beginPath(); _activeCtx.moveTo(_lastX,_lastY); _activeCtx.lineTo(_lastX+0.01,_lastY+0.01); _activeCtx.stroke();
+    controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){}
+    window._inkDirty=true; ev.preventDefault(); ev.stopPropagation(); return true;
+  }
+  function updateInk(ev) {
+    if (!_inkDrawing || !_activeMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h = _dr.intersectObject(_activeMesh, false);
+    if (!h.length || !h[0].uv) return;
+    const xy = uv2xy(h[0].uv, _inkBoardCanvas);
+    _activeCtx.beginPath(); _activeCtx.moveTo(_lastX,_lastY); _activeCtx.lineTo(xy.x,xy.y); _activeCtx.stroke();
+    _lastX=xy.x; _lastY=xy.y; window._inkDirty=true; ev.preventDefault();
+  }
+  function endInk(ev) {
+    if (!_inkDrawing) return;
+    _inkDrawing=false; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+  }
+
+  function drawArrow(ctx, x1, y1, x2, y2) {
+    const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy);
+    if (len<2) return;
+    const ang=Math.atan2(dy,dx), hw=Math.max(8,Math.min(24,len*0.10)), ha=Math.PI/8;
+    function pass(w,c){ ctx.globalCompositeOperation='source-over'; ctx.strokeStyle=c; ctx.lineWidth=w; ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-hw*Math.cos(ang-ha),y2-hw*Math.sin(ang-ha)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-hw*Math.cos(ang+ha),y2-hw*Math.sin(ang+ha)); ctx.stroke(); }
+    pass(PEN_W+2,'rgba(0,0,0,0.88)'); pass(PEN_W,PEN_COLOR);
+  }
+  function drawHandle(ctx, x, y, isMid=false) {
+    ctx.save(); ctx.fillStyle=isMid?'#88ccff':'#ffffff'; ctx.strokeStyle='#4499ff'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+  function drawShape(ctx, s, sel) {
+    ctx.globalCompositeOperation='source-over';
+    if (s.type==='arrow') { drawArrow(ctx,s.x1,s.y1,s.x2,s.y2);
+      if (sel) { drawHandle(ctx,s.x1,s.y1); drawHandle(ctx,s.x2,s.y2); drawHandle(ctx,(s.x1+s.x2)/2,(s.y1+s.y2)/2,true); } }
+  }
+  function redrawShapes() {
+    if (!_shapeBoardCtx) return;
+    _shapeBoardCtx.clearRect(0,0,_shapeBoardCanvas.width,_shapeBoardCanvas.height);
+    shapes.forEach((s,i)=>drawShape(_shapeBoardCtx,s,i===selIdx));
+    window._shapeDirty=true;
+  }
+
+  function setShapeMode(next) {
+    shapeMode = shapeMode===next?'none':next;
+    if (shapeMode!=='none') { ensureShape(); selIdx=-1; redrawShapes(); inkMode='none'; document.getElementById('toolPen').classList.remove('active'); document.getElementById('toolEraser').classList.remove('active'); if(_inkDrawing)endInk(); }
+    document.getElementById('toolArrow').classList.toggle('active', shapeMode==='arrow');
+  }
+  function tryStartShape(ev) {
+    if (shapeMode==='none') return false;
+    ensureShape(); if(!_shapeBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm, camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return false;
+    const xy=uv2xy(h[0].uv,_shapeBoardCanvas);
+    _sx=xy.x; _sy=xy.y; _cx=xy.x; _cy=xy.y; _shapeDrawing=true;
+    controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){}
+    ev.preventDefault(); ev.stopPropagation(); return true;
+  }
+  function updateShape(ev) {
+    if (!_shapeDrawing||!_shapeBoardMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return;
+    const xy=uv2xy(h[0].uv,_shapeBoardCanvas);
+    _cx=xy.x; _cy=xy.y;
+    _shapeBoardCtx.clearRect(0,0,_shapeBoardCanvas.width,_shapeBoardCanvas.height);
+    shapes.forEach((s,i)=>drawShape(_shapeBoardCtx,s,i===selIdx));
+    drawArrow(_shapeBoardCtx,_sx,_sy,_cx,_cy);
+    window._shapeDirty=true; ev.preventDefault();
+  }
+  function endShapeDraw(ev) {
+    if (!_shapeDrawing) return;
+    _shapeDrawing=false; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+    if (Math.hypot(_cx-_sx,_cy-_sy)>=4) shapes.push({type:'arrow',x1:_sx,y1:_sy,x2:_cx,y2:_cy});
+    redrawShapes(); shapeMode='none'; document.getElementById('toolArrow').classList.remove('active');
+  }
+
+  function distSeg(px,py,x1,y1,x2,y2){ const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy; if(!l2) return Math.hypot(px-x1,py-y1); const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/l2)); return Math.hypot(px-(x1+t*dx),py-(y1+t*dy)); }
+  function hitShape(s,cx,cy){ return s.type==='arrow'&&distSeg(cx,cy,s.x1,s.y1,s.x2,s.y2)<12; }
+  function hitHandles(s,cx,cy){ if(s.type==='arrow'){ if(Math.hypot(cx-s.x1,cy-s.y1)<8)return'start'; if(Math.hypot(cx-s.x2,cy-s.y2)<8)return'end'; if(Math.hypot(cx-(s.x1+s.x2)/2,cy-(s.y1+s.y2)/2)<8)return'mid'; } return null; }
+
+  // 右クリックメニュー用：画面座標にある矢印の添字を返す（無ければ -1）
+  window._hitArrowAt = (clientX, clientY) => {
+    if (!_shapeBoardMesh || !shapes.length) return -1;
+    getNDC({ clientX, clientY }); _dr.setFromCamera(_dm, camera);
+    const h = _dr.intersectObject(_shapeBoardMesh, false);
+    if (!h.length || !h[0].uv) return -1;
+    const {x:cx, y:cy} = uv2xy(h[0].uv, _shapeBoardCanvas);
+    for (let i=shapes.length-1; i>=0; i--) if (hitShape(shapes[i],cx,cy)) return i;
+    return -1;
+  };
+  window._deleteArrowAt = (i) => {
+    if (i < 0 || i >= shapes.length) return;
+    shapes.splice(i, 1);
+    if (selIdx === i) selIdx = -1; else if (selIdx > i) selIdx--;
+    redrawShapes();
+  };
+
+  function tryStartSel(ev) {
+    if (shapeMode!=='none'||inkMode!=='none') return false;
+    if (!_shapeBoardMesh) return false;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return false;
+    const {x:cx,y:cy}=uv2xy(h[0].uv,_shapeBoardCanvas);
+    if (selIdx>=0) { const hh=hitHandles(shapes[selIdx],cx,cy); if(hh){ selHandle=hh; selOrigin={x:cx,y:cy}; selSnap={...shapes[selIdx]}; selDragging=true; controls.enabled=false; try{renderer.domElement.setPointerCapture(ev.pointerId);}catch(e){} ev.preventDefault(); ev.stopPropagation(); return true; } }
+    for (let i=shapes.length-1;i>=0;i--) { if(hitShape(shapes[i],cx,cy)){ selIdx=i; selDragging=false; redrawShapes(); ev.preventDefault(); ev.stopPropagation(); return true; } }
+    if (selIdx>=0) { selIdx=-1; redrawShapes(); }
+    return false;
+  }
+  function updateSel(ev) {
+    if (!selDragging||selIdx<0) return;
+    if (!_shapeBoardMesh) return;
+    getNDC(ev); _dr.setFromCamera(_dm,camera);
+    const h=_dr.intersectObject(_shapeBoardMesh,false);
+    if (!h.length||!h[0].uv) return;
+    const {x,y}=uv2xy(h[0].uv,_shapeBoardCanvas);
+    const s=shapes[selIdx];
+    if (s.type==='arrow') {
+      if (selHandle==='start'){s.x1=x;s.y1=y;}
+      else if(selHandle==='end'){s.x2=x;s.y2=y;}
+      else if(selHandle==='mid'&&selOrigin&&selSnap){const dx=x-selOrigin.x,dy=y-selOrigin.y;s.x1=selSnap.x1+dx;s.y1=selSnap.y1+dy;s.x2=selSnap.x2+dx;s.y2=selSnap.y2+dy;}
+    }
+    redrawShapes(); ev.preventDefault();
+  }
+  function endSel(ev) {
+    if (!selDragging) return;
+    selDragging=false; selHandle=null; selOrigin=null; selSnap=null; controls.enabled=true;
+    try{renderer.domElement.releasePointerCapture(ev?.pointerId);}catch(e){}
+  }
+
+  document.getElementById('toolPen').addEventListener('click', ()=>setInkMode('pen'));
+  document.getElementById('toolEraser').addEventListener('click', ()=>setInkMode('eraser'));
+  document.getElementById('inkClear').addEventListener('click', clearInk);
+  document.getElementById('toolArrow').addEventListener('click', ()=>setShapeMode('arrow'));
+  document.getElementById('shapeClear').addEventListener('click', ()=>{ shapes.length=0;selIdx=-1;if(_shapeBoardCtx)redrawShapes(); });
+
+  renderer.domElement.addEventListener('pointerdown', e=>{ if(e.button===0) tryStartShape(e)||tryStartSel(e)||tryStartInk(e); });
+  window.addEventListener('pointermove', e=>{ if(_shapeDrawing){updateShape(e);return;} if(selDragging){updateSel(e);return;} if(_inkDrawing){updateInk(e);return;} });
+  window.addEventListener('pointerup',     e=>{ if(e.button===0){endShapeDraw(e);endSel(e);endInk(e);} });
+  window.addEventListener('pointercancel', e=>{ endShapeDraw(e);endSel(e);endInk(e); });
+  window.addEventListener('keydown', e=>{
+    const tag=document.activeElement?.tagName;
+    if(selIdx>=0&&(e.key==='Delete'||e.key==='Backspace')&&tag!=='INPUT'&&tag!=='TEXTAREA'){
+      shapes.splice(selIdx,1);selIdx=-1;redrawShapes();e.preventDefault();
+    }
+  });
+})();
+
+    requestAnimationFrame(tick);
+  </script>
+<!-- 文字や絵の引きずりを始めさせない。始まるとブラウザが禁止のしるし（🚫）を出したまま
+     操作を横取りし、つまみや盤面にポインタが届かなくなる（CLAUDE.md §8-21） -->
+<script>window.addEventListener('dragstart', e => e.preventDefault());</script>
+</body>
+</html>

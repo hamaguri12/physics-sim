@@ -37,6 +37,11 @@
   .e-btn.primary:hover{background:rgba(0,85,204,0.22)}
   .j-hint{position:absolute;color:rgba(0,85,204,0.85);font-size:10.5px;letter-spacing:.06em;pointer-events:none;z-index:4;text-shadow:0 0 4px rgba(255,255,255,0.8);transform:translate(-50%,-50%);transition:opacity .3s}
   .e-loader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(20,30,80,0.55);font-size:12.5px;pointer-events:none;z-index:1;letter-spacing:.05em;transition:opacity .4s}
+/* 画面の文字は選ばせない。つまみなどを速く連打すると近くの文字が選ばれ、その選んだ文字の上を
+   押して動かすとブラウザが「文字の引きずり」を始め、禁止のしるし（🚫）が出たまま操作を
+   横取りされる（CLAUDE.md §8-21）。入力欄の中だけは選べるままにしておく */
+body{user-select:none}
+body input,body textarea,body select{user-select:auto}
 </style>
   <script data-goatcounter="https://hamaguri12-physics-sim.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
@@ -675,5 +680,8 @@
   setTimeout(()=>{ if(loaderEl && loaderEl.style.display!=='none') hideLoader(); }, 5000);
 })();
 </script>
+<!-- 文字や絵の引きずりを始めさせない。始まるとブラウザが禁止のしるし（🚫）を出したまま
+     操作を横取りし、つまみや盤面にポインタが届かなくなる（CLAUDE.md §8-21） -->
+<script>window.addEventListener('dragstart', e => e.preventDefault());</script>
 </body>
 </html>
