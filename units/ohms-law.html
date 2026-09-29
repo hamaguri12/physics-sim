@@ -127,7 +127,7 @@
        数字が短くても列が縮まないようにする。この値を小さくすると、またぴくぴく動く（検査 ohmjitter が見張る）。
        ★ 測るときは offsetWidth で測ること。パネルには拡大の transform が掛かっているので
        getBoundingClientRect は拡大後の値を返し、実際より小さい値に決めてしまう（2026-09-22 に一度やった） */
-    .kv .v.reserve{min-width:122px}
+    .kv .v.reserve{min-width:126px}   /* いちばん長い形「1.00e+4 MJ t ＝ 9999.9 s」が 124 px（offsetWidth。MJ を足して 2 px 伸びた：2026-09-29） */
     .kv .v small{font-weight:400;color:var(--muted)}
     .kv .sec{grid-column:1 / -1;color:var(--muted);font-size:11px;margin-top:6px;border-top:1px solid var(--border);padding-top:4px}
     .panel canvas{display:block;border-radius:8px;background:rgba(255,255,255,0.7)}
@@ -503,6 +503,7 @@
     }
     function fmtJ(q) {
       if (q < 1e-9) return '0 J';
+      if (q >= 1e6) return (q / 1e6).toPrecision(3) + ' MJ';   // 1,000 kJ を超えると「1.02e+3 kJ」と出ていた（銀・銅を 10 V にすると 15〜30 秒で届く。2026-09-29 本人）
       if (q >= 1e3) return (q / 1e3).toPrecision(3) + ' kJ';
       if (q >= 1)   return q.toPrecision(3) + ' J';
       return (q * 1e3).toPrecision(3) + ' mJ';
@@ -1414,6 +1415,9 @@
       $(id).addEventListener('change', e => { show[key] = e.target.checked; onShowChanged(key); });
     }
     function onShowChanged(key) {
+      // 矢印（電子にはたらく力）と断面 A（通る電子を数える）は、電子が見えていてこそ意味がある。
+      // 電子を隠したまま出すと、見えない電子の位置に矢印だけ浮き、見えないのに「N 個」と数えた（2026-09-29 本人：出したら電子のチェックも自動で入れる）
+      if ((key === 'arrow' || key === 'section') && show[key] && !show.elec) { show.elec = true; $('ckElec').checked = true; refreshParticleVisibility(); }
       if (key === 'elec' || key === 'ion') refreshParticleVisibility();
       if (key === 'pot')  { paintConductor(); paintCircuit(); }
       if (key === 'info') infoPanel.style.display = show.info ? 'block' : 'none';
@@ -1779,6 +1783,7 @@
     // ===== リサイズ =====
     function resize() {
       const w = window.innerWidth, h = window.innerHeight;       // clientWidth は初回 0 を返すことがある
+      renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));   // 拡大率のちがうモニターへ窓を移しても、ぼやけ・粗さが出ないように入れ直す（2026-09-29 本人）
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.fov = hPlusFov(w / h);

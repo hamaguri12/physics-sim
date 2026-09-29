@@ -496,7 +496,6 @@
       resistors: {
         mode: 'series', n: 2, E: 6, r: 0,
         R1: 30, R2: 20, R3: 10,                    // 問 26・27 の 30 Ω・20 Ω
-        M: { E: 24, R1: 1, R2: 9, R3: 7, R4: 3, S: false },   // 組み合わせ（真ん中をスイッチでつなぐ。408 の形）
         collapse: false, meters: false, rA: 0.5, rV: 10000,
         hScale: 0.5, flow: true, colorPot: false, labels: true, dims: false, showInfo: true, showSchem: true,
       },
@@ -528,100 +527,72 @@
       const net = new Net();
       const metersOn = P.meters;
       // ポンプは左の辺（下 → 上へくみ上げる）。＋が上（回路図の上の線）。
-      // 組み合わせでは、ポンプの出口をそのまま分かれ目 A（z 0）にする。前は ＋ を上の角（z −4）に置いて導線で A へ戻していたので、
-      // 左の辺の z −4〜0 に「ポンプの樋・＋→A・A→上の段」の 3 本が重なり（流れも逆どうし）、回路図では電池が A の上に描かれた（2026-09-24）
-      const mixed = P.mode === 'mixed', top = mixed ? 'A' : '＋';
+      // 回路の形は直列と並列の 2 つ。前は「組み合わせ」（真ん中をスイッチでつなぐ 408 の形）もあったが、
+      // 教科書に無いので消した（2026-09-29 本人「組み合わせモードそのものを消してください」）
       const p0 = net.node('−', -7, 4, { show: false });
-      if (mixed) net.node('A', -7, 0); else net.node('＋', -7, -4, { show: false });
+      net.node('＋', -7, -4, { show: false });
       net.ref = p0;
-      const Emain = net.add('E', 'E', '−', top, { E: P.E, r: P.E > 1e-9 ? P.r : 0, dir: 1, label: 'E' });   // 起電力 0 は「電池なし」（内部抵抗も無し）
-      if (P.mode === 'series' || P.mode === 'parallel') {
-        const n = P.n;
-        const Rs = [P.R1, P.R2, P.R3].slice(0, n);
-        if (P.collapse) {
-          // 「1 つの抵抗に置きかえる」：合成抵抗 R を 1 つだけ上の線に置く（図 50・51 の右側の →）
-          const Rc = P.mode === 'series' ? Rs.reduce((s, r) => s + r, 0) : 1 / Rs.reduce((s, r) => s + 1 / r, 0);
-          net.node('t0', -RLEN / 2 - 1.0, -4, { show: false }); net.node('ra', -RLEN / 2, -4, { show: false }); net.node('rb', RLEN / 2, -4, { show: false });
-          net.add('wire', 'w0', '＋', 't0', { via: [[-7, -4]] });
-          net.add('wire', 'wa', 't0', 'ra');
-          net.add('R', 'R', 'ra', 'rb', { R: Rc, label: 'R', combined: true });
-          if (metersOn) net.add('V', 'V', 'ra', 'rb', { r: P.rV, via: [[-RLEN / 2, -6.2], [RLEN / 2, -6.2]], label: 'V' });
-          net.node('t1', 7, -4, { show: false });
-          net.add('wire', 'w1', 'rb', 't1');
-        } else if (P.mode === 'series') {
-          // 上の線に抵抗を並べる。抵抗の長さ RLEN、あいだは導線
-          const total = n * RLEN + (n - 1) * 1.2, x0 = -total / 2;
-          net.node('t0', x0 - 1.0, -4, { show: false });
-          net.add('wire', 'w0', '＋', 't0', { via: [[-7, -4]] });
-          let prev = 't0';
-          for (let k = 0; k < n; k++) {
-            const xa = x0 + k * (RLEN + 1.2), xb = xa + RLEN;
-            const A = 'r' + (k + 1) + 'a', B = 'r' + (k + 1) + 'b';
-            net.node(A, xa, -4, { show: false }); net.node(B, xb, -4, { show: false });
-            net.add('wire', 'w' + A, prev, A);
-            net.add('R', 'R' + (k + 1), A, B, { R: Rs[k], label: 'R' + sub(k + 1) });
-            if (metersOn) net.add('V', 'V' + (k + 1), A, B, { r: P.rV, via: [[xa, -6.2], [xb, -6.2]], label: 'V' + sub(k + 1) });
-            prev = B;
-          }
-          net.node('t1', 7, -4, { show: false });
-          net.add('wire', 'w1', prev, 't1');
-        } else {
-          // 分かれて流れる：枝ごとに z をずらす。合流点 J1・J2
-          // XJ：分かれ目（J1・J2）の x。抵抗をそろえると、計器ありの回路図で電圧計の値が抵抗の横にしか置けなくなる
-          // （縦は枝の間隔で詰まっている）。3.6 では電圧計の足から並列の縦線まで 2.3 メモリしかなく、値の字が縦線にかかった（2026-09-24 dcschem）。
-          // 4.4 にして 3.1 メモリ（並列 3 つ・計器で 45 px）空ける。水路もこのぶん左右に広がる
-          const XJ = 4.4;
-          const J1 = net.node('J1', -XJ, -4, { show: false }), J2 = net.node('J2', XJ, -4, { show: false });
-          net.add('wire', 'w0', '＋', 'J1', { via: [[-7, -4]] });
-          // 抵抗（落差）は、どの枝も同じ位置（真ん中）にそろえる。並列で見せたいのは「どの枝も同じ高さを落ちる」「ちがうのは幅（抵抗）と流れる量」で、
-          // 横に並べると見比べられる。回路図も、教科書でよく見る縦にそろった形になる（2026-09-24 本人「そろえてください」）。
-          // 前は枝ごとに左右へずらしていた（理由は ①同じ x だと札と高低差の矢印が画面で重なった ②水車のころ、手前の枝の「落ちる前の高い樋」の陰に
-          // 奥の落差が隠れた）。いまは札を空いた所へ自動で置き（layoutLabels）、水車も無いので、どちらも起きない（そろえた写しで全体・横・高さの矢印を撮って確かめた）。
-          // 落差の位置に物理の意味は無い（抵抗の前後の導線はどこも同じ電位）
-          const zs = n === 2 ? [-6, -2] : [-7, -4, -1];
-          for (let k = 0; k < n; k++) {
-            const z = zs[k], A = 'r' + (k + 1) + 'a', B = 'r' + (k + 1) + 'b';
-            net.node(A, -RLEN / 2, z, { show: false }); net.node(B, RLEN / 2, z, { show: false });
-            net.add('wire', 'wa' + k, 'J1', A, { via: [[-XJ, z]] });
-            net.add('R', 'R' + (k + 1), A, B, { R: Rs[k], label: 'R' + sub(k + 1) });
-            if (metersOn) net.add('V', 'V' + (k + 1), A, B, { r: P.rV, via: [[-RLEN / 2, z - 1.4], [RLEN / 2, z - 1.4]], label: 'V' + sub(k + 1) });
-            net.add('wire', 'wb' + k, B, 'J2', { via: [[XJ, z]] });
-          }
-          net.node('t1', 7, -4, { show: false });
-          net.add('wire', 'w1', 'J2', 't1');
+      net.add('E', 'E', '−', '＋', { E: P.E, r: P.E > 1e-9 ? P.r : 0, dir: 1, label: 'E' });   // 起電力 0 は「電池なし」（内部抵抗も無し）
+      const n = P.n;
+      const Rs = [P.R1, P.R2, P.R3].slice(0, n);
+      if (P.collapse) {
+        // 「1 つの抵抗に置きかえる」：合成抵抗 R を 1 つだけ上の線に置く（図 50・51 の右側の →）
+        const Rc = P.mode === 'series' ? Rs.reduce((s, r) => s + r, 0) : 1 / Rs.reduce((s, r) => s + 1 / r, 0);
+        net.node('t0', -RLEN / 2 - 1.0, -4, { show: false }); net.node('ra', -RLEN / 2, -4, { show: false }); net.node('rb', RLEN / 2, -4, { show: false });
+        net.add('wire', 'w0', '＋', 't0', { via: [[-7, -4]] });
+        net.add('wire', 'wa', 't0', 'ra');
+        net.add('R', 'R', 'ra', 'rb', { R: Rc, label: 'R', combined: true });
+        if (metersOn) net.add('V', 'V', 'ra', 'rb', { r: P.rV, via: [[-RLEN / 2, -6.2], [RLEN / 2, -6.2]], label: 'V' });
+        net.node('t1', 7, -4, { show: false });
+        net.add('wire', 'w1', 'rb', 't1');
+      } else if (P.mode === 'series') {
+        // 上の線に抵抗を並べる。抵抗の長さ RLEN、あいだは導線
+        const total = n * RLEN + (n - 1) * 1.2, x0 = -total / 2;
+        net.node('t0', x0 - 1.0, -4, { show: false });
+        net.add('wire', 'w0', '＋', 't0', { via: [[-7, -4]] });
+        let prev = 't0';
+        for (let k = 0; k < n; k++) {
+          const xa = x0 + k * (RLEN + 1.2), xb = xa + RLEN;
+          const A = 'r' + (k + 1) + 'a', B = 'r' + (k + 1) + 'b';
+          net.node(A, xa, -4, { show: false }); net.node(B, xb, -4, { show: false });
+          net.add('wire', 'w' + A, prev, A);
+          net.add('R', 'R' + (k + 1), A, B, { R: Rs[k], label: 'R' + sub(k + 1) });
+          if (metersOn) net.add('V', 'V' + (k + 1), A, B, { r: P.rV, via: [[xa, -6.2], [xb, -6.2]], label: 'V' + sub(k + 1) });
+          prev = B;
         }
-        // 右の辺を下り、下の線を電流計を通って戻る
-        net.node('b1', 7, 4, { show: false }); net.node('b2', 1.4, 4, { show: false }); net.node('b3', -1.4, 4, { show: false });
-        net.add('wire', 'w2', 't1', 'b1');
-        net.add('wire', 'w3', 'b1', 'b2');
-        net.add('A', 'A', 'b2', 'b3', { r: metersOn ? P.rA : 0, label: 'A' });
-        net.add('wire', 'w4', 'b3', '−');
+        net.node('t1', 7, -4, { show: false });
+        net.add('wire', 'w1', prev, 't1');
       } else {
-        // 組み合わせ：2 段の並列を真ん中のスイッチでつなぐ（開いていると「直列 2 本の並列」、閉じると「並列 2 組の直列」）
-        const M = P.M; Emain.E = M.E;
-        net.node('B', 7, 0, { label: 'B' });   // A はポンプの出口として上で作った
-        net.node('P', 0, -4, { label: 'P' }); net.node('Q', 0, 0, { label: 'Q' });
-        // 上の段
-        net.node('t1', -4.6, -4, { show: false }); net.node('t2', -2, -4, { show: false }); net.node('t3', 2, -4, { show: false }); net.node('t4', 4.6, -4, { show: false });
-        net.add('wire', 'w1', 'A', 't1', { via: [[-7, -4]] });
-        net.add('R', 'R1', 't1', 't2', { R: M.R1, label: 'R' + sub(1) });
-        net.add('wire', 'w2', 't2', 'P'); net.add('wire', 'w3', 'P', 't3');
-        net.add('R', 'R3', 't3', 't4', { R: M.R3, label: 'R' + sub(3) });
-        net.add('wire', 'w4', 't4', 'B', { via: [[7, -4]] });
-        // 中の段
-        net.node('m1', -4.6, 0, { show: false }); net.node('m2', -2, 0, { show: false }); net.node('m3', 2, 0, { show: false }); net.node('m4', 4.6, 0, { show: false });
-        net.add('wire', 'w5', 'A', 'm1');
-        net.add('R', 'R2', 'm1', 'm2', { R: M.R2, label: 'R' + sub(2) });
-        net.add('wire', 'w6', 'm2', 'Q'); net.add('wire', 'w7', 'Q', 'm3');
-        net.add('R', 'R4', 'm3', 'm4', { R: M.R4, label: 'R' + sub(4) });
-        net.add('wire', 'w8', 'm4', 'B');
-        net.add('sw', 'S', 'P', 'Q', { closed: M.S, label: 'S' });
-        // 下の線：B から電流計を通って −へ
-        net.node('b2', 1.4, 4, { show: false }); net.node('b3', -1.4, 4, { show: false });
-        net.add('wire', 'w9', 'B', 'b2', { via: [[7, 4]] });
-        net.add('A', 'A', 'b2', 'b3', { r: metersOn ? P.rA : 0, label: 'A' });
-        net.add('wire', 'w10', 'b3', '−');
+        // 分かれて流れる：枝ごとに z をずらす。合流点 J1・J2
+        // XJ：分かれ目（J1・J2）の x。抵抗をそろえると、計器ありの回路図で電圧計の値が抵抗の横にしか置けなくなる
+        // （縦は枝の間隔で詰まっている）。3.6 では電圧計の足から並列の縦線まで 2.3 メモリしかなく、値の字が縦線にかかった（2026-09-24 dcschem）。
+        // 4.4 にして 3.1 メモリ（並列 3 つ・計器で 45 px）空ける。水路もこのぶん左右に広がる
+        const XJ = 4.4;
+        const J1 = net.node('J1', -XJ, -4, { show: false }), J2 = net.node('J2', XJ, -4, { show: false });
+        net.add('wire', 'w0', '＋', 'J1', { via: [[-7, -4]] });
+        // 抵抗（落差）は、どの枝も同じ位置（真ん中）にそろえる。並列で見せたいのは「どの枝も同じ高さを落ちる」「ちがうのは幅（抵抗）と流れる量」で、
+        // 横に並べると見比べられる。回路図も、教科書でよく見る縦にそろった形になる（2026-09-24 本人「そろえてください」）。
+        // 前は枝ごとに左右へずらしていた（理由は ①同じ x だと札と高低差の矢印が画面で重なった ②水車のころ、手前の枝の「落ちる前の高い樋」の陰に
+        // 奥の落差が隠れた）。いまは札を空いた所へ自動で置き（layoutLabels）、水車も無いので、どちらも起きない（そろえた写しで全体・横・高さの矢印を撮って確かめた）。
+        // 落差の位置に物理の意味は無い（抵抗の前後の導線はどこも同じ電位）
+        const zs = n === 2 ? [-6, -2] : [-7, -4, -1];
+        for (let k = 0; k < n; k++) {
+          const z = zs[k], A = 'r' + (k + 1) + 'a', B = 'r' + (k + 1) + 'b';
+          net.node(A, -RLEN / 2, z, { show: false }); net.node(B, RLEN / 2, z, { show: false });
+          net.add('wire', 'wa' + k, 'J1', A, { via: [[-XJ, z]] });
+          net.add('R', 'R' + (k + 1), A, B, { R: Rs[k], label: 'R' + sub(k + 1) });
+          if (metersOn) net.add('V', 'V' + (k + 1), A, B, { r: P.rV, via: [[-RLEN / 2, z - 1.4], [RLEN / 2, z - 1.4]], label: 'V' + sub(k + 1) });
+          net.add('wire', 'wb' + k, B, 'J2', { via: [[XJ, z]] });
+        }
+        net.node('t1', 7, -4, { show: false });
+        net.add('wire', 'w1', 'J2', 't1');
       }
+      // 右の辺を下り、下の線を電流計を通って戻る
+      net.node('b1', 7, 4, { show: false }); net.node('b2', 1.4, 4, { show: false }); net.node('b3', -1.4, 4, { show: false });
+      net.add('wire', 'w2', 't1', 'b1');
+      net.add('wire', 'w3', 'b1', 'b2');
+      net.add('A', 'A', 'b2', 'b3', { r: metersOn ? P.rA : 0, label: 'A' });
+      net.add('wire', 'w4', 'b3', '−');
       return net;
     }
 
@@ -4294,17 +4265,15 @@
       let html = '', vals = '';   // vals ＝ 値のつまみ（盤面の部品を押しても同じ値を変えられる）。並びのいちばん下に
       if (PAGE === 'resistors') {
         html += grp('回路',
-          seg('segMode', [['series', '直列'], ['parallel', '並列'], ['mixed', '組み合わせ']]) +
+          seg('segMode', [['series', '直列'], ['parallel', '並列']]) +   // 「組み合わせ」は教科書に無いので消した（2026-09-29 本人）
           `<div class="fld" id="fld_n"><div class="lab"><span>抵抗の数</span></div>${seg('segN', [['2', '2 つ'], ['3', '3 つ']])}</div>` +
           `<div class="row" id="rowCollapse"><button class="btn" id="btnCollapse">1 つの抵抗に置きかえる</button></div>` +
-          `<div id="wrapS">${ck('ckS', 'スイッチ S を閉じる（P と Q をつなぐ）', P.M.S)}</div>` +
           `<div class="note" id="modeNote"></div>`);
         vals += grp('電池',
           sl('E', '起電力 E', 0, 12, 0.5, P.E) +
           sl('r', '内部抵抗 r', 0, 5, 0.1, P.r, '<div class="note">r を 0 より大きくすると、ポンプの出口で少し落ちて、端子電圧が E より下がります</div>'));
         vals += grp('抵抗',
-          sl('R1', 'R₁', 1, 100, 1, P.R1) + sl('R2', 'R₂', 1, 100, 1, P.R2) + sl('R3', 'R₃', 1, 100, 1, P.R3) +
-          `<div id="wrapM">` + sl('MR1', 'R₁', 0.5, 20, 0.5, P.M.R1) + sl('MR2', 'R₂', 0.5, 20, 0.5, P.M.R2) + sl('MR3', 'R₃', 0.5, 20, 0.5, P.M.R3) + sl('MR4', 'R₄', 0.5, 20, 0.5, P.M.R4) + sl('ME', '起電力 E', 0, 30, 1, P.M.E) + `</div>`);
+          sl('R1', 'R₁', 1, 100, 1, P.R1) + sl('R2', 'R₂', 1, 100, 1, P.R2) + sl('R3', 'R₃', 1, 100, 1, P.R3));
         vals += grp('計器',
           ck('meters', '計器の内部抵抗を考える', P.meters) +
           `<div id="wrapMeters">` + sl('rA', '電流計の内部抵抗 r_A', 0.1, 5, 0.1, P.rA) + sl('rV', '電圧計の内部抵抗 r_V', 1, 100, 1, P.rV / 1000) + `</div>` +
@@ -4371,7 +4340,6 @@
       P.showInfo = $('showInfo').checked; P.showSchem = $('showSchem').checked;
       if (PAGE === 'resistors') {
         P.E = readSlider('E'); P.r = readSlider('r'); P.R1 = readSlider('R1'); P.R2 = readSlider('R2'); P.R3 = readSlider('R3');
-        P.M.R1 = readSlider('MR1'); P.M.R2 = readSlider('MR2'); P.M.R3 = readSlider('MR3'); P.M.R4 = readSlider('MR4'); P.M.E = readSlider('ME'); P.M.S = $('ckS').checked;
         P.meters = $('meters').checked; P.rA = readSlider('rA'); P.rV = readSlider('rV') * 1000;
       } else if (PAGE === 'kirchhoff') {
         for (let k = 1; k <= 3; k++) { const b = P.br[k - 1]; b.S = $('S' + k).checked; b.E = readSlider('E' + k); b.R = readSlider('R' + k); }
@@ -4392,17 +4360,12 @@
       if (PAGE === 'resistors') {
         setSeg('segMode', P.mode); setSeg('segN', P.n);
         setV('E', P.E); setV('r', P.r); setV('R1', P.R1); setV('R2', P.R2); setV('R3', P.R3);
-        setV('MR1', P.M.R1); setV('MR2', P.M.R2); setV('MR3', P.M.R3); setV('MR4', P.M.R4); setV('ME', P.M.E); setC('ckS', P.M.S);
         setC('meters', P.meters); setV('rA', P.rA); setV('rV', P.rV / 1000);
-        const mixed = P.mode === 'mixed';
-        show('fld_n', !mixed); show('rowCollapse', !mixed); show('wrapS', mixed); show('wrapM', mixed);
-        show('fld_R1', !mixed); show('fld_R2', !mixed); show('fld_R3', !mixed && P.n === 3); show('fld_E', !mixed);
+        show('fld_R3', P.n === 3);
         $('btnCollapse').classList.toggle('active', P.collapse);
         $('btnCollapse').textContent = P.collapse ? '2 つ以上の抵抗に戻す' : '1 つの抵抗に置きかえる';
         show('wrapMeters', P.meters);
-        $('modeNote').textContent = mixed
-          ? 'R₁ と R₃、R₂ と R₄ が直列の 2 本の並列。S を閉じると P と Q がつながり、R₁ と R₂・R₃ と R₄ が並列の 2 組の直列に変わります'
-          : (P.mode === 'series' ? '水路は 1 本道なので、流れる水（電流）はどこでも同じ。落差の合計 ＝ くみ上げた高さ' : '水は分かれて流れ、流量の和 ＝ ポンプの流量。落差はどの枝も同じ');
+        $('modeNote').textContent = P.mode === 'series' ? '水路は 1 本道なので、流れる水（電流）はどこでも同じ。落差の合計 ＝ くみ上げた高さ' : '水は分かれて流れ、流量の和 ＝ ポンプの流量。落差はどの枝も同じ';
       } else if (PAGE === 'kirchhoff') {
         setSeg('segPreset', P.preset || 'basic'); setSeg('segLoop', P.loop);
         for (let k = 1; k <= 3; k++) { const b = P.br[k - 1]; setC('S' + k, b.S); setV('E' + k, b.E); setV('R' + k, b.R); $('btnDir' + k).textContent = b.dir >= 0 ? '＋が上' : '＋が下'; }
@@ -5536,10 +5499,8 @@
     function controlsFor(e) {
       const list = [];
       if (PAGE === 'resistors') {
-        const mixed = P.mode === 'mixed';
-        if (e.kind === 'E') { list.push({ id: mixed ? 'ME' : 'E', label: '起電力 E' }); if (!mixed) list.push({ id: 'r', label: '内部抵抗 r' }); }
-        if (e.kind === 'R') { if (e.combined) return list; const k = e.name.replace('R', ''); list.push({ id: (mixed ? 'MR' : 'R') + k, label: e.label }); }
-        if (e.kind === 'sw') list.push({ check: 'ckS', label: 'S を閉じる' });
+        if (e.kind === 'E') { list.push({ id: 'E', label: '起電力 E' }); list.push({ id: 'r', label: '内部抵抗 r' }); }
+        if (e.kind === 'R') { if (e.combined) return list; const k = e.name.replace('R', ''); list.push({ id: 'R' + k, label: e.label }); }
         if (e.kind === 'A' && P.meters) list.push({ id: 'rA', label: '内部抵抗 r_A' });
       } else if (PAGE === 'kirchhoff') {
         const k = e.kind === 'R' ? e.branch : parseInt(e.name.replace(/\D/g, ''), 10);

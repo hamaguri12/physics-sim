@@ -234,7 +234,7 @@
 
     <!-- 左サイドバー：道具箱 -->
     <aside class="sidebar" id="toolboxPanel">
-      <button id="toolboxToggle" class="toolboxToggle" type="button" aria-expanded="false">＞</button>
+      <button id="toolboxToggle" class="toolboxToggle" type="button" aria-expanded="true">＜</button>
 
       <p class="h">道具箱</p>
 
@@ -600,7 +600,7 @@
     const toolboxToggle = document.getElementById('toolboxToggle');
     toolboxToggle?.addEventListener('click', () => {
       const collapsed = toolboxPanel.classList.toggle('is-collapsed');
-      toolboxToggle.textContent = collapsed ? '＜' : '＞';
+      toolboxToggle.textContent = collapsed ? '＞' : '＜';
       toolboxToggle.setAttribute('aria-expanded', String(!collapsed));
     });
 

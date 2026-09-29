@@ -666,7 +666,7 @@
           </button>
         </div>
         <div class="row">
-          <button id="btnThinPlate" class="btn" type="button" title="教科書の「厚さの無視できる金属板」。電気容量は変わりません">
+          <button id="btnThinPlate" class="btn" type="button" title="厚さの無視できる金属板。電気容量は変わりません">
             <span class="ic"><i class="blk thin" style="background:#8a929e"></i></span>薄い金属板
           </button>
         </div>
@@ -2335,16 +2335,21 @@
       let changed = false;
       const pos = projectToPlane(cx, cy);
       if (!pos) return false;
-      const hit = pickPart(cx, cy);
-      if (hit && hit.type !== 'wire' && PART_DEFS[hit.type].terminals.length) {
-        let best = null, bd = Infinity;
-        for (const t of worldTerminals(hit)) {
-          const d = (t.x - pos.x) * (t.x - pos.x) + (t.z - pos.z) * (t.z - pos.z);
-          if (d < bd) { bd = d; best = t; }
-        }
-        if (best && paintCell(best.x, best.z)) changed = true;
-      }
       snapToGrid(pos);
+      // ポインタの下の格子点が回路の点（導線・端子・リード線）なら、その点だけを塗る。
+      // 「部品の上なら近いほうの端子」は、ポインタの下に回路の点が無いとき（極板や胴の上）だけ。
+      // 前は部品の当たり判定（絵より 0.3 大きい）にかすっただけで端子まで塗ったので、部品のわきの導線をなぞると電源の端子も塗れた（2026-09-29 本人）
+      if (!circuit.netAt.has(kk(pos.x, pos.z))) {
+        const hit = pickPart(cx, cy);
+        if (hit && hit.type !== 'wire' && PART_DEFS[hit.type].terminals.length) {
+          let best = null, bd = Infinity;
+          for (const t of worldTerminals(hit)) {
+            const d = (t.x - pos.x) * (t.x - pos.x) + (t.z - pos.z) * (t.z - pos.z);
+            if (d < bd) { bd = d; best = t; }
+          }
+          if (best && paintCell(best.x, best.z)) changed = true;
+        }
+      }
       if (paintCell(pos.x, pos.z)) changed = true;
       return changed;
     }
@@ -3727,14 +3732,19 @@
       const ns = circuit.partNets.get(p);
       const prof = gapProfile(p);
 
-      // 同じ形の帯はまとめる（誘電体を半分だけ入れたときは 2 種類になる）
+      // 同じ形の帯はまとめる（誘電体を半分だけ入れたときは 2 種類になる）。
+      // 行の頭の記号（Ⓐ Ⓑ）と言い方は図（drawZoom）と同じにする（前は「板のまわりの空気」という古い言い方で、記号も無かった：2026-09-29 本人）
+      const markOf = bandMarks(p);
+      const markFor = b => (markOf ? (markOf.get(bandKeyOf(b)) || '') : '');
       const kinds = [];
       for (const band of prof.bands) {
         const segs = gapSegs(band, d, Math.abs(v) / band.eff);
         const key = segs.map(s => s.kind + s.z0.toFixed(4) + s.z1.toFixed(4) + s.er.toFixed(3)).join('|');
         const hit = kinds.find(k => k.key === key);
         if (hit) hit.wide += band.x1 - band.x0;
-        else kinds.push({ key, segs, wide: band.x1 - band.x0, hasBlock: band.layers.length > 0 });
+        else kinds.push({ key, segs, wide: band.x1 - band.x0, hasBlock: band.layers.length > 0, mk: markFor(band), bridged: !!band.bridged,
+                          allCond: band.layers.length > 0 && band.layers.every(Ly => Ly.isCond),
+                          allDi:   band.layers.length > 0 && band.layers.every(Ly => !Ly.isCond) });
       }
       kinds.sort((a, b) => b.wide - a.wide);      // 幅の広いほうを実線にする
 
@@ -3828,22 +3838,20 @@
                + '<span style="color:#2a6ff0;font-weight:700">■</span> V（電位）'
                + '<br><b>V = ' + fmtVx(p, Math.abs(v)) + '</b>　d = ' + fmtLen(d, 'd');
       const rows = [], seen = new Set();
+      const push = (key, text, mk) => { if (!seen.has(key)) { seen.add(key); rows.push(markChip(mk) + text); } };
       for (const k of kinds) for (const s of k.segs) {
-        // 同じ「空気」でも、板といっしょの帯と、板のない帯とでは電場がちがう。見分けがつくようにする
-        const key = s.kind + (s.kind === 'di' ? s.er.toFixed(1) : '') + (s.kind === 'air' ? (k.hasBlock ? 'b' : 'o') : '') + toM(s.E);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        rows.push(s.kind === 'cond' ? '導体の中　<b>E = 0</b>（電位は変わらない）'
-                : s.kind === 'di'   ? '誘電体（' + erText(s.er) + '）の中　E′ = <b>' + fmtE(s.E) + '</b>'
-                : k.hasBlock        ? '板のまわりの空気　E = <b>' + fmtE(s.E) + '</b>'
-                : kinds.length === 1 ? '<b>E = ' + fmtE(s.E) + '</b>　（E = V / d）'
-                                    : '板のないところ　E = <b>' + fmtE(s.E) + '</b>');
+        // 同じ「空気」でも、板といっしょの帯と、板のない帯とでは電場がちがう。図と同じ言い方（上下の空気／板のないところ）で見分ける
+        if (s.kind === 'cond') push('cond' + k.mk, k.bridged ? '導体が<b>両方の極板に触れています</b>（ここは導線と同じ。電位差 0）' : '導体の中　<b>E = 0</b>（電位は変わらない）', k.mk);
+        else if (s.kind === 'di') push('d' + s.er.toFixed(1) + '/' + toM(s.E), '誘電体（' + erText(s.er) + '）の中　E′ = <b>' + fmtE(s.E) + '</b>', k.mk);
+        else if (k.hasBlock) push('air' + toM(s.E) + k.mk, (k.allCond ? '導体の上下（空気）' : k.allDi ? '誘電体の上下（空気）' : '板の上下（空気）') + '　E = <b>' + fmtE(s.E) + '</b>', k.mk);
+        else if (kinds.length === 1) push('open', '<b>E = ' + fmtE(s.E) + '</b>　（E = V / d）', k.mk);
+        else push('open', '板のないところ　E = <b>' + fmtE(s.E) + '</b>', k.mk);
       }
-      html += '<br>' + rows.slice(0, 4).join('<br>');
+      html += '<br>' + rows.slice(0, 5).join('<br>');
       if (kinds.length > 1) {
         html += '<br><span style="opacity:.8">'
              + kinds.slice(0, 3).map((k, i) => (i === 0 ? '実線' : i === 1 ? '破線' : '点線')
-                 + '：' + (k.hasBlock ? '板の入っているところ' : '板のないところ')).join('　')
+                 + '：' + markChip(k.mk) + (k.hasBlock ? '板の入っているところ' : '板のないところ')).join('　')
              + '</span>';
       }
       html += grounded ? '<br><span style="opacity:.8">アースを 0 V としたときの電位</span>'
@@ -4342,10 +4350,9 @@
       }
       if (key === 'v') return max < 1 ? { m: 1e3, u: 'mV' } : { m: 1, u: 'V' };
       if (key === 'q') {
-        if (max < 1e-9) return { m: 1e12, u: 'pC' };
-        if (max < 1e-6) return { m: 1e9,  u: 'nC' };
-        if (max < 1e-3) return { m: 1e6,  u: 'μC' };
-        return { m: 1e3, u: 'mC' };
+        // 電気量は道具箱で選んだ単位に固定（パネルと同じ。前は値の大きさで自動に選び、パネルが nC なのにグラフは μC になった：2026-09-29 本人）
+        const cu = chargeUnit();
+        return { m: 1 / cu.u, u: cu.name };
       }
       if (max < 1e-6) return { m: 1e9, u: 'nA' };
       if (max < 1e-3) return { m: 1e6, u: 'μA' };
@@ -5921,6 +5928,8 @@
     function selectPart(p) {
       if (p && !parts.includes(p)) p = null;   // 消えた部品は選べない（押したまま Delete したときなど）
       selected = p;
+      // 部品を選んだら、矢印（図形欄）の選択は外す。前は両方選ばれたままになり、Delete で矢印と部品が両方消えた（2026-09-29）
+      if (p) window._clearArrowSel?.();
       // グラフに出す部品を覚えておく。スイッチのように描けるものがない部品を選んでも、
       // グラフは直前の部品のまま描き続ける（操作するたびに消えてしまわないように）
       if (p && GRAPH_KINDS[p.type]) graph.part = p;
@@ -5985,17 +5994,22 @@
       inp.type = 'number'; inp.min = Math.floor(min); inp.max = max; inp.step = step; inp.value = fmtNum(value, digits);
       inp.className = 'numIn';
       const u = document.createElement('span'); u.textContent = unit; u.style.cssText = 'font-size:12px;color:var(--muted)';
+      let cur = value, cancelling = false;   // いま反映されている値（Esc で戻す先）
       const commit = () => {
         pendingInputs.delete(commit);
+        if (cancelling) { cancelling = false; return; }   // Esc で戻したあとの blur → change は反映しない
         let v = parseFloat(inp.value);
-        if (!isFinite(v)) { inp.value = fmtNum(value, digits); return; }
+        if (!isFinite(v)) { inp.value = fmtNum(cur, digits); return; }
         v = Math.min(max, Math.max(min, v));
+        cur = v;
         onCommit(v);
       };
+      // Esc：打ちこみをやめて元の値に戻す（前は Esc が何もせず、打ちこんだ数が「あとで反映」のまま残って、次に別の部品を触った瞬間に効いた：2026-09-29 本人）
+      const cancel = () => { pendingInputs.delete(commit); cancelling = true; inp.value = fmtNum(cur, digits); };
       inp.addEventListener('change', commit);
       inp.addEventListener('input', () => pendingInputs.add(commit));   // 打ち込み途中（未反映）の印
       // 入力中のキー（R・Delete・Ctrl+Z など）を盤面のショートカットに横取りされないようにする
-      inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); });
+      inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); else if (e.key === 'Escape') { cancel(); inp.blur(); cancelling = false; } });
       row.append(inp, u); wrap.append(lab, row);
       wrap._unit = u;                 // 単位の文字（大きさに合わせて後から差しかえる欄がある）
       wrap._name = name;              // 見出しの文字（同上）
@@ -6389,7 +6403,7 @@
       else if (p.type === 'cmeter') inspBody.append(fieldNote('2点の間の<b style="color:var(--text)">合成容量</b>を測ります（並列につなぐ）。抵抗・閉じたスイッチは導線、電源は外したものとして数えます'));
       else if (p.type === 'conductor') inspBody.append(plateSizeField(p), plateAlignField(p), fieldNote('極板間に重ねると、その厚みぶん間隔が縮んだのと同じはたらきをします'));
       else if (p.type === 'thinplate') inspBody.append(plateSizeField(p), plateAlignField(p),
-        fieldNote('教科書の「<b style="color:var(--text)">厚さの無視できる金属板</b>」です。'
+        fieldNote('<b style="color:var(--text)">厚さの無視できる金属板</b>です。'   // 「教科書の」は外した（特定の本を指す言い方。CLAUDE.md §8-20・2026-09-29 本人）
           + '厚さが 0 なので<b style="color:var(--text)">電気容量は変わりません</b>。<br>'
           + 'すきまに入れると、その面がぜんぶ同じ電位になります（下の「電位」）。'));
       else if (p.type === 'wire') inspBody.append(fieldNote('抵抗のない導線です'));
@@ -7052,6 +7066,9 @@
         e.preventDefault(); e.stopImmediatePropagation();
         return;
       }
+      // 矢印（図形欄）が部品の上にあるときは、矢印を先にする（見た目も矢印が上。2026-09-29 本人）。
+      // ここで部品をつかまずに返すと、あとに付いている図形欄の pointerdown が矢印を選ぶ。部品の選択は外す（Delete で部品まで消さない）
+      if ((window._hitArrowAt?.(e.clientX, e.clientY) ?? -1) >= 0) { selectPart(null); return; }
       const h = isPlate(selected) ? pickHandle(e.clientX, e.clientY) : null;
       if (h) {                                   // 選んでいる板のつまみ：大きさを変える
         drag.active = true; drag.moved = true;
@@ -7118,8 +7135,9 @@
         return;
       }
       if (!wireMode && paintColor === null) {
-        const h = isPlate(selected) ? pickHandle(e.clientX, e.clientY) : null;
-        renderer.domElement.style.cursor = h ? handleCursor(h) : (pickPart(e.clientX, e.clientY) ? 'grab' : '');
+        const onArrow = (window._hitArrowAt?.(e.clientX, e.clientY) ?? -1) >= 0;   // 矢印の上では部品をつかまない（pointerdown と同じ。2026-09-29）
+        const h = !onArrow && isPlate(selected) ? pickHandle(e.clientX, e.clientY) : null;
+        renderer.domElement.style.cursor = h ? handleCursor(h) : (!onArrow && pickPart(e.clientX, e.clientY) ? 'grab' : '');
       }
     });
 
@@ -8131,6 +8149,8 @@
     if (selIdx === i) selIdx = -1; else if (selIdx > i) selIdx--;
     redrawShapes();
   };
+  // 部品を選んだときに、矢印の選択を外す（selectPart から呼ぶ。両方選ばれたまま Delete で両方消えないように。2026-09-29）
+  window._clearArrowSel = () => { if (selIdx >= 0) { selIdx = -1; redrawShapes(); } };
 
   function tryStartSel(ev) {
     if (shapeMode!=='none'||inkMode!=='none') return false;
